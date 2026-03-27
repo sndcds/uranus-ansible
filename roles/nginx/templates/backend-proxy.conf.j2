@@ -1,0 +1,24 @@
+server {
+    listen 80;
+    server_name {{ backend_domain }};
+{% if local_test_mode | default(false) | bool %}
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ backend_domain }};
+
+    ssl_certificate /etc/ssl/localcerts/{{ backend_domain }}.crt;
+    ssl_certificate_key /etc/ssl/localcerts/{{ backend_domain }}.key;
+{% endif %}
+
+    location / {
+        proxy_pass http://localhost:{{ backend_port }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}

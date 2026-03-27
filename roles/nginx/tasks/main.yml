@@ -1,0 +1,101 @@
+---
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: Enable nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Deploy frontend nginx vhost
+  ansible.builtin.template:
+    src: frontend-static.conf.j2
+    dest: /etc/nginx/sites-available/uranus-frontend.conf
+    mode: "0644"
+  when: frontend_domain is defined
+  notify: Reload nginx
+
+- name: Enable frontend nginx vhost
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-frontend.conf
+    dest: /etc/nginx/sites-enabled/uranus-frontend.conf
+    state: link
+  when: frontend_domain is defined
+  notify: Reload nginx
+
+- name: Deploy backend nginx vhost
+  ansible.builtin.template:
+    src: backend-proxy.conf.j2
+    dest: /etc/nginx/sites-available/uranus-backend.conf
+    mode: "0644"
+  when: backend_domain is defined
+  notify: Reload nginx
+
+- name: Enable backend nginx vhost
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-backend.conf
+    dest: /etc/nginx/sites-enabled/uranus-backend.conf
+    state: link
+  when: backend_domain is defined
+  notify: Reload nginx
+
+- name: Deploy nominatim nginx vhost
+  ansible.builtin.template:
+    src: nominatim-proxy.conf.j2
+    dest: /etc/nginx/sites-available/uranus-nominatim.conf
+    mode: "0644"
+  when: nominatim_domain is defined
+  notify: Reload nginx
+
+- name: Ensure Nominatim landing page directory exists
+  ansible.builtin.file:
+    path: /var/www/uranus-nominatim
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: nominatim_domain is defined
+
+- name: Deploy Nominatim landing page
+  ansible.builtin.template:
+    src: nominatim-index.html.j2
+    dest: /var/www/uranus-nominatim/index.html
+    mode: "0644"
+  when: nominatim_domain is defined
+
+- name: Enable nominatim nginx vhost
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-nominatim.conf
+    dest: /etc/nginx/sites-enabled/uranus-nominatim.conf
+    state: link
+  when: nominatim_domain is defined
+  notify: Reload nginx
+
+- name: Deploy monitoring nginx vhost
+  ansible.builtin.template:
+    src: monitoring-icinga.conf.j2
+    dest: /etc/nginx/sites-available/uranus-monitoring.conf
+    mode: "0644"
+  when: icinga_web_domain is defined
+  notify: Reload nginx
+
+- name: Enable monitoring nginx vhost
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-monitoring.conf
+    dest: /etc/nginx/sites-enabled/uranus-monitoring.conf
+    state: link
+  when: icinga_web_domain is defined
+  notify: Reload nginx
+
+- name: Validate nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false

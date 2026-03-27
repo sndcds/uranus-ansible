@@ -1,0 +1,19 @@
+---
+- name: Install postfix
+  ansible.builtin.apt:
+    name: postfix
+    state: present
+
+- name: Configure postfix main.cf
+  ansible.builtin.copy:
+    dest: /etc/postfix/main.cf
+    mode: "0644"
+    content: |
+      myhostname = {{ uranus_domains.mail_mx }}
+      mydestination = localhost
+      relayhost =
+      inet_interfaces = all
+      inet_protocols = ipv4
+      smtp_tls_security_level = may
+      smtpd_tls_security_level = may
+  notify: Restart postfix

@@ -1,0 +1,264 @@
+---
+- name: Provision local KVM guests
+  hosts: kvm_hosts
+  serial: 1
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+
+  pre_tasks:
+    - name: Load local vault variables if present
+      ansible.builtin.include_vars:
+        file: ../group_vars/vault.yml
+      ignore_errors: true
+
+    - name: Gather facts without privilege escalation
+      ansible.builtin.setup:
+      become: false
+
+    - name: Check if virtualization extensions are available
+      ansible.builtin.shell: "egrep -c '(vmx|svm)' /proc/cpuinfo"
+      register: virt_check
+      changed_when: false
+
+    - name: Fail if virtualization extensions are not available
+      ansible.builtin.fail:
+        msg: "Keine Virtualisierungserweiterung gefunden. Bitte BIOS/UEFI prüfen."
+      when: virt_check.stdout | int == 0
+
+    - name: Select VMs to provision
+      ansible.builtin.set_fact:
+        selected_vms: >-
+          {{
+            vms if (target_vm is not defined or not target_vm)
+            else (vms | selectattr('name', 'equalto', target_vm) | list)
+          }}
+
+    - name: Fail if requested VM is unknown
+      ansible.builtin.fail:
+        msg: "Unbekannte VM '{{ target_vm }}'. Verfügbare VMs: {{ vms | map(attribute='name') | join(', ') }}"
+      when:
+        - target_vm is defined
+        - target_vm
+        - selected_vms | length == 0
+
+  tasks:
+    - name: Install KVM and libvirt packages
+      ansible.builtin.apt:
+        name:
+          - qemu-kvm
+          - libvirt-daemon-system
+          - libvirt-clients
+          - bridge-utils
+          - cpu-checker
+          - uvtool
+          - libosinfo-bin
+          - wget
+          - patch
+        state: present
+        update_cache: true
+
+    - name: Add target user to kvm group
+      ansible.builtin.user:
+        name: "{{ ansible_user | default(kvm_admin_user) }}"
+        groups: kvm
+        append: true
+
+    - name: Add target user to libvirt group
+      ansible.builtin.user:
+        name: "{{ ansible_user | default(kvm_admin_user) }}"
+        groups: libvirt
+        append: true
+
+    - name: Create libvirt network XML files
+      ansible.builtin.template:
+        src: ../templates/libvirt-bridge.xml.j2
+        dest: "/tmp/{{ item.name }}.xml"
+        mode: "0644"
+      loop: "{{ libvirt_networks }}"
+
+    - name: Define libvirt networks
+      ansible.builtin.command: "virsh net-define /tmp/{{ item.name }}.xml"
+      register: net_define_result
+      failed_when: false
+      changed_when: "'defined' in net_define_result.stdout or net_define_result.rc == 0"
+      loop: "{{ libvirt_networks }}"
+
+    - name: Start libvirt networks
+      ansible.builtin.command: "virsh net-start {{ item.name }}"
+      register: net_start_result
+      failed_when: false
+      changed_when: "'started' in net_start_result.stdout or net_start_result.rc == 0"
+      loop: "{{ libvirt_networks }}"
+
+    - name: Autostart libvirt networks
+      ansible.builtin.command: "virsh net-autostart {{ item.name }}"
+      register: net_autostart_result
+      failed_when: false
+      changed_when: "'autostarted' in net_autostart_result.stdout or net_autostart_result.rc == 0"
+      loop: "{{ libvirt_networks }}"
+
+    - name: Create cloud-init user-data config
+      ansible.builtin.template:
+        src: ../templates/user-data.config.j2
+        dest: "{{ cloudinit_user_data_path }}"
+        mode: "0600"
+
+    - name: Sync Ubuntu cloud image
+      ansible.builtin.command: >
+        uvt-simplestreams-libvirt sync
+        --source={{ uvt_source }}
+        arch={{ uvt_arch }}
+        release={{ uvt_release }}
+      register: uvt_sync
+      changed_when: uvt_sync.rc == 0
+
+    - name: Check whether VM domain already exists
+      ansible.builtin.command: "virsh dominfo {{ item.name }}"
+      register: vm_domain_check
+      changed_when: false
+      failed_when: false
+      loop: "{{ selected_vms }}"
+
+    - name: Destroy existing VMs before reprovisioning
+      ansible.builtin.command: "virsh destroy {{ item.item.name }}"
+      register: vm_destroy_result
+      failed_when: false
+      changed_when: vm_destroy_result.rc == 0
+      loop: "{{ vm_domain_check.results }}"
+      when:
+        - recreate_existing_vms | bool
+        - item.rc == 0
+
+    - name: Undefine existing VMs before reprovisioning
+      ansible.builtin.command: "virsh undefine {{ item.item.name }} --remove-all-storage"
+      register: vm_undefine_result
+      failed_when: false
+      changed_when: vm_undefine_result.rc == 0
+      loop: "{{ vm_domain_check.results }}"
+      when:
+        - recreate_existing_vms | bool
+        - item.rc == 0
+
+    - name: Create selected VMs on the local libvirt NAT network
+      ansible.builtin.command: >
+        uvt-kvm create
+        --ssh-public-key-file {{ ssh_public_key_file }}
+        --memory {{ item.memory }}
+        --disk {{ item.disk }}
+        --cpu {{ item.cpu }}
+        --user-data {{ cloudinit_user_data_path }}
+        --packages {{ vm_packages | join(',') }}
+        {{ item.name }}
+        arch="{{ uvt_arch }}" release={{ uvt_release }} label="{{ uvt_label }}"
+      loop: "{{ selected_vms }}"
+      loop_control:
+        index_var: vm_index
+      when:
+        - create_vms | bool
+        - local_test_mode | bool
+        - recreate_existing_vms | bool or vm_domain_check.results[vm_index].rc != 0
+      register: vm_create_result
+      failed_when:
+        - vm_create_result.rc != 0
+        - "'storage volume' not in (vm_create_result.stderr | default(''))"
+
+    - name: Fail when a VM disk exists without a libvirt domain
+      ansible.builtin.fail:
+        msg: >
+          VM {{ item.item.name }} hat bereits ein vorhandenes Storage-Volume, aber keine
+          bekannte libvirt-Domain. Setze `recreate_existing_vms=true`, um sie neu aufzubauen,
+          oder bereinige die alten Volumes manuell.
+      loop: "{{ vm_create_result.results | default([]) }}"
+      when:
+        - item is not skipped
+        - item.rc | default(0) != 0
+        - "'storage volume' in (item.stderr | default(''))"
+
+    - name: Ensure selected VMs are running
+      ansible.builtin.command: "virsh start {{ item.name }}"
+      register: vm_start_result
+      failed_when: false
+      changed_when: "'started' in vm_start_result.stdout or vm_start_result.rc == 0"
+      loop: "{{ selected_vms }}"
+
+    - name: Wait until a DHCP lease is present for each selected VM
+      ansible.builtin.shell: "virsh domifaddr {{ item.name }} --source lease | awk '/ipv4/ {print $4}' | cut -d/ -f1 | head -n1"
+      register: vm_ip_result
+      changed_when: false
+      retries: 30
+      delay: 5
+      until: vm_ip_result.stdout | length > 0
+      loop: "{{ selected_vms }}"
+
+    - name: Load existing runtime inventory raw content if present
+      ansible.builtin.set_fact:
+        existing_runtime_inventory_raw: "{{ lookup('file', playbook_dir ~ '/../inventory/runtime_hosts.yml', errors='ignore') | default('', true) | trim }}"
+
+    - name: Parse existing runtime inventory if present
+      ansible.builtin.set_fact:
+        existing_runtime_inventory: "{{ (existing_runtime_inventory_raw | from_yaml) if (existing_runtime_inventory_raw | length > 0) else {} }}"
+
+    - name: Start merged runtime host map with existing entries
+      ansible.builtin.set_fact:
+        merged_runtime_hosts: "{{ existing_runtime_inventory.all.children.provisioned_vms.hosts | default({}) }}"
+
+    - name: Merge selected VM addresses into runtime host map
+      ansible.builtin.set_fact:
+        merged_runtime_hosts: >-
+          {{
+            merged_runtime_hosts
+            | combine(
+                {
+                  item.item.name: {
+                    'ansible_host': item.stdout,
+                    'ansible_user': 'ubuntu',
+                    'ansible_ssh_private_key_file': ssh_private_key_file,
+                    'ansible_become': true,
+                    'ansible_become_method': 'sudo'
+                  }
+                },
+                recursive=True
+              )
+          }}
+      loop: "{{ vm_ip_result.results }}"
+
+    - name: Persist runtime inventory with provisioned VM addresses
+      ansible.builtin.template:
+        src: ../templates/runtime-inventory.yml.j2
+        dest: "{{ playbook_dir }}/../inventory/runtime_hosts.yml"
+        mode: "0644"
+      vars:
+        runtime_inventory_hosts: "{{ merged_runtime_hosts }}"
+
+    - name: Register runtime inventory entries for this playbook run
+      ansible.builtin.add_host:
+        name: "{{ item.item.name }}"
+        groups:
+          - "{{ item.item.group }}"
+          - provisioned_vms
+        ansible_host: "{{ item.stdout }}"
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: "{{ ssh_private_key_file }}"
+        ansible_become: true
+        ansible_become_method: sudo
+      loop: "{{ vm_ip_result.results }}"
+
+    - name: Reset SSH host key entry for reprovisioned VMs
+      ansible.builtin.command: "ssh-keygen -R {{ item.stdout }}"
+      register: ssh_keygen_result
+      failed_when: false
+      changed_when: ssh_keygen_result.rc == 0
+      loop: "{{ vm_ip_result.results }}"
+
+- name: Wait for SSH on provisioned VMs
+  hosts: provisioned_vms
+  serial: 1
+  gather_facts: false
+
+  tasks:
+    - name: Wait until SSH accepts the configured key
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+        sleep: 5

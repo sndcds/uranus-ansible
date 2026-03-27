@@ -1,0 +1,15 @@
+---
+- name: Configure logrotate for Uranus
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/uranus
+    mode: "0644"
+    content: |
+      /var/log/uranus/*.log {
+          daily
+          rotate {{ logrotate_retention }}
+          missingok
+          notifempty
+          compress
+          delaycompress
+          copytruncate
+      }

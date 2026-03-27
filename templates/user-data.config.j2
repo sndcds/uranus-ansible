@@ -1,0 +1,11 @@
+#cloud-config
+users:
+  - default
+  - name: ubuntu
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {{ lookup('file', ssh_public_key_file) }}
+password: {{ cloudinit_password }}
+chpasswd: { expire: False }
+ssh_pwauth: True

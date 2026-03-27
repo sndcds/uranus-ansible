@@ -1,0 +1,214 @@
+---
+- name: Install Nominatim prerequisites
+  ansible.builtin.apt:
+    name:
+      - osm2pgsql
+      - pkg-config
+      - libicu-dev
+      - virtualenv
+      - python3-pip
+      - curl
+      - wget
+    state: present
+
+- name: Ensure nominatim system user exists
+  ansible.builtin.user:
+    name: nominatim
+    comment: Nominatim service user
+    home: /srv/nominatim
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Ensure nominatim home is traversable by system services
+  ansible.builtin.file:
+    path: /srv/nominatim
+    state: directory
+    owner: nominatim
+    group: nominatim
+    mode: "0755"
+
+- name: Ensure Nominatim directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('nominatim') }}"
+    group: "{{ item.group | default('nominatim') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - path: /srv/nominatim/data
+    - path: "{{ nominatim_project_dir }}"
+    - path: "{{ nominatim_project_dir }}/website"
+    - path: /srv/nominatim/.config
+      mode: "0700"
+    - path: /var/log/nominatim
+      owner: www-data
+      group: www-data
+      mode: "0755"
+
+- name: Allow remote PostgreSQL access for Nominatim
+  ansible.builtin.blockinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK FOR NOMINATIM"
+    block: |
+      {% for net in nominatim_db_allowed_networks %}
+      host    all    {{ nominatim_db_user }}    {{ net }}    scram-sha-256
+      {% endfor %}
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  register: nominatim_pg_hba
+
+- name: Ensure PostgreSQL listens on remote interfaces for Nominatim
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: '^#?listen_addresses ='
+    line: "listen_addresses = '{{ postgresql_listen_addresses | default('*') }}'"
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  register: nominatim_pg_listen
+
+- name: Restart PostgreSQL after Nominatim access changes
+  ansible.builtin.systemd:
+    name: postgresql
+    state: restarted
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  when: nominatim_pg_hba.changed or nominatim_pg_listen.changed
+
+- name: Ensure Nominatim database user exists on db01
+  community.postgresql.postgresql_user:
+    name: "{{ nominatim_db_user }}"
+    password: "{{ nominatim_db_password }}"
+    encrypted: true
+    role_attr_flags: SUPERUSER
+  become_user: postgres
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+
+- name: Create Python virtualenv for Nominatim
+  ansible.builtin.command:
+    cmd: virtualenv /srv/nominatim/nominatim-venv
+    creates: /srv/nominatim/nominatim-venv/bin/activate
+
+- name: Install Nominatim backend and API packages
+  ansible.builtin.pip:
+    name:
+      - nominatim-db
+      - nominatim-api
+      - "psycopg[binary]"
+      - falcon
+      - uvicorn
+      - gunicorn
+    virtualenv: /srv/nominatim/nominatim-venv
+
+- name: Deploy Nominatim project environment
+  ansible.builtin.template:
+    src: nominatim.env.j2
+    dest: "{{ nominatim_project_dir }}/.env"
+    owner: nominatim
+    group: nominatim
+    mode: "0644"
+  notify: Restart nominatim
+
+- name: Deploy Nominatim systemd socket unit
+  ansible.builtin.template:
+    src: nominatim.socket.j2
+    dest: /etc/systemd/system/nominatim.socket
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart nominatim socket
+
+- name: Deploy Nominatim systemd service unit
+  ansible.builtin.template:
+    src: nominatim.service.j2
+    dest: /etc/systemd/system/nominatim.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart nominatim
+
+- name: Download Schleswig-Holstein OSM extract
+  ansible.builtin.get_url:
+    url: "{{ nominatim_data_url }}"
+    dest: "{{ nominatim_data_file }}"
+    owner: nominatim
+    group: nominatim
+    mode: "0644"
+
+- name: Check whether Nominatim import has already run
+  ansible.builtin.stat:
+    path: "{{ nominatim_project_dir }}/.nominatim_imported"
+  register: nominatim_import_marker
+
+- name: Check whether Nominatim database already exists on db01
+  ansible.builtin.command:
+    cmd: >
+      psql -tAc
+      "SELECT 1 FROM pg_database WHERE datname='{{ nominatim_db_name }}'"
+  changed_when: false
+  register: nominatim_db_exists
+  become_user: postgres
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  when: not nominatim_import_marker.stat.exists
+
+- name: Drop stale Nominatim database before fresh import
+  ansible.builtin.command:
+    cmd: dropdb --if-exists {{ nominatim_db_name }}
+  become_user: postgres
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  when:
+    - not nominatim_import_marker.stat.exists
+    - nominatim_db_exists.stdout | trim == '1'
+
+- name: Import Schleswig-Holstein data into Nominatim
+  ansible.builtin.command:
+    cmd: >
+      /srv/nominatim/nominatim-venv/bin/nominatim
+      import
+      --project-dir {{ nominatim_project_dir }}
+      --osm-file {{ nominatim_data_file }}
+      --no-updates
+  become_user: nominatim
+  register: nominatim_import_result
+  when: not nominatim_import_marker.stat.exists
+
+- name: Mark Nominatim import complete
+  ansible.builtin.file:
+    path: "{{ nominatim_project_dir }}/.nominatim_imported"
+    state: touch
+    owner: nominatim
+    group: nominatim
+    mode: "0644"
+  when:
+    - not nominatim_import_marker.stat.exists
+    - nominatim_import_result is succeeded
+
+- name: Refresh Nominatim website files
+  ansible.builtin.command:
+    cmd: >
+      /srv/nominatim/nominatim-venv/bin/nominatim
+      refresh
+      --project-dir {{ nominatim_project_dir }}
+      --website
+  become_user: nominatim
+  changed_when: false
+
+- name: Check Nominatim database integrity
+  ansible.builtin.command:
+    cmd: >
+      /srv/nominatim/nominatim-venv/bin/nominatim
+      admin
+      --project-dir {{ nominatim_project_dir }}
+      --check-database
+  become_user: nominatim
+  changed_when: false
+
+- name: Enable and start Nominatim socket
+  ansible.builtin.systemd:
+    name: nominatim.socket
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable and start Nominatim service
+  ansible.builtin.systemd:
+    name: nominatim.service
+    enabled: true
+    state: started

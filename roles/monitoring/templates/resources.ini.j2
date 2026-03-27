@@ -1,0 +1,17 @@
+[icingaweb_db]
+type = "db"
+db = "pgsql"
+host = "{{ hostvars[monitoring_db_delegate_host].ansible_host | default(monitoring_db_delegate_host) }}"
+port = "5432"
+dbname = "{{ monitoring_web_db_name }}"
+username = "{{ monitoring_web_db_user }}"
+password = "{{ monitoring_web_db_password }}"
+
+[icinga_ido]
+type = "db"
+db = "pgsql"
+host = "{{ hostvars[monitoring_db_delegate_host].ansible_host | default(monitoring_db_delegate_host) }}"
+port = "5432"
+dbname = "{{ monitoring_ido_db_name }}"
+username = "{{ monitoring_ido_db_user }}"
+password = "{{ monitoring_ido_db_password }}"

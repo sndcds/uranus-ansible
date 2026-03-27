@@ -1,0 +1,7 @@
+object IdoPgsqlConnection "ido-pgsql" {
+  user = "{{ monitoring_ido_db_user }}"
+  password = "{{ monitoring_ido_db_password }}"
+  host = "{{ hostvars[monitoring_db_delegate_host].ansible_host | default(monitoring_db_delegate_host) }}"
+  port = 5432
+  database = "{{ monitoring_ido_db_name }}"
+}

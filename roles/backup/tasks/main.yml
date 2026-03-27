@@ -1,0 +1,65 @@
+---
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ backup_root }}"
+    state: directory
+    mode: "0750"
+
+- name: Build managed backup database list
+  ansible.builtin.set_fact:
+    managed_backup_databases: >-
+      {{
+        app_databases
+        if (app_databases is defined)
+        else
+        [{
+          'name': db_name,
+          'user': db_user,
+          'password': db_password
+        }]
+      }}
+
+- name: Install PostgreSQL backup script
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/uranus-db-backup.sh
+    mode: "0750"
+    content: |
+      #!/bin/bash
+      set -e
+      TS=$(date +%F_%H-%M-%S)
+      {% for app_db in managed_backup_databases %}
+      PGPASSWORD='{{ app_db.password }}' pg_dump -U {{ app_db.user }} -h localhost {{ app_db.name }} > {{ backup_root }}/{{ app_db.name }}_${TS}.sql
+      {% endfor %}
+
+- name: Create systemd service for backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-db-backup.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Uranus DB Backup
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/uranus-db-backup.sh
+
+- name: Create systemd timer for backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-db-backup.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Uranus DB Backup
+
+      [Timer]
+      OnCalendar=*-*-* 02:00:00
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable backup timer
+  ansible.builtin.systemd:
+    name: uranus-db-backup.timer
+    enabled: true
+    state: started

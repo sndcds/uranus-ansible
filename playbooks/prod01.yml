@@ -1,0 +1,4 @@
+---
+- import_playbook: single_vm.yml
+  vars:
+    target_vm: prod01

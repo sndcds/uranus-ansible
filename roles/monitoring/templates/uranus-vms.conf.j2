@@ -1,0 +1,95 @@
+apply Service for (service_name => config in host.vars.uranus_http_checks) {
+  import "generic-service"
+
+  check_command = "http"
+  vars += config
+
+  display_name = service_name
+
+  assign where host.vars.uranus_http_checks
+}
+
+apply Service for (service_name => config in host.vars.uranus_tcp_checks) {
+  import "generic-service"
+
+  check_command = "tcp"
+  vars += config
+
+  display_name = service_name
+
+  assign where host.vars.uranus_tcp_checks
+}
+
+apply Service for (service_name => config in host.vars.uranus_pgsql_checks) {
+  import "generic-service"
+
+  check_command = "pgsql"
+  vars += config
+
+  display_name = service_name
+
+  assign where host.vars.uranus_pgsql_checks
+}
+
+{% for target in monitoring_targets | rejectattr('address', 'equalto', '') %}
+{% if target.name != inventory_hostname %}
+object Host "{{ target.name }}" {
+  import "generic-host"
+
+  address = "{{ target.address }}"
+  check_command = "tcp"
+  vars.tcp_port = 22
+  vars.os = "{{ target.os | default('Linux') }}"
+{% if target.http_checks is defined %}
+  vars.uranus_http_checks = {
+{% for service_name, config in target.http_checks.items() %}
+    "{{ service_name }}" = {
+{% for key, value in config.items() %}
+      {{ key }} = {{ value | to_json }}
+{% endfor %}
+    }
+{% endfor %}
+  }
+{% endif %}
+{% if target.tcp_checks is defined %}
+  vars.uranus_tcp_checks = {
+{% for service_name, config in target.tcp_checks.items() %}
+    "{{ service_name }}" = {
+{% for key, value in config.items() %}
+      {{ key }} = {{ value | to_json }}
+{% endfor %}
+    }
+{% endfor %}
+  }
+{% endif %}
+{% if target.pgsql_checks is defined %}
+  vars.uranus_pgsql_checks = {
+{% for service_name, config in target.pgsql_checks.items() %}
+    "{{ service_name }}" = {
+{% for key, value in config.items() %}
+      {{ key }} = {{ value | to_json }}
+{% endfor %}
+    }
+{% endfor %}
+  }
+{% endif %}
+}
+
+{% endif %}
+{% endfor %}
+
+{% set self_target = (monitoring_targets | selectattr('name', 'equalto', inventory_hostname) | list | first | default({})) %}
+{% if self_target and self_target.http_checks is defined %}
+{% for service_name, config in self_target.http_checks.items() %}
+object Service "{{ service_name }}" {
+  import "generic-service"
+
+  host_name = NodeName
+  check_command = "http"
+{% for key, value in config.items() %}
+  vars.{{ key }} = {{ value | to_json }}
+{% endfor %}
+}
+
+{% endfor %}
+{% endif %}

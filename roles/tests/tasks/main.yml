@@ -1,0 +1,22 @@
+---
+- name: Wait for backend API
+  ansible.builtin.uri:
+    url: "http://localhost:{{ backend_port }}{{ api_health_endpoint }}"
+    method: GET
+    status_code: 200
+  register: api_test
+  retries: 10
+  delay: 5
+  until: api_test.status == 200
+  when: vm_role in ['dev', 'prod']
+
+- name: Test frontend locally
+  ansible.builtin.uri:
+    url: "http://localhost{{ frontend_health_endpoint }}"
+    method: GET
+    status_code: 200
+  register: frontend_test
+  retries: 10
+  delay: 5
+  until: frontend_test.status == 200
+  when: vm_role in ['dev', 'prod']

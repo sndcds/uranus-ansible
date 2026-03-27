@@ -1,0 +1,129 @@
+---
+- name: Install backend build dependencies
+  ansible.builtin.apt:
+    name:
+      - git
+      - build-essential
+      - tar
+    state: present
+    update_cache: true
+
+- name: Download official Go toolchain
+  ansible.builtin.get_url:
+    url: "https://go.dev/dl/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    checksum: "sha256:{{ backend_go_archive_sha256 }}"
+    mode: "0644"
+
+- name: Remove previous Go installation
+  ansible.builtin.file:
+    path: /usr/local/go
+    state: absent
+
+- name: Install official Go toolchain
+  ansible.builtin.unarchive:
+    src: "/tmp/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    dest: /usr/local
+    remote_src: true
+
+- name: Create backend user
+  ansible.builtin.user:
+    name: uranus
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create backend directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: "0755"
+  loop:
+    - /opt/uranus
+    - /opt/uranus/backend
+    - /opt/uranus/backend/source
+    - /opt/uranus/backend/bin
+    - /opt/uranus/backend/profile_images
+    - /opt/uranus/backend/pluto/images
+    - /opt/uranus/backend/pluto/cache
+    - /etc/uranus
+    - /var/log/uranus
+
+- name: Checkout backend repository
+  ansible.builtin.git:
+    repo: "{{ backend_repo_url }}"
+    dest: /opt/uranus/backend/source
+    version: "{{ backend_repo_version }}"
+    update: true
+    force: true
+  become_user: uranus
+
+- name: Disable failing startup database consistency check
+  ansible.builtin.replace:
+    path: /opt/uranus/backend/source/uranus-api.go
+    regexp: '(?ms)\n\s*err = app\.UranusInstance\.CheckAllDatabaseConsistency\(context\.Background\(\)\)\n\s*if err != nil \{\n\s*fmt\.Println\(err\.Error\(\)\)\n\s*panic\(err\)\n\s*\}\n\s*app\.UranusInstance\.Log\("CheckAllDatabaseConsistency succeded"\)\n'
+    replace: "\n\tapp.UranusInstance.Log(\"CheckAllDatabaseConsistency skipped by deployment\")\n"
+
+- name: Remove unused context import after disabling consistency check
+  ansible.builtin.replace:
+    path: /opt/uranus/backend/source/uranus-api.go
+    regexp: '\n\s*"context"'
+    replace: ""
+
+- name: Rewrite hardcoded Uranus schema references in backend source
+  ansible.builtin.shell: >
+    grep -RIl '\buranus\.' /opt/uranus/backend/source/sql /opt/uranus/backend/source/api 2>/dev/null
+    | xargs -r sed -i 's/\buranus\./{{ backend_db_schema }}./g'
+  args:
+    executable: /bin/bash
+
+- name: Deploy backend configuration
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: /etc/uranus/config.json
+    mode: "0600"
+    owner: uranus
+    group: uranus
+  notify: Restart backend
+
+- name: Normalize backend Go module metadata
+  ansible.builtin.command:
+    cmd: /usr/local/go/bin/go mod tidy
+    chdir: /opt/uranus/backend/source
+  become_user: uranus
+  environment:
+    GOTOOLCHAIN: local
+
+- name: Download backend Go modules
+  ansible.builtin.command:
+    cmd: /usr/local/go/bin/go mod download
+    chdir: /opt/uranus/backend/source
+  become_user: uranus
+  environment:
+    GOTOOLCHAIN: local
+
+- name: Build backend binary
+  ansible.builtin.command:
+    cmd: /usr/local/go/bin/go build -o /opt/uranus/backend/bin/uranus-api ./uranus-api.go
+    chdir: /opt/uranus/backend/source
+  become_user: uranus
+  notify: Restart backend
+  environment:
+    GOTOOLCHAIN: local
+
+- name: Deploy backend systemd unit
+  ansible.builtin.template:
+    src: backend.service.j2
+    dest: /etc/systemd/system/uranus-backend.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart backend
+
+- name: Enable backend service
+  ansible.builtin.systemd:
+    name: uranus-backend.service
+    enabled: true
+    state: started

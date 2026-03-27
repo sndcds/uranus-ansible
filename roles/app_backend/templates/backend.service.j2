@@ -1,0 +1,15 @@
+[Unit]
+Description=Uranus Backend
+After=network.target
+
+[Service]
+User=uranus
+Group=uranus
+WorkingDirectory=/opt/uranus/backend/source
+Environment=PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/uranus/backend/bin/uranus-api -config /etc/uranus/config.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

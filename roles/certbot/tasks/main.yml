@@ -1,0 +1,47 @@
+---
+- name: Build certbot domain list
+  ansible.builtin.set_fact:
+    certbot_domains: >-
+      {{
+        ([frontend_domain] if frontend_domain is defined else [])
+        +
+        ([backend_domain] if backend_domain is defined else [])
+        +
+        ([nominatim_domain] if nominatim_domain is defined else [])
+        +
+        ([icinga_web_domain] if icinga_web_domain is defined else [])
+      }}
+
+- name: Ensure local certificate directory exists
+  ansible.builtin.file:
+    path: /etc/ssl/localcerts
+    state: directory
+    mode: "0755"
+  when:
+    - local_test_mode | default(false) | bool
+    - certbot_domains | length > 0
+
+- name: Generate self-signed certificates for local testing
+  ansible.builtin.command: >
+    openssl req -x509 -nodes -newkey rsa:2048 -days 365
+    -keyout /etc/ssl/localcerts/{{ item }}.key
+    -out /etc/ssl/localcerts/{{ item }}.crt
+    -subj /CN={{ item }}
+    -addext subjectAltName=DNS:{{ item }}
+  args:
+    creates: "/etc/ssl/localcerts/{{ item }}.crt"
+  loop: "{{ certbot_domains }}"
+  when:
+    - local_test_mode | default(false) | bool
+    - certbot_domains | length > 0
+
+- name: Request certificates
+  ansible.builtin.command: >
+    certbot --nginx
+    --non-interactive
+    --agree-tos
+    -m {{ ssl_email }}
+    {% for domain in certbot_domains %} -d {{ domain }} {% endfor %}
+  when:
+    - not (local_test_mode | default(false) | bool)
+    - certbot_domains | length > 0

@@ -1,0 +1,251 @@
+---
+- name: Remove any stale PostgreSQL APT source entries before bootstrapping
+  ansible.builtin.shell: |
+    set -e
+    if [ -d /etc/apt/sources.list.d ]; then
+      grep -Rl "apt.postgresql.org" /etc/apt/sources.list.d 2>/dev/null | xargs -r rm -f
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Remove stale PostgreSQL signing key before bootstrapping
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/postgresql.gpg
+    state: absent
+
+- name: Install PostgreSQL repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download PostgreSQL signing key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /tmp/postgresql.asc
+    mode: "0644"
+
+- name: Convert signing key
+  ansible.builtin.command:
+    cmd: gpg --dearmor --batch --yes -o /etc/apt/keyrings/postgresql.gpg /tmp/postgresql.asc
+
+- name: Ensure PostgreSQL signing key permissions
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/postgresql.gpg
+    mode: "0644"
+
+- name: Add PostgreSQL APT repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/pgdg.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt {{ ubuntu_release }}-pgdg main
+    mode: "0644"
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install PostgreSQL and PostGIS
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+      - "{{ postgis_package }}"
+      - python3-psycopg2
+    state: present
+
+- name: Ensure PostgreSQL service is enabled
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: true
+    state: started
+
+- name: Copy Uranus SQL dump to database host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../uranus.sql"
+    dest: /var/lib/postgresql/uranus.sql
+    owner: postgres
+    group: postgres
+    mode: "0644"
+
+- name: Normalize schema name in Uranus SQL dump
+  ansible.builtin.replace:
+    path: /var/lib/postgresql/uranus.sql
+    regexp: 'CREATE SCHEMA uranus;'
+    replace: 'CREATE SCHEMA IF NOT EXISTS {{ db_schema | default(backend_db_schema) }};'
+
+- name: Rewrite Uranus schema references in SQL dump
+  ansible.builtin.replace:
+    path: /var/lib/postgresql/uranus.sql
+    regexp: '\buranus\.'
+    replace: '{{ db_schema | default(backend_db_schema) }}.'
+
+- name: Remove source-owner statements from Uranus SQL dump
+  ansible.builtin.replace:
+    path: /var/lib/postgresql/uranus.sql
+    regexp: '^ALTER (SCHEMA|TYPE|FUNCTION|TABLE|SEQUENCE) .* OWNER TO oklab;$'
+    replace: '-- stripped source owner statement'
+
+- name: Build managed application database list
+  ansible.builtin.set_fact:
+    managed_app_databases: >-
+      {{
+        app_databases
+        if (app_databases is defined)
+        else
+        [{
+          'name': db_name,
+          'user': db_user,
+          'password': db_password
+        }]
+      }}
+
+- name: Configure postgresql.conf
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: '^#?listen_addresses ='
+    line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+  notify: Restart PostgreSQL
+
+- name: Allow client networks in pg_hba.conf
+  ansible.builtin.blockinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    block: |
+      {% for net in postgresql_allowed_networks %}
+      host    all    all    {{ net }}    scram-sha-256
+      {% endfor %}
+  notify: Restart PostgreSQL
+
+- name: Apply PostgreSQL network configuration immediately
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure application database users exist
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ item.user }}"
+    password: "{{ item.password }}"
+    encrypted: true
+  loop: "{{ managed_app_databases }}"
+
+- name: Ensure application databases exist
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    owner: "{{ item.user }}"
+  loop: "{{ managed_app_databases }}"
+
+- name: Enable PostGIS extension in application databases
+  become_user: postgres
+  community.postgresql.postgresql_ext:
+    name: postgis
+    db: "{{ item.name }}"
+  loop: "{{ managed_app_databases }}"
+
+- name: Check whether target schema exists in application databases
+  ansible.builtin.command:
+    cmd: >
+      psql -tAc
+      "SELECT 1 FROM pg_namespace WHERE nspname='{{ db_schema | default(backend_db_schema) }}'"
+      {{ item.name }}
+  changed_when: false
+  failed_when: false
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+  register: app_db_schema_check
+
+- name: Recreate application databases when imported schema mismatches target schema
+  ansible.builtin.command:
+    cmd: >
+      psql -d postgres -tAc
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+      WHERE datname='{{ item.item.name }}' AND pid <> pg_backend_pid();"
+  become_user: postgres
+  loop: "{{ app_db_schema_check.results }}"
+  when:
+    - item.stdout | trim != '1'
+
+- name: Drop application databases when imported schema mismatches target schema
+  ansible.builtin.command:
+    cmd: dropdb --if-exists {{ item.item.name }}
+  become_user: postgres
+  loop: "{{ app_db_schema_check.results }}"
+  when:
+    - item.stdout | trim != '1'
+
+- name: Recreate empty application databases after schema reset
+  ansible.builtin.command:
+    cmd: createdb -O {{ item.item.user }} {{ item.item.name }}
+  become_user: postgres
+  loop: "{{ app_db_schema_check.results }}"
+  when:
+    - item.stdout | trim != '1'
+
+- name: Re-enable PostGIS after schema reset
+  community.postgresql.postgresql_ext:
+    name: postgis
+    db: "{{ item.item.name }}"
+  become_user: postgres
+  loop: "{{ app_db_schema_check.results }}"
+  when:
+    - item.stdout | trim != '1'
+
+- name: Remove stale import marker after schema reset
+  ansible.builtin.file:
+    path: "/var/lib/postgresql/.{{ item.item.name }}_sql_imported"
+    state: absent
+  loop: "{{ app_db_schema_check.results }}"
+  when:
+    - item.stdout | trim != '1'
+
+- name: Import Uranus SQL dump into application databases
+  ansible.builtin.shell: >
+    psql -v ON_ERROR_STOP=1 -d {{ item.name }} -f /var/lib/postgresql/uranus.sql
+    && touch /var/lib/postgresql/.{{ item.name }}_sql_imported
+  args:
+    creates: "/var/lib/postgresql/.{{ item.name }}_sql_imported"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+
+- name: Grant schema usage to application users
+  community.postgresql.postgresql_query:
+    db: "{{ item.name }}"
+    query: "GRANT USAGE ON SCHEMA {{ db_schema | default(backend_db_schema) }} TO {{ item.user }};"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+
+- name: Grant table privileges to application users
+  community.postgresql.postgresql_query:
+    db: "{{ item.name }}"
+    query: "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {{ db_schema | default(backend_db_schema) }} TO {{ item.user }};"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+
+- name: Grant sequence privileges to application users
+  community.postgresql.postgresql_query:
+    db: "{{ item.name }}"
+    query: "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {{ db_schema | default(backend_db_schema) }} TO {{ item.user }};"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+
+- name: Set default table privileges for application users
+  community.postgresql.postgresql_query:
+    db: "{{ item.name }}"
+    query: "ALTER DEFAULT PRIVILEGES IN SCHEMA {{ db_schema | default(backend_db_schema) }} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {{ item.user }};"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"
+
+- name: Set default sequence privileges for application users
+  community.postgresql.postgresql_query:
+    db: "{{ item.name }}"
+    query: "ALTER DEFAULT PRIVILEGES IN SCHEMA {{ db_schema | default(backend_db_schema) }} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {{ item.user }};"
+  become_user: postgres
+  loop: "{{ managed_app_databases }}"

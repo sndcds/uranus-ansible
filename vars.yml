@@ -1,0 +1,68 @@
+local_test_mode: true
+create_vms: true
+recreate_existing_vms: false
+apply_uvtool_patch: false
+
+kvm_admin_user: "{{ lookup('env', 'USER') | default('root', true) }}"
+ssh_public_key_file: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa.pub"
+ssh_private_key_file: "{{ ssh_public_key_file | regex_replace('\\.pub$', '') }}"
+cloudinit_password: "{{ vault_cloudinit_password }}"
+cloudinit_user_data_path: "/tmp/uranus-user-data.config"
+vm_netplan_dir: "/tmp/uranus-vm-netplan"
+vm_dns_servers: []
+
+uvt_source: "https://cloud-images.ubuntu.com/daily"
+uvt_arch: "amd64"
+uvt_release: "noble"
+uvt_label: "daily"
+uvtool_patch_url: ""
+uvtool_patch_target: ""
+vm_packages:
+  - qemu-guest-agent
+
+guest_pool:
+  name: "default"
+  uuid: "11111111-2222-3333-4444-555555555555"
+  source_device: "/var/lib/libvirt/images"
+  target_path: "/var/lib/libvirt/images"
+  mode: "0755"
+  owner: 0
+  group: 0
+
+libvirt_networks:
+  - name: "default"
+    gateway: "192.168.122.1"
+    netmask: "255.255.255.0"
+    dhcp_start: "192.168.122.100"
+    dhcp_end: "192.168.122.254"
+
+vms:
+  - name: db01
+    group: db
+    memory: 2048
+    disk: 80
+    cpu: 4
+
+  - name: dev01
+    group: dev
+    memory: 2048
+    disk: 80
+    cpu: 4
+
+  - name: prod01
+    group: prod
+    memory: 4096
+    disk: 120
+    cpu: 4
+
+  - name: mon01
+    group: monitoring
+    memory: 2048
+    disk: 40
+    cpu: 2
+
+  - name: nom01
+    group: nominatim
+    memory: 4096
+    disk: 200
+    cpu: 6

@@ -1,0 +1,8 @@
+vm_role: dev
+backend_domain: "api.dev.uranus.home.arpa"
+frontend_domain: "dev.uranus.home.arpa"
+app_env: "development"
+db_host: "localhost"
+db_name: "uranus_dev"
+db_user: "uranus_dev"
+db_password: "{{ vault_db_password_dev }}"

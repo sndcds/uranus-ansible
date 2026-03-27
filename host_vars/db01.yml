@@ -1,0 +1,13 @@
+vm_role: db
+db_schema: "uranus"
+app_databases:
+  - name: "uranus_dev"
+    user: "uranus_dev"
+    password: "{{ vault_db_password_dev }}"
+  - name: "uranus_prod"
+    user: "uranus_prod"
+    password: "{{ vault_db_password_prod }}"
+postgresql_listen_addresses: "*"
+postgresql_allowed_networks:
+  - "127.0.0.1/32"
+  - "192.168.122.0/24"

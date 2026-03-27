@@ -1,0 +1,8 @@
+vm_role: prod
+backend_domain: "api.uranus.home.arpa"
+frontend_domain: "uranus.home.arpa"
+app_env: "production"
+db_host: "localhost"
+db_name: "uranus_prod"
+db_user: "uranus_prod"
+db_password: "{{ vault_db_password_prod }}"

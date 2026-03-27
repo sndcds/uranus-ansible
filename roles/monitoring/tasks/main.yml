@@ -1,0 +1,338 @@
+---
+- name: Install monitoring packages
+  ansible.builtin.apt:
+    name:
+      - icinga2
+      - icinga2-ido-pgsql
+      - icingaweb2
+      - icingaweb2-module-monitoring
+      - icingacli
+      - monitoring-plugins
+      - postgresql-client
+      - php-fpm
+      - php-pgsql
+      - php-gd
+      - php-intl
+      - php-mbstring
+      - php-xml
+      - php-curl
+    state: present
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Disable apache2 to serve Icinga Web 2 only via nginx
+  ansible.builtin.systemd:
+    name: apache2
+    enabled: false
+    state: stopped
+    masked: true
+  when: "'apache2.service' in ansible_facts.services"
+
+- name: Enable icinga2 without starting it before configuration is complete
+  ansible.builtin.systemd:
+    name: icinga2
+    enabled: true
+    state: stopped
+
+- name: Enable php-fpm
+  ansible.builtin.systemd:
+    name: php8.3-fpm
+    enabled: true
+    state: started
+
+- name: Ensure icingaweb2 configuration directory exists
+  ansible.builtin.file:
+    path: /etc/icingaweb2
+    state: directory
+    owner: root
+    group: www-data
+    mode: "0770"
+
+- name: Ensure icingaweb2 subdirectories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: www-data
+    mode: "0770"
+  loop:
+    - /etc/icingaweb2/enabledModules
+    - /etc/icingaweb2/modules
+    - /etc/icingaweb2/modules/monitoring
+
+- name: Allow www-data to access icingaweb2 configuration
+  ansible.builtin.user:
+    name: www-data
+    groups: icingaweb2
+    append: true
+
+- name: Find Icinga Web 2 PostgreSQL schema file
+  ansible.builtin.shell: >
+    for path in
+    /usr/share/icingaweb2/etc/schema/pgsql.schema.sql
+    /usr/share/icingaweb2/schema/pgsql.schema.sql
+    /usr/share/icingaweb2/etc/schema/pgsql.sql;
+    do
+      [ -f "$path" ] && echo "$path" && exit 0;
+    done;
+    exit 1
+  args:
+    executable: /bin/bash
+  register: icingaweb_schema_file
+  changed_when: false
+
+- name: Ensure monitoring database users exist on db01
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    encrypted: true
+  become_user: postgres
+  delegate_to: "{{ monitoring_db_delegate_host }}"
+  loop:
+    - name: "{{ monitoring_web_db_user }}"
+      password: "{{ monitoring_web_db_password }}"
+    - name: "{{ monitoring_ido_db_user }}"
+      password: "{{ monitoring_ido_db_password }}"
+
+- name: Ensure monitoring databases exist on db01
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    owner: "{{ item.owner }}"
+  become_user: postgres
+  delegate_to: "{{ monitoring_db_delegate_host }}"
+  loop:
+    - name: "{{ monitoring_web_db_name }}"
+      owner: "{{ monitoring_web_db_user }}"
+    - name: "{{ monitoring_ido_db_name }}"
+      owner: "{{ monitoring_ido_db_user }}"
+
+- name: Build Uranus VM monitoring target list
+  ansible.builtin.set_fact:
+    monitoring_targets:
+      - name: "db01"
+        address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+        os: "Linux"
+        tcp_checks:
+          postgresql:
+            tcp_port: 5432
+        pgsql_checks:
+          postgresql-db:
+            pgsql_hostname: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+            pgsql_port: 5432
+            pgsql_database: "{{ monitoring_web_db_name }}"
+            pgsql_username: "{{ monitoring_web_db_user }}"
+            pgsql_password: "{{ monitoring_web_db_password }}"
+      - name: "dev01"
+        address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.dev_frontend ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
+        os: "Linux"
+        http_checks:
+          nginx:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.dev_frontend }}"
+            http_uri: "/"
+          frontend:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.dev_frontend }}"
+            http_uri: "{{ frontend_health_endpoint }}"
+          backend:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.dev_backend }}"
+            http_uri: "{{ api_health_endpoint }}"
+      - name: "prod01"
+        address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.prod_frontend ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
+        os: "Linux"
+        http_checks:
+          nginx:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.prod_frontend }}"
+            http_uri: "/"
+          frontend:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.prod_frontend }}"
+            http_uri: "{{ frontend_health_endpoint }}"
+          backend:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.prod_backend }}"
+            http_uri: "{{ api_health_endpoint }}"
+      - name: "mon01"
+        address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.icinga ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
+        os: "Linux"
+        http_checks:
+          nginx:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.icinga }}"
+            http_uri: "/"
+          icingaweb2:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.icinga }}"
+            http_uri: "/authentication/login"
+      - name: "nom01"
+        address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.nominatim ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
+        os: "Linux"
+        http_checks:
+          nginx:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.nominatim }}"
+            http_uri: "/"
+          nominatim:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.nominatim }}"
+            http_uri: "/"
+
+- name: Import Icinga Web 2 schema into monitoring web database
+  ansible.builtin.shell: >
+    PGPASSWORD='{{ monitoring_web_db_password }}'
+    psql -h {{ hostvars[monitoring_db_delegate_host].ansible_host | default(monitoring_db_delegate_host) }}
+    -U {{ monitoring_web_db_user }}
+    -d {{ monitoring_web_db_name }}
+    -f {{ icingaweb_schema_file.stdout }}
+    && touch /etc/icingaweb2/.icingaweb2_schema_imported
+  args:
+    executable: /bin/bash
+    creates: /etc/icingaweb2/.icingaweb2_schema_imported
+
+- name: Import Icinga IDO schema into monitoring IDO database
+  ansible.builtin.shell: >
+    PGPASSWORD='{{ monitoring_ido_db_password }}'
+    psql -h {{ hostvars[monitoring_db_delegate_host].ansible_host | default(monitoring_db_delegate_host) }}
+    -U {{ monitoring_ido_db_user }}
+    -d {{ monitoring_ido_db_name }}
+    -f /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+    && touch /etc/icingaweb2/.icinga_ido_schema_imported
+  args:
+    executable: /bin/bash
+    creates: /etc/icingaweb2/.icinga_ido_schema_imported
+
+- name: Generate Icinga Web 2 admin password hash
+  ansible.builtin.command:
+    cmd: php -r "echo password_hash('{{ monitoring_admin_password }}', PASSWORD_DEFAULT), PHP_EOL;"
+  register: icingaweb_admin_password_hash
+  changed_when: false
+
+- name: Ensure Icinga Web 2 admin user exists in database
+  community.postgresql.postgresql_query:
+    db: "{{ monitoring_web_db_name }}"
+    query: >-
+      INSERT INTO icingaweb_user (name, active, password_hash)
+      VALUES ('{{ monitoring_admin_user }}', 1, '{{ icingaweb_admin_password_hash.stdout | trim }}')
+      ON CONFLICT (name) DO UPDATE
+      SET active = EXCLUDED.active, password_hash = EXCLUDED.password_hash;
+  become_user: postgres
+  delegate_to: "{{ monitoring_db_delegate_host }}"
+
+- name: Deploy Icinga Web 2 global config
+  ansible.builtin.template:
+    src: config.ini.j2
+    dest: /etc/icingaweb2/config.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Deploy Icinga Web 2 resources config
+  ansible.builtin.template:
+    src: resources.ini.j2
+    dest: /etc/icingaweb2/resources.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Deploy Icinga Web 2 authentication config
+  ansible.builtin.template:
+    src: authentication.ini.j2
+    dest: /etc/icingaweb2/authentication.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Deploy Icinga Web 2 roles config
+  ansible.builtin.template:
+    src: roles.ini.j2
+    dest: /etc/icingaweb2/roles.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Deploy monitoring module backend config
+  ansible.builtin.template:
+    src: monitoring-backends.ini.j2
+    dest: /etc/icingaweb2/modules/monitoring/backends.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Deploy monitoring module command transport config
+  ansible.builtin.template:
+    src: monitoring-commandtransports.ini.j2
+    dest: /etc/icingaweb2/modules/monitoring/commandtransports.ini
+    owner: root
+    group: www-data
+    mode: "0660"
+
+- name: Enable Icinga Web 2 monitoring module
+  ansible.builtin.file:
+    src: /usr/share/icingaweb2/modules/monitoring
+    dest: /etc/icingaweb2/enabledModules/monitoring
+    state: link
+
+- name: Deploy Icinga 2 API user config
+  ansible.builtin.template:
+    src: api-users.conf.j2
+    dest: /etc/icinga2/conf.d/api-users.conf
+    mode: "0644"
+
+- name: Deploy Icinga 2 IDO PgSQL feature config
+  ansible.builtin.template:
+    src: ido-pgsql.conf.j2
+    dest: /etc/icinga2/features-available/ido-pgsql.conf
+    mode: "0644"
+
+- name: Deploy Icinga 2 Uranus VM checks
+  ansible.builtin.template:
+    src: uranus-vms.conf.j2
+    dest: /etc/icinga2/conf.d/uranus-vms.conf
+    mode: "0644"
+
+- name: Initialize Icinga 2 API certificates
+  ansible.builtin.command:
+    cmd: icinga2 api setup
+    creates: "/var/lib/icinga2/certs/{{ inventory_hostname }}.crt"
+
+- name: Enable Icinga 2 API feature
+  ansible.builtin.command:
+    cmd: icinga2 feature enable api
+  register: icinga2_api_enable
+  changed_when: "'enabled' in icinga2_api_enable.stdout"
+  failed_when:
+    - icinga2_api_enable.rc != 0
+    - "'already enabled' not in (icinga2_api_enable.stderr | default(''))"
+
+- name: Enable Icinga 2 IDO PgSQL feature
+  ansible.builtin.command:
+    cmd: icinga2 feature enable ido-pgsql
+  register: icinga2_ido_enable
+  changed_when: "'enabled' in icinga2_ido_enable.stdout"
+  failed_when:
+    - icinga2_ido_enable.rc != 0
+    - "'already enabled' not in (icinga2_ido_enable.stderr | default(''))"
+
+- name: Restart icinga2 after feature changes
+  ansible.builtin.systemd:
+    name: icinga2
+    state: restarted
+    enabled: true
+
+- name: Ensure Icinga Web 2 setup token exists
+  ansible.builtin.command:
+    cmd: icingacli setup token create
+    creates: /etc/icingaweb2/setup.token

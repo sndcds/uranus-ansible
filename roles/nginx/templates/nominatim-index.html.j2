@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nominatim</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f0e8;
+        --panel: #fffdf8;
+        --ink: #1f2a2e;
+        --muted: #5d6a6f;
+        --accent: #1d6f5f;
+        --accent-2: #d8efe8;
+        --border: #d8d1c5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, #ffffff 0, #f4f0e8 42%),
+          linear-gradient(180deg, #efe7da 0%, var(--bg) 100%);
+      }
+      main {
+        max-width: 880px;
+        margin: 4rem auto;
+        padding: 0 1.25rem;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 2rem;
+        box-shadow: 0 18px 50px rgba(31, 42, 46, 0.08);
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(2rem, 5vw, 3.4rem);
+        line-height: 0.95;
+      }
+      p {
+        margin: 0 0 1rem;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+      form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.75rem;
+        margin: 1.5rem 0 1rem;
+      }
+      input {
+        width: 100%;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font: inherit;
+      }
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 0.9rem 1.2rem;
+        background: var(--accent);
+        color: white;
+        font: inherit;
+        cursor: pointer;
+      }
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.25rem;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .link-card {
+        background: var(--accent-2);
+        border-radius: 12px;
+        padding: 0.8rem 1rem;
+      }
+      code {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.95em;
+      }
+      @media (max-width: 700px) {
+        form { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>Nominatim</h1>
+        <p>Lokale Geocoding-Instanz fuer Schleswig-Holstein.</p>
+        <p>Die API laeuft bereits. Ueber die Suche unten kannst du direkt einen Nominatim-Request gegen <code>/search</code> ausloesen.</p>
+
+        <form action="/search" method="get">
+          <input type="text" name="q" placeholder="Flensburg, Schleswig oder eine Adresse" required>
+          <input type="hidden" name="format" value="jsonv2">
+          <button type="submit">Suchen</button>
+        </form>
+
+        <div class="links">
+          <a class="link-card" href="/status">Status</a>
+          <a class="link-card" href="/search?q=Flensburg&amp;format=jsonv2">Beispielsuche</a>
+          <a class="link-card" href="/reverse?lat=54.7833&amp;lon=9.4333&amp;format=jsonv2">Reverse Beispiel</a>
+          <a class="link-card" href="/lookup?format=jsonv2">Lookup</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

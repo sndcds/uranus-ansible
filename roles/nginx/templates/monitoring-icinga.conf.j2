@@ -1,0 +1,36 @@
+server {
+    listen 80;
+    server_name {{ icinga_web_domain }};
+{% if local_test_mode | default(false) | bool %}
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ icinga_web_domain }};
+
+    ssl_certificate /etc/ssl/localcerts/{{ icinga_web_domain }}.crt;
+    ssl_certificate_key /etc/ssl/localcerts/{{ icinga_web_domain }}.key;
+{% endif %}
+
+    root /usr/share/icingaweb2/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ ^/index\.php(.*)$ {
+        fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+        include snippets/fastcgi-php.conf;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param ICINGAWEB_CONFIGDIR /etc/icingaweb2;
+        fastcgi_param SCRIPT_FILENAME /usr/share/icingaweb2/public/index.php;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+
+    location ~ \.php$ {
+        return 404;
+    }
+}

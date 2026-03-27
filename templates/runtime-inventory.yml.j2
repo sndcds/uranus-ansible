@@ -1,0 +1,22 @@
+all:
+  children:
+    provisioned_vms:
+      hosts:
+{% for host_name, host_data in (runtime_inventory_hosts | default({}) | dictsort) %}
+        {{ host_name }}:
+          ansible_host: {{ host_data.ansible_host }}
+          ansible_user: {{ host_data.ansible_user | default('ubuntu') }}
+          ansible_ssh_private_key_file: {{ host_data.ansible_ssh_private_key_file | default(ssh_private_key_file) }}
+          ansible_become: {{ host_data.ansible_become | default(true) | bool | lower }}
+          ansible_become_method: {{ host_data.ansible_become_method | default('sudo') }}
+{% endfor %}
+{% for group_name in ['db', 'dev', 'prod', 'monitoring', 'nominatim'] %}
+    {{ group_name }}:
+      hosts:
+{% for host_name, host_data in (runtime_inventory_hosts | default({}) | dictsort) %}
+{% set vm_group = (vms | selectattr('name', 'equalto', host_name) | map(attribute='group') | first | default('')) %}
+{% if vm_group == group_name %}
+        {{ host_name }}: {}
+{% endif %}
+{% endfor %}
+{% endfor %}

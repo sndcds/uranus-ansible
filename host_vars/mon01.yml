@@ -1,0 +1,3 @@
+vm_role: monitoring
+icinga_web_domain: "monitoring.uranus.home.arpa"
+monitoring_notifications_mail: "alerts@example.com"

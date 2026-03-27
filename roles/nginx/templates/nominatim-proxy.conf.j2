@@ -1,0 +1,77 @@
+server {
+    listen 80;
+    server_name {{ nominatim_domain }};
+{% if local_test_mode | default(false) | bool %}
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ nominatim_domain }};
+
+    ssl_certificate /etc/ssl/localcerts/{{ nominatim_domain }}.crt;
+    ssl_certificate_key /etc/ssl/localcerts/{{ nominatim_domain }}.key;
+{% endif %}
+
+    location = / {
+        root /var/www/uranus-nominatim;
+        try_files /index.html =404;
+    }
+
+    location /search {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/search;
+    }
+
+    location /search.php {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/search.php;
+    }
+
+    location /reverse {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/reverse;
+    }
+
+    location /lookup {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/lookup;
+    }
+
+    location /status {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/status;
+    }
+
+    location /details.php {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/details.php;
+    }
+
+    location / {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+        proxy_pass http://unix:/run/nominatim.sock:/;
+    }
+}

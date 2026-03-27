@@ -1,0 +1,14 @@
+vault_cloudinit_password: "CHANGE_ME_LOCAL_PASSWORD"
+
+vault_db_password_dev: "CHANGE_ME_DB_PASSWORD_DEV"
+vault_db_password_prod: "CHANGE_ME_DB_PASSWORD_PROD"
+
+vault_backend_jwt_secret: "CHANGE_ME_BACKEND_JWT_SECRET"
+vault_backend_secret_key: "CHANGE_ME_BACKEND_SECRET_KEY"
+
+vault_nominatim_db_password: "CHANGE_ME_NOMINATIM_DB_PASSWORD"
+
+vault_monitoring_web_db_password: "CHANGE_ME_ICINGAWEB2_DB_PASSWORD"
+vault_monitoring_ido_db_password: "CHANGE_ME_ICINGA_IDO_DB_PASSWORD"
+vault_monitoring_admin_password: "CHANGE_ME_ICINGA_ADMIN_PASSWORD"
+vault_monitoring_api_password: "CHANGE_ME_ICINGA_API_PASSWORD"

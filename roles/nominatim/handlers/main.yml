@@ -1,0 +1,14 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart nominatim socket
+  ansible.builtin.systemd:
+    name: nominatim.socket
+    state: restarted
+
+- name: Restart nominatim
+  ansible.builtin.systemd:
+    name: nominatim.service
+    state: restarted

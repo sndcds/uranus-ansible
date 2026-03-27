@@ -1,0 +1,91 @@
+ubuntu_release: "noble"
+
+common_packages:
+  - nginx
+  - fail2ban
+  - bash-completion
+  - apt-utils
+  - net-tools
+  - iputils-ping
+  - dnsutils
+  - httpie
+  - curl
+  - htop
+  - jq
+  - tree
+  - vim
+  - git
+  - openssl
+  - ufw
+  - certbot
+  - python3-certbot-nginx
+
+ntp_allowed_networks:
+  - "0.0.0.0/0"
+
+uranus_domains:
+  dev_frontend: "dev.uranus.home.arpa"
+  dev_backend: "api.dev.uranus.home.arpa"
+  prod_frontend: "uranus.home.arpa"
+  prod_backend: "api.uranus.home.arpa"
+  nominatim: "nominatim.uranus.home.arpa"
+  icinga: "monitoring.uranus.home.arpa"
+  mail_mx: "mail.uranus.home.arpa"
+
+postgresql_version: 17
+postgis_package: "postgresql-17-postgis-3"
+
+ssl_email: "admin@example.com"
+
+backend_port: 9090
+frontend_port: 3000
+frontend_repo_url: "https://github.com/sndcds/uranus-dashboard.git"
+frontend_repo_version: "main"
+frontend_nodejs_major: "20"
+backend_repo_url: "https://github.com/sndcds/uranus.git"
+backend_repo_version: "main"
+backend_go_version: "1.25.8"
+backend_go_archive_sha256: "ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6"
+backend_db_schema: "uranus"
+backend_supported_languages:
+  - de
+  - en
+  - da
+backend_jwt_secret: "{{ vault_backend_jwt_secret }}"
+backend_secret_key: "{{ vault_backend_secret_key }}"
+
+nominatim_region_name: "Schleswig-Holstein"
+nominatim_data_url: "https://download.geofabrik.de/europe/germany/schleswig-holstein-latest.osm.pbf"
+nominatim_data_file: "/srv/nominatim/data/schleswig-holstein-latest.osm.pbf"
+nominatim_project_dir: "/srv/nominatim/nominatim-project"
+nominatim_import_style: "address"
+nominatim_default_language: "de"
+nominatim_languages:
+  - de
+  - en
+  - da
+nominatim_port: 8088
+nominatim_db_delegate_host: "db01"
+nominatim_db_name: "nominatim"
+nominatim_db_user: "nominatim"
+nominatim_db_password: "{{ vault_nominatim_db_password }}"
+nominatim_db_allowed_networks:
+  - "192.168.122.0/24"
+
+monitoring_db_delegate_host: "db01"
+monitoring_web_db_name: "icingaweb2"
+monitoring_web_db_user: "icingaweb2"
+monitoring_web_db_password: "{{ vault_monitoring_web_db_password }}"
+monitoring_ido_db_name: "icinga_ido"
+monitoring_ido_db_user: "icinga_ido"
+monitoring_ido_db_password: "{{ vault_monitoring_ido_db_password }}"
+monitoring_admin_user: "icingaadmin"
+monitoring_admin_password: "{{ vault_monitoring_admin_password }}"
+monitoring_api_user: "icingaweb2"
+monitoring_api_password: "{{ vault_monitoring_api_password }}"
+
+api_health_endpoint: "/api/events"
+frontend_health_endpoint: "/"
+
+backup_root: "/var/backups/uranus"
+logrotate_retention: 14

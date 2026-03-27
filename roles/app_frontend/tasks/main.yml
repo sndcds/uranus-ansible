@@ -1,0 +1,89 @@
+---
+- name: Ensure NodeSource keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download NodeSource signing key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /tmp/nodesource.gpg.key
+    mode: "0644"
+
+- name: Convert NodeSource signing key
+  ansible.builtin.command:
+    cmd: gpg --dearmor --batch --yes -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource.gpg.key
+
+- name: Ensure NodeSource signing key permissions
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/nodesource.gpg
+    mode: "0644"
+
+- name: Add NodeSource repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_{{ frontend_nodejs_major }}.x nodistro main
+
+- name: Install frontend build dependencies
+  ansible.builtin.apt:
+    name:
+      - nodejs
+      - git
+    state: present
+    update_cache: true
+
+- name: Create frontend user
+  ansible.builtin.user:
+    name: uranus
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create frontend directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: "0755"
+  loop:
+    - /opt/uranus
+    - /opt/uranus/frontend
+
+- name: Checkout frontend repository
+  ansible.builtin.git:
+    repo: "{{ frontend_repo_url }}"
+    dest: /opt/uranus/frontend
+    version: "{{ frontend_repo_version }}"
+    update: true
+  become_user: uranus
+
+- name: Deploy frontend environment file
+  ansible.builtin.template:
+    src: frontend.env.local.j2
+    dest: /opt/uranus/frontend/.env.local
+    owner: uranus
+    group: uranus
+    mode: "0644"
+
+- name: Install frontend dependencies
+  ansible.builtin.command:
+    cmd: npm ci
+    chdir: /opt/uranus/frontend
+  become_user: uranus
+
+- name: Build frontend application
+  ansible.builtin.command:
+    cmd: npm run build
+    chdir: /opt/uranus/frontend
+  become_user: uranus
+
+- name: Disable legacy frontend systemd service if present
+  ansible.builtin.systemd:
+    name: uranus-frontend.service
+    enabled: false
+    state: stopped
+  failed_when: false

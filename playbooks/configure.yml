@@ -1,0 +1,131 @@
+---
+- name: Register runtime inventory hosts for delegated connections
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+  vars:
+    runtime_inventory: "{{ lookup('file', playbook_dir ~ '/../inventory/runtime_hosts.yml') | from_yaml }}"
+    runtime_inventory_hosts: "{{ runtime_inventory.all.children.provisioned_vms.hosts | default({}) }}"
+    runtime_inventory_groups:
+      - db
+      - dev
+      - prod
+      - monitoring
+      - nominatim
+
+  tasks:
+    - name: Load local vault variables if present
+      ansible.builtin.include_vars:
+        file: ../group_vars/vault.yml
+      ignore_errors: true
+
+    - name: Add runtime inventory hosts to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ item.key }}"
+        groups:
+          - provisioned_vms
+        ansible_host: "{{ item.value.ansible_host }}"
+        ansible_user: "{{ item.value.ansible_user | default('ubuntu') }}"
+        ansible_ssh_private_key_file: "{{ item.value.ansible_ssh_private_key_file | default(ssh_private_key_file) }}"
+        ansible_become: "{{ item.value.ansible_become | default(true) }}"
+        ansible_become_method: "{{ item.value.ansible_become_method | default('sudo') }}"
+      loop: "{{ runtime_inventory_hosts | dict2items }}"
+      when:
+        - runtime_inventory_hosts | length > 0
+
+    - name: Add runtime inventory hosts to role groups for delegated connections
+      ansible.builtin.add_host:
+        name: "{{ item.1 }}"
+        groups:
+          - "{{ item.0 }}"
+      loop: >-
+        {{
+          runtime_inventory_groups
+          | product(runtime_inventory_hosts.keys() | list)
+          | list
+        }}
+      when:
+        - runtime_inventory.all.children[item.0] is defined
+        - item.1 in (runtime_inventory.all.children[item.0].hosts | default({}, true))
+
+- name: Configure provisioned VMs
+  hosts: "{{ target_hosts | default('provisioned_vms') }}"
+  serial: 1
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+    - ../group_vars/all.yml
+
+  pre_tasks:
+    - name: Load local vault variables if present
+      ansible.builtin.include_vars:
+        file: ../group_vars/vault.yml
+      ignore_errors: true
+
+    - name: Load host-specific vars
+      ansible.builtin.include_vars:
+        file: "../host_vars/{{ inventory_hostname }}.yml"
+
+    - name: Gather facts without privilege escalation
+      ansible.builtin.setup:
+      become: false
+
+  tasks:
+    - name: Bootstrap PostgreSQL before general package management
+      ansible.builtin.include_role:
+        name: postgresql
+      when: vm_role == 'db'
+
+    - name: Apply common baseline
+      ansible.builtin.include_role:
+        name: common
+
+    - name: Apply firewall baseline
+      ansible.builtin.include_role:
+        name: ufw
+
+    - name: Apply log rotation baseline
+      ansible.builtin.include_role:
+        name: logrotate
+
+    - name: Configure database backups
+      ansible.builtin.include_role:
+        name: backup
+      when: vm_role == 'db'
+
+    - name: Configure local TLS or ACME certificates
+      ansible.builtin.include_role:
+        name: certbot
+      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim']
+
+    - name: Configure reverse proxy
+      ansible.builtin.include_role:
+        name: nginx
+      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim']
+
+    - name: Configure backend application
+      ansible.builtin.include_role:
+        name: app_backend
+      when: vm_role in ['dev', 'prod']
+
+    - name: Configure frontend application
+      ansible.builtin.include_role:
+        name: app_frontend
+      when: vm_role in ['dev', 'prod']
+
+    - name: Configure postfix
+      ansible.builtin.include_role:
+        name: postfix
+      when: vm_role in ['dev', 'prod']
+
+    - name: Configure monitoring stack
+      ansible.builtin.include_role:
+        name: monitoring
+      when: vm_role == 'monitoring'
+
+    - name: Configure Nominatim
+      ansible.builtin.include_role:
+        name: nominatim
+      when: vm_role == 'nominatim'
