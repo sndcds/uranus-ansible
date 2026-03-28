@@ -5,19 +5,26 @@ all:
         db01:
           ansible_host: 192.168.122.249
           ansible_user: ubuntu
-          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          ansible_become: true
+          ansible_become_method: sudo
+        dev01:
+          ansible_host: 192.168.122.22
+          ansible_user: ubuntu
           ansible_become: true
           ansible_become_method: sudo
         mon01:
           ansible_host: 192.168.122.241
           ansible_user: ubuntu
-          ansible_ssh_private_key_file: ~/.ssh/id_rsa
           ansible_become: true
           ansible_become_method: sudo
         nom01:
           ansible_host: 192.168.122.10
           ansible_user: ubuntu
-          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          ansible_become: true
+          ansible_become_method: sudo
+        prod01:
+          ansible_host: 192.168.122.237
+          ansible_user: ubuntu
           ansible_become: true
           ansible_become_method: sudo
     db:
@@ -25,8 +32,10 @@ all:
         db01: {}
     dev:
       hosts:
+        dev01: {}
     prod:
       hosts:
+        prod01: {}
     monitoring:
       hosts:
         mon01: {}

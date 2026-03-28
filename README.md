@@ -107,7 +107,9 @@ Wichtige Dateien:
 
 - `ansible.cfg`: zentrale Ansible-Konfiguration
 - `vars.yml`: VM-Layout, Provisioning-Defaults, lokaler Testmodus
-- `group_vars/all.yml`: globale Domänen, Versionsstände, App- und Nominatim-Variablen
+- `group_vars/all.yml`: globale Domänen, Versionsstände und nicht-sensitive Default-Variablen
+- `group_vars/vault.yml`: lokale Secrets und Passwörter, nicht im Repo versionieren
+- `group_vars/vault.yml.example`: Beispielstruktur für Secrets
 - `host_vars/db01.yml`: Datenbank-Setup
 - `host_vars/dev01.yml`: Dev-App-Setup
 - `host_vars/prod01.yml`: Prod-App-Setup
@@ -126,6 +128,69 @@ Auf dem Host:
 Das Repository geht davon aus, dass du lokal als libvirt/KVM-Admin arbeitest und die VMs über das Standard-libvirt-Netz `192.168.122.0/24` laufen.
 
 ## Wichtige Variablen
+
+### Secrets
+
+Sensitive Werte sollen nicht mehr in `group_vars/all.yml`, `host_vars/` oder `vars.yml` im Klartext gepflegt werden.
+
+Stattdessen:
+
+1. `group_vars/vault.yml.example` nach `group_vars/vault.yml` kopieren
+2. echte Werte in `group_vars/vault.yml` setzen
+3. optional `group_vars/vault.yml` mit `ansible-vault encrypt` verschlüsseln
+
+`group_vars/vault.yml` ist in `.gitignore` eingetragen und wird von `playbooks/provision.yml` sowie `playbooks/configure.yml` optional geladen.
+
+Beispiel:
+
+```bash
+cp group_vars/vault.yml.example group_vars/vault.yml
+ansible-vault encrypt group_vars/vault.yml
+```
+
+### Ansible Vault nutzen
+
+Typischer Ablauf:
+
+1. Datei aus der Vorlage erzeugen
+2. Secrets eintragen
+3. Datei mit `ansible-vault` verschlüsseln
+4. Playbooks mit Vault-Passwort ausführen
+
+Befehle:
+
+```bash
+cp group_vars/vault.yml.example group_vars/vault.yml
+ansible-vault edit group_vars/vault.yml
+ansible-vault encrypt group_vars/vault.yml
+```
+
+Wenn die Datei bereits verschlüsselt ist:
+
+```bash
+ansible-vault edit group_vars/vault.yml
+ansible-vault view group_vars/vault.yml
+ansible-vault decrypt group_vars/vault.yml
+```
+
+Playbooks mit Vault-Passwort starten:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/db01.yml --ask-vault-pass
+ansible-playbook -i inventory.ini playbooks/site.yml --ask-vault-pass
+```
+
+Alternativ mit Passwortdatei:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/site.yml --vault-password-file .vault_pass.txt
+```
+
+Wichtig:
+
+- `group_vars/vault.yml` wird optional geladen, muss für echte Deployments aber vorhanden sein
+- `group_vars/vault.yml` sollte nicht unverschlüsselt im Dateisystem liegen bleiben
+- die Beispiel-Datei `group_vars/vault.yml.example` dient nur als Strukturvorlage
 
 ### `vars.yml`
 
@@ -155,6 +220,8 @@ Besonders relevant:
 - `backend_db_schema`
 - `nominatim_*`
 
+Secrets in dieser Datei sind jetzt nur noch Referenzen auf `vault_*`-Variablen.
+
 ### `host_vars/db01.yml`
 
 Hier wird die Mehrfach-DB-Konfiguration definiert:
@@ -163,10 +230,10 @@ Hier wird die Mehrfach-DB-Konfiguration definiert:
 app_databases:
   - name: uranus_dev
     user: uranus_dev
-    password: CHANGE_ME_DB_PASSWORD_DEV
+    password: "{{ vault_db_password_dev }}"
   - name: uranus_prod
     user: uranus_prod
-    password: CHANGE_ME_DB_PASSWORD_PROD
+    password: "{{ vault_db_password_prod }}"
 ```
 
 Zusätzlich:
@@ -181,6 +248,8 @@ Dev und Prod verwenden jeweils eigene Datenbanken:
 
 - `dev01` -> `uranus_dev` / `uranus_dev`
 - `prod01` -> `uranus_prod` / `uranus_prod`
+
+Die zugehörigen Passwörter kommen aus `group_vars/vault.yml`.
 
 ## Datenbanken
 
@@ -258,7 +327,7 @@ ansible-playbook -i inventory/runtime_hosts.yml playbooks/dev01.yml
 
 ## Typische Reihenfolge für einen frischen lokalen Aufbau
 
-1. Platzhalter-Passwörter und Secrets in `group_vars/` und `host_vars/` ersetzen.
+1. `group_vars/vault.yml.example` nach `group_vars/vault.yml` kopieren und echte Secrets eintragen.
 2. Optional `/etc/hosts` für die `*.home.arpa`-Domains ergänzen.
 3. `db01` provisionieren und konfigurieren.
 4. `dev01` und `prod01` provisionieren und konfigurieren.
@@ -396,15 +465,20 @@ Das ist wichtig, weil mehrere Rollen per `become_user` auf andere Unix-User wech
 
 ## Sicherheit und Platzhalter
 
-Aktuell sind mehrere sicherheitsrelevante Variablen Platzhalter und müssen vor echtem Einsatz ersetzt werden:
+Die Platzhalterwerte liegen jetzt gesammelt in `group_vars/vault.yml.example`.
 
-- `cloudinit_password`
-- `backend_jwt_secret`
-- `backend_secret_key`
-- `db_password` in den App-Host-Variablen
-- `app_databases[*].password` in `host_vars/db01.yml`
-- `nominatim_db_password`
-- `ssl_email`
+Vor echtem Einsatz solltest du mindestens setzen:
+
+- `vault_cloudinit_password`
+- `vault_db_password_dev`
+- `vault_db_password_prod`
+- `vault_backend_jwt_secret`
+- `vault_backend_secret_key`
+- `vault_nominatim_db_password`
+- `vault_monitoring_web_db_password`
+- `vault_monitoring_ido_db_password`
+- `vault_monitoring_admin_password`
+- `vault_monitoring_api_password`
 
 ## Aktueller Status
 

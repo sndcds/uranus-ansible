@@ -6,7 +6,6 @@ all:
         {{ host_name }}:
           ansible_host: {{ host_data.ansible_host }}
           ansible_user: {{ host_data.ansible_user | default('ubuntu') }}
-          ansible_ssh_private_key_file: {{ host_data.ansible_ssh_private_key_file | default(ssh_private_key_file) }}
           ansible_become: {{ host_data.ansible_become | default(true) | bool | lower }}
           ansible_become_method: {{ host_data.ansible_become_method | default('sudo') }}
 {% endfor %}
