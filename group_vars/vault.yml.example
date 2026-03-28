@@ -5,7 +5,6 @@ vault_db_password_prod: "CHANGE_ME_DB_PASSWORD_PROD"
 
 vault_backend_jwt_secret: "CHANGE_ME_BACKEND_JWT_SECRET"
 vault_backend_secret_key: "CHANGE_ME_BACKEND_SECRET_KEY"
-vault_backend_auth_smtp_password: "CHANGE_ME_BACKEND_AUTH_SMTP_PASSWORD"
 vault_backend_smtp_password: "CHANGE_ME_BACKEND_SMTP_PASSWORD"
 
 vault_nominatim_db_password: "CHANGE_ME_NOMINATIM_DB_PASSWORD"

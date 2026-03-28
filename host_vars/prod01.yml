@@ -2,6 +2,8 @@ vm_role: prod
 backend_domain: "api.uranus.home.arpa"
 frontend_domain: "uranus.home.arpa"
 app_env: "production"
+frontend_repo_version: "main"
+backend_repo_version: "main"
 db_host: "localhost"
 db_name: "uranus_prod"
 db_user: "uranus_prod"

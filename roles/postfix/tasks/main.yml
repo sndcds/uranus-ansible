@@ -20,6 +20,7 @@
       - postfix
       - libsasl2-modules
       - ca-certificates
+      - rsyslog
     state: present
   when: postfix_relay_enabled
 
@@ -67,6 +68,23 @@
     group: root
     mode: "0600"
   when: postfix_sasl_passwords.changed
+
+- name: Configure rsyslog mail log
+  ansible.builtin.copy:
+    dest: /etc/rsyslog.d/50-postfix-mail.conf
+    mode: "0644"
+    content: |
+      mail.*    -/var/log/mail.log
+      & stop
+  notify: Restart rsyslog
+  when: postfix_relay_enabled
+
+- name: Ensure rsyslog is enabled and running
+  ansible.builtin.systemd:
+    name: rsyslog
+    enabled: true
+    state: started
+  when: postfix_relay_enabled
 
 - name: Ensure postfix is enabled and running
   ansible.builtin.systemd:

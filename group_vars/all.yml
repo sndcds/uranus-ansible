@@ -43,7 +43,7 @@ uranus_domains:
 postgresql_version: 17
 postgis_package: "postgresql-17-postgis-3"
 
-ssl_email: "admin@example.com"
+ssl_email: "noreply@oklabflensburg.de"
 
 backend_port: 9090
 frontend_port: 3000
@@ -66,12 +66,12 @@ backend_auth_token_expiration_time: 600
 backend_auth_smtp_host: ""
 backend_auth_smtp_port: 587
 backend_auth_smtp_login: ""
-backend_auth_smtp_password: "{{ vault_backend_auth_smtp_password | default('') }}"
+backend_auth_smtp_password: "{{ vault_backend_smtp_password | default('') }}"
 backend_auth_reply_email_address: "{{ ssl_email }}"
 backend_smtp_host: "{{ backend_auth_smtp_host }}"
 backend_smtp_port: "{{ backend_auth_smtp_port }}"
 backend_smtp_login: "{{ backend_auth_smtp_login }}"
-backend_smtp_password: "{{ vault_backend_smtp_password | default(backend_auth_smtp_password) }}"
+backend_smtp_password: "{{ vault_backend_smtp_password | default('') }}"
 postfix_relay_host: "{{ backend_smtp_host }}"
 postfix_relay_port: "{{ backend_smtp_port }}"
 postfix_relay_login: "{{ backend_smtp_login }}"

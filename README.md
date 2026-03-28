@@ -246,6 +246,20 @@ Wenn du für Postfix andere Zugangsdaten als für das Backend verwenden willst, 
 
 Die sensiblen SMTP-Passwörter gehören in `group_vars/vault.yml`.
 
+Wenn der Relay konfiguriert ist, richtet die Rolle zusätzlich `rsyslog` ein und schreibt Postfix-Logs nach:
+
+```text
+/var/log/mail.log
+```
+
+Nützliche Befehle auf `dev01` oder `prod01`:
+
+```bash
+sudo tail -f /var/log/mail.log
+sudo journalctl -u postfix -f
+postqueue -p
+```
+
 ## Firewall
 
 Die UFW-Basis ist auf allen VMs aktiv mit `deny incoming` und `allow outgoing`.
