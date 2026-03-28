@@ -14,29 +14,38 @@
     direction: outgoing
     policy: allow
 
-- name: Allow SSH
+- name: Enable UFW logging
+  community.general.ufw:
+    logging: "{{ ufw_logging | default('low') }}"
+
+- name: Allow SSH from configured management networks
   community.general.ufw:
     rule: allow
     port: "22"
     proto: tcp
+    src: "{{ item }}"
+  loop: "{{ ssh_allowed_networks | default(['192.168.122.0/24']) }}"
 
-- name: Allow HTTP
+- name: Rate-limit SSH
+  community.general.ufw:
+    rule: limit
+    port: "22"
+    proto: tcp
+  when: ssh_allowed_networks | default([]) | length == 0
+
+- name: Allow HTTP on web-facing VMs
   community.general.ufw:
     rule: allow
     port: "80"
     proto: tcp
+  when: vm_role in (web_exposed_vm_roles | default([]))
 
-- name: Allow HTTPS
+- name: Allow HTTPS on web-facing VMs
   community.general.ufw:
     rule: allow
     port: "443"
     proto: tcp
-
-- name: Allow NTP
-  community.general.ufw:
-    rule: allow
-    port: "123"
-    proto: udp
+  when: vm_role in (web_exposed_vm_roles | default([]))
 
 - name: Allow backend API port locally if app server
   community.general.ufw:

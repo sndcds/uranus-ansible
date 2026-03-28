@@ -77,7 +77,7 @@ Reihenfolge grob:
 2. `common`
 3. `ufw`
 4. `logrotate`
-5. `backup` auf `db01`
+5. `backup` auf `db01`, `dev01` und `prod01`
 6. `certbot`
 7. `nginx`
 8. `app_backend`
@@ -179,6 +179,92 @@ Playbooks mit Vault-Passwort starten:
 ansible-playbook -i inventory.ini playbooks/db01.yml --ask-vault-pass
 ansible-playbook -i inventory.ini playbooks/site.yml --ask-vault-pass
 ```
+
+### Backup
+
+Backups werden aktuell lokal auf den jeweiligen VMs unter `backup_root` geschrieben. Standard ist:
+
+```yaml
+backup_root: /var/backups/uranus
+```
+
+Auf `db01` legt die Rolle tägliche PostgreSQL-Dumps unter `db/` ab:
+
+- `/var/backups/uranus/db/uranus_dev_<timestamp>.sql`
+- `/var/backups/uranus/db/uranus_prod_<timestamp>.sql`
+
+Auf `dev01` und `prod01` legt die Rolle tägliche Archiv-Backups unter `app/` ab:
+
+- `/var/backups/uranus/app/dev01_<timestamp>.tar.gz`
+- `/var/backups/uranus/app/prod01_<timestamp>.tar.gz`
+
+Gesichert werden dabei standardmäßig:
+
+- `/etc/nginx`
+- `/etc/uranus`
+- `/opt/uranus/frontend/dist`
+- `/opt/uranus/backend/bin`
+- `/opt/uranus/backend/profile_images`
+- `/opt/uranus/backend/pluto/images`
+- `/opt/uranus/backend/pluto/cache`
+
+Die Aufbewahrung steuert `backup_retention_days` in `group_vars/all.yml`. Standard ist `14` Tage.
+
+Die Backups laufen per Systemd-Timer:
+
+- `uranus-db-backup.timer` auf `db01`
+- `uranus-app-backup.timer` auf `dev01` und `prod01`
+
+Manuell auslösen:
+
+```bash
+sudo systemctl start uranus-db-backup.service
+sudo systemctl start uranus-app-backup.service
+```
+
+Wenn du die Sicherungen nicht nur lokal auf den VMs, sondern zentral auf `db01` oder off-host ablegen willst, musst du zusätzlich einen zweiten Kopierschritt mit `rsync`, `restic` oder einem NAS/SFTP-Ziel ergänzen.
+
+## Mail
+
+`dev01` und `prod01` nutzen Postfix nur als ausgehenden SMTP-Relay. Ein vollständiger Mailserver mit Mailboxen, IMAP/POP3 oder eingehender MX-Zustellung ist nicht eingerichtet.
+
+Die Postfix-Rolle zieht ihre Relay-Daten standardmäßig aus diesen Variablen:
+
+- `backend_smtp_host`
+- `backend_smtp_port`
+- `backend_smtp_login`
+- `backend_smtp_password`
+
+Darauf aufbauend werden automatisch gesetzt:
+
+- `postfix_relay_host`
+- `postfix_relay_port`
+- `postfix_relay_login`
+- `postfix_relay_password`
+
+Wenn du für Postfix andere Zugangsdaten als für das Backend verwenden willst, kannst du die `postfix_relay_*`-Werte separat überschreiben.
+
+Die sensiblen SMTP-Passwörter gehören in `group_vars/vault.yml`.
+
+## Firewall
+
+Die UFW-Basis ist auf allen VMs aktiv mit `deny incoming` und `allow outgoing`.
+
+Zusätzlich gilt aktuell:
+
+- SSH ist auf die Netze in `ssh_allowed_networks` begrenzt
+- HTTP und HTTPS sind nur auf Web-VMs mit Rollen aus `web_exposed_vm_roles` offen
+- `db01` öffnet PostgreSQL nur für `postgresql_allowed_networks`
+- der Backend-Port `9090` ist nur lokal auf `127.0.0.1` freigegeben
+- eingehendes NTP ist nicht freigeschaltet
+
+Die wichtigsten Härtungs-Variablen stehen in `group_vars/all.yml`:
+
+- `ssh_allowed_networks`
+- `web_exposed_vm_roles`
+- `ufw_logging`
+
+Auf `db01` ist PostgreSQL zusätzlich enger gebunden und lauscht nicht mehr auf allen Interfaces, sondern nur auf `localhost` und der internen VM-IP.
 
 Alternativ mit Passwortdatei:
 

@@ -22,6 +22,14 @@ common_packages:
 
 ntp_allowed_networks:
   - "0.0.0.0/0"
+ssh_allowed_networks:
+  - "192.168.122.0/24"
+web_exposed_vm_roles:
+  - dev
+  - prod
+  - monitoring
+  - nominatim
+ufw_logging: "low"
 
 uranus_domains:
   dev_frontend: "dev.uranus.home.arpa"
@@ -51,6 +59,23 @@ backend_supported_languages:
   - de
   - en
   - da
+backend_profile_image_quality: 75
+backend_pluto_image_max_file_size: 20
+backend_pluto_image_max_px: 1920
+backend_auth_token_expiration_time: 600
+backend_auth_smtp_host: ""
+backend_auth_smtp_port: 587
+backend_auth_smtp_login: ""
+backend_auth_smtp_password: "{{ vault_backend_auth_smtp_password | default('') }}"
+backend_auth_reply_email_address: "{{ ssl_email }}"
+backend_smtp_host: "{{ backend_auth_smtp_host }}"
+backend_smtp_port: "{{ backend_auth_smtp_port }}"
+backend_smtp_login: "{{ backend_auth_smtp_login }}"
+backend_smtp_password: "{{ vault_backend_smtp_password | default(backend_auth_smtp_password) }}"
+postfix_relay_host: "{{ backend_smtp_host }}"
+postfix_relay_port: "{{ backend_smtp_port }}"
+postfix_relay_login: "{{ backend_smtp_login }}"
+postfix_relay_password: "{{ backend_smtp_password }}"
 backend_jwt_secret: "{{ vault_backend_jwt_secret }}"
 backend_secret_key: "{{ vault_backend_secret_key }}"
 
@@ -88,4 +113,13 @@ api_health_endpoint: "/api/events"
 frontend_health_endpoint: "/"
 
 backup_root: "/var/backups/uranus"
+backup_retention_days: 14
+app_backup_paths:
+  - /etc/nginx
+  - /etc/uranus
+  - /opt/uranus/frontend/dist
+  - /opt/uranus/backend/bin
+  - /opt/uranus/backend/profile_images
+  - /opt/uranus/backend/pluto/images
+  - /opt/uranus/backend/pluto/cache
 logrotate_retention: 14

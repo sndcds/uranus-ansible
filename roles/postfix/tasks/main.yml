@@ -1,8 +1,27 @@
 ---
-- name: Install postfix
+- name: Determine whether outbound SMTP relay is configured
+  ansible.builtin.set_fact:
+    postfix_relay_enabled: >-
+      {{
+        (postfix_relay_host | default('') | length > 0)
+        and (postfix_relay_port | default(0) | int > 0)
+        and (postfix_relay_login | default('') | length > 0)
+        and (postfix_relay_password | default('') | length > 0)
+      }}
+
+- name: Skip postfix relay setup when SMTP relay variables are unset
+  ansible.builtin.debug:
+    msg: "Skipping postfix relay setup because postfix_relay_* or backend_smtp_* variables are incomplete."
+  when: not postfix_relay_enabled
+
+- name: Install postfix relay packages
   ansible.builtin.apt:
-    name: postfix
+    name:
+      - postfix
+      - libsasl2-modules
+      - ca-certificates
     state: present
+  when: postfix_relay_enabled
 
 - name: Configure postfix main.cf
   ansible.builtin.copy:
@@ -11,9 +30,47 @@
     content: |
       myhostname = {{ uranus_domains.mail_mx }}
       mydestination = localhost
-      relayhost =
-      inet_interfaces = all
+      relayhost = [{{ postfix_relay_host }}]:{{ postfix_relay_port }}
+      inet_interfaces = loopback-only
       inet_protocols = ipv4
-      smtp_tls_security_level = may
+      smtp_tls_security_level = encrypt
+      smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+      smtp_sasl_auth_enable = yes
+      smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+      smtp_sasl_security_options = noanonymous
+      smtp_sasl_tls_security_options = noanonymous
       smtpd_tls_security_level = may
+      compatibility_level = 3.6
   notify: Restart postfix
+  when: postfix_relay_enabled
+
+- name: Configure postfix relay credentials
+  ansible.builtin.copy:
+    dest: /etc/postfix/sasl_passwd
+    mode: "0600"
+    content: |
+      [{{ postfix_relay_host }}]:{{ postfix_relay_port }} {{ postfix_relay_login }}:{{ postfix_relay_password }}
+  register: postfix_sasl_passwords
+  notify: Restart postfix
+  when: postfix_relay_enabled
+
+- name: Build postfix relay credentials database
+  ansible.builtin.command:
+    cmd: postmap /etc/postfix/sasl_passwd
+  when: postfix_sasl_passwords.changed
+  notify: Restart postfix
+
+- name: Ensure hashed relay credential permissions
+  ansible.builtin.file:
+    path: /etc/postfix/sasl_passwd.db
+    owner: root
+    group: root
+    mode: "0600"
+  when: postfix_sasl_passwords.changed
+
+- name: Ensure postfix is enabled and running
+  ansible.builtin.systemd:
+    name: postfix
+    enabled: true
+    state: started
+  when: postfix_relay_enabled

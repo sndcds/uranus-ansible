@@ -5,6 +5,20 @@
     state: directory
     mode: "0750"
 
+- name: Ensure database backup directory exists
+  ansible.builtin.file:
+    path: "{{ backup_root }}/db"
+    state: directory
+    mode: "0750"
+  when: vm_role == 'db'
+
+- name: Ensure application backup directory exists
+  ansible.builtin.file:
+    path: "{{ backup_root }}/app"
+    state: directory
+    mode: "0750"
+  when: vm_role in ['dev', 'prod']
+
 - name: Build managed backup database list
   ansible.builtin.set_fact:
     managed_backup_databases: >-
@@ -18,6 +32,12 @@
           'password': db_password
         }]
       }}
+  when: vm_role == 'db'
+
+- name: Build managed application backup path list
+  ansible.builtin.set_fact:
+    managed_app_backup_paths: "{{ app_backup_paths | default([]) }}"
+  when: vm_role in ['dev', 'prod']
 
 - name: Install PostgreSQL backup script
   ansible.builtin.copy:
@@ -28,8 +48,39 @@
       set -e
       TS=$(date +%F_%H-%M-%S)
       {% for app_db in managed_backup_databases %}
-      PGPASSWORD='{{ app_db.password }}' pg_dump -U {{ app_db.user }} -h localhost {{ app_db.name }} > {{ backup_root }}/{{ app_db.name }}_${TS}.sql
+      PGPASSWORD='{{ app_db.password }}' pg_dump -U {{ app_db.user }} -h localhost {{ app_db.name }} > {{ backup_root }}/db/{{ app_db.name }}_${TS}.sql
       {% endfor %}
+      find {{ backup_root }}/db -maxdepth 1 -type f -name '*.sql' -mtime +{{ backup_retention_days | default(14) }} -delete
+  when: vm_role == 'db'
+
+- name: Install application backup script
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/uranus-app-backup.sh
+    mode: "0750"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      TS=$(date +%F_%H-%M-%S)
+      ARCHIVE="{{ backup_root }}/app/{{ inventory_hostname }}_${TS}.tar.gz"
+      SOURCES=(
+      {% for app_path in managed_app_backup_paths %}
+        "{{ app_path }}"
+      {% endfor %}
+      )
+      {% raw %}
+      EXISTING_SOURCES=()
+      for src in "${SOURCES[@]}"; do
+        if [ -e "${src}" ]; then
+          EXISTING_SOURCES+=("${src#/}")
+        fi
+      done
+      if [ "${#EXISTING_SOURCES[@]}" -eq 0 ]; then
+        exit 0
+      fi
+      tar -C / -czf "${ARCHIVE}" "${EXISTING_SOURCES[@]}"
+      {% endraw %}
+      find {{ backup_root }}/app -maxdepth 1 -type f -name '{{ inventory_hostname }}_*.tar.gz' -mtime +{{ backup_retention_days | default(14) }} -delete
+  when: vm_role in ['dev', 'prod']
 
 - name: Create systemd service for backup
   ansible.builtin.copy:
@@ -42,6 +93,20 @@
       [Service]
       Type=oneshot
       ExecStart=/usr/local/sbin/uranus-db-backup.sh
+  when: vm_role == 'db'
+
+- name: Create systemd service for application backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-app-backup.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Uranus Application Backup
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/uranus-app-backup.sh
+  when: vm_role in ['dev', 'prod']
 
 - name: Create systemd timer for backup
   ansible.builtin.copy:
@@ -57,9 +122,44 @@
 
       [Install]
       WantedBy=timers.target
+  when: vm_role == 'db'
 
-- name: Enable backup timer
+- name: Create systemd timer for application backup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-app-backup.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Uranus Application Backup
+
+      [Timer]
+      OnCalendar=*-*-* 03:00:00
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+  when: vm_role in ['dev', 'prod']
+
+- name: Reload systemd after database backup unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: vm_role == 'db'
+
+- name: Reload systemd after application backup unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: vm_role in ['dev', 'prod']
+
+- name: Enable database backup timer
   ansible.builtin.systemd:
     name: uranus-db-backup.timer
     enabled: true
     state: started
+  when: vm_role == 'db'
+
+- name: Enable application backup timer
+  ansible.builtin.systemd:
+    name: uranus-app-backup.timer
+    enabled: true
+    state: started
+  when: vm_role in ['dev', 'prod']

@@ -93,7 +93,7 @@
     - name: Configure database backups
       ansible.builtin.include_role:
         name: backup
-      when: vm_role == 'db'
+      when: vm_role in ['db', 'dev', 'prod']
 
     - name: Configure local TLS or ACME certificates
       ansible.builtin.include_role:
