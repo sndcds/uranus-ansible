@@ -48,10 +48,8 @@ ssl_email: "noreply@oklabflensburg.de"
 backend_port: 9090
 frontend_port: 3000
 frontend_repo_url: "https://github.com/sndcds/uranus-dashboard.git"
-frontend_repo_version: "main"
 frontend_nodejs_major: "20"
 backend_repo_url: "https://github.com/sndcds/uranus.git"
-backend_repo_version: "main"
 backend_go_version: "1.25.8"
 backend_go_archive_sha256: "ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6"
 backend_db_schema: "uranus"
