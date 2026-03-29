@@ -6,6 +6,9 @@ all:
         {{ host_name }}:
           ansible_host: {{ host_data.ansible_host }}
           ansible_user: {{ host_data.ansible_user | default('ubuntu') }}
+{% if host_data.ansible_ssh_common_args is defined %}
+          ansible_ssh_common_args: {{ host_data.ansible_ssh_common_args | to_json }}
+{% endif %}
           ansible_become: {{ host_data.ansible_become | default(true) | bool | lower }}
           ansible_become_method: {{ host_data.ansible_become_method | default('sudo') }}
 {% endfor %}

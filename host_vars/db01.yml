@@ -7,7 +7,7 @@ app_databases:
   - name: "uranus_prod"
     user: "uranus_prod"
     password: "{{ vault_db_password_prod }}"
-postgresql_listen_addresses: "localhost,192.168.122.249"
+postgresql_listen_addresses: "localhost,{{ ansible_host }}"
 postgresql_allowed_networks:
   - "127.0.0.1/32"
   - "192.168.122.0/24"

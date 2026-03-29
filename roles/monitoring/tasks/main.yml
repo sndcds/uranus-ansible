@@ -332,6 +332,15 @@
     state: restarted
     enabled: true
 
+- name: Enable Icinga Web 2 setup module
+  ansible.builtin.command:
+    cmd: icingacli module enable setup
+  register: icingaweb2_setup_enable
+  changed_when: "'setup' in (icingaweb2_setup_enable.stdout | default(''))"
+  failed_when:
+    - icingaweb2_setup_enable.rc != 0
+    - "'already enabled' not in (icingaweb2_setup_enable.stderr | default(''))"
+
 - name: Ensure Icinga Web 2 setup token exists
   ansible.builtin.command:
     cmd: icingacli setup token create

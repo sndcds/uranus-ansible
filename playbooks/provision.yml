@@ -183,6 +183,23 @@
       changed_when: "'started' in vm_start_result.stdout or vm_start_result.rc == 0"
       loop: "{{ selected_vms }}"
 
+    - name: Check autostart status for selected VMs
+      ansible.builtin.command: "virsh dominfo {{ item.name }}"
+      register: vm_autostart_info
+      changed_when: false
+      loop: "{{ selected_vms }}"
+      when: vm_autostart | bool
+
+    - name: Enable libvirt autostart for selected VMs
+      ansible.builtin.command: "virsh autostart {{ item.item.name }}"
+      register: vm_autostart_result
+      changed_when: "'marked as autostarted' in (vm_autostart_result.stdout | default(''))"
+      loop: "{{ vm_autostart_info.results | default([]) }}"
+      when:
+        - vm_autostart | bool
+        - item is not skipped
+        - (item.stdout | default('')) is not regex('(?m)^Autostart:\\s+enable$')
+
     - name: Wait until a DHCP lease is present for each selected VM
       ansible.builtin.shell: "virsh domifaddr {{ item.name }} --source lease | awk '/ipv4/ {print $4}' | cut -d/ -f1 | head -n1"
       register: vm_ip_result
@@ -204,6 +221,13 @@
       ansible.builtin.set_fact:
         merged_runtime_hosts: "{{ existing_runtime_inventory.all.children.provisioned_vms.hosts | default({}) }}"
 
+    - name: Define SSH jump host settings for provisioned VMs
+      ansible.builtin.set_fact:
+        kvm_jump_host: "{{ groups['kvm_hosts'] | first }}"
+        kvm_jump_user: "{{ hostvars[groups['kvm_hosts'] | first].ansible_user | default('root') }}"
+        kvm_jump_ssh_common_args: >-
+          -o ProxyJump={{ hostvars[groups['kvm_hosts'] | first].ansible_user | default('root') }}@{{ groups['kvm_hosts'] | first }}
+
     - name: Merge selected VM addresses into runtime host map
       ansible.builtin.set_fact:
         merged_runtime_hosts: >-
@@ -214,6 +238,7 @@
                   item.item.name: {
                     'ansible_host': item.stdout,
                     'ansible_user': 'ubuntu',
+                    'ansible_ssh_common_args': kvm_jump_ssh_common_args,
                     'ansible_become': true,
                     'ansible_become_method': 'sudo'
                   }
@@ -228,6 +253,8 @@
         src: ../templates/runtime-inventory.yml.j2
         dest: "{{ playbook_dir }}/../inventory/runtime_hosts.yml"
         mode: "0644"
+      delegate_to: localhost
+      become: false
       vars:
         runtime_inventory_hosts: "{{ merged_runtime_hosts }}"
 
@@ -240,6 +267,7 @@
         ansible_host: "{{ item.stdout }}"
         ansible_user: ubuntu
         ansible_ssh_private_key_file: "{{ ssh_private_key_file }}"
+        ansible_ssh_common_args: "{{ kvm_jump_ssh_common_args }}"
         ansible_become: true
         ansible_become_method: sudo
       loop: "{{ vm_ip_result.results }}"

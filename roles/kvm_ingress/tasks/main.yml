@@ -1,0 +1,60 @@
+---
+- name: Install KVM ingress packages
+  ansible.builtin.apt:
+    name:
+      - nginx
+      - openssl
+    state: present
+    update_cache: true
+
+- name: Enable nginx for KVM ingress
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Ensure local certificate directory exists on KVM host
+  ansible.builtin.file:
+    path: /etc/ssl/localcerts
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remove default nginx site on KVM host
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Ensure self-signed certificates exist for ingress domains
+  ansible.builtin.shell: >
+    openssl req -x509 -nodes -newkey rsa:2048
+    -keyout /etc/ssl/localcerts/{{ item.domain }}.key
+    -out /etc/ssl/localcerts/{{ item.domain }}.crt
+    -days 365
+    -subj "/CN={{ item.domain }}"
+    -addext "subjectAltName=DNS:{{ item.domain }}"
+  args:
+    creates: "/etc/ssl/localcerts/{{ item.domain }}.crt"
+  loop: "{{ kvm_ingress_sites }}"
+
+- name: Deploy KVM ingress nginx vhosts
+  ansible.builtin.template:
+    src: reverse-proxy-site.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    mode: "0644"
+  loop: "{{ kvm_ingress_sites }}"
+  notify: Reload nginx
+
+- name: Enable KVM ingress nginx vhosts
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+    state: link
+  loop: "{{ kvm_ingress_sites }}"
+  notify: Reload nginx
+
+- name: Validate KVM ingress nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false

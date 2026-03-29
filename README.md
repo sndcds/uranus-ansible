@@ -38,16 +38,16 @@ Verwendet werden lokale Domains unter `home.arpa`:
 
 Die Basiswerte stehen in `group_vars/all.yml`, die host-spezifischen Zuweisungen in `host_vars/`.
 
-Damit diese Domains vom Host aus auflösbar sind, brauchst du passende Einträge in `/etc/hosts`. Beispiel mit den typischen libvirt-IP-Adressen:
+Damit diese Domains vom Laptop oder einem anderen Gerät im LAN erreichbar sind, zeigt die neue KVM-Ingress-Konfiguration alle Domains auf den KVM-Host. Auf dem Laptop brauchst du passende Einträge in `/etc/hosts` oder lokales DNS, die auf `192.168.1.118` zeigen:
 
 ```hosts
-192.168.122.22 dev.uranus.home.arpa api.dev.uranus.home.arpa
-192.168.122.237 uranus.home.arpa api.uranus.home.arpa mail.uranus.home.arpa
-192.168.122.241 monitoring.uranus.home.arpa
-192.168.122.10 nominatim.uranus.home.arpa
+192.168.1.118 dev.uranus.home.arpa api.dev.uranus.home.arpa
+192.168.1.118 uranus.home.arpa api.uranus.home.arpa
+192.168.1.118 monitoring.uranus.home.arpa
+192.168.1.118 nominatim.uranus.home.arpa
 ```
 
-Die tatsächlich vergebenen IPs stehen nach dem Provisionieren in `inventory/runtime_hosts.yml`.
+Der KVM-Host terminiert dabei TLS mit lokalen Test-Zertifikaten und leitet die Requests intern an die jeweils aktuellen VM-IP-Adressen aus `inventory/runtime_hosts.yml` weiter.
 
 ## Architektur
 
@@ -56,6 +56,7 @@ Die tatsächlich vergebenen IPs stehen nach dem Provisionieren in `inventory/run
 Das Provisioning läuft lokal auf dem KVM-Host über `uvtool` und libvirt:
 
 - `playbooks/provision.yml` installiert KVM/libvirt, erzeugt das libvirt-NAT-Netz und erstellt die VMs
+- die Provisionierung markiert die libvirt-Domains außerdem als `autostart`, damit sie nach einem Host-Neustart wieder hochkommen
 - anschließend werden die per DHCP vergebenen IPs in `inventory/runtime_hosts.yml` geschrieben
 
 Wichtige Templates:

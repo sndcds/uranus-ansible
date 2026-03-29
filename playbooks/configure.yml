@@ -28,6 +28,7 @@
         ansible_host: "{{ item.value.ansible_host }}"
         ansible_user: "{{ item.value.ansible_user | default('ubuntu') }}"
         ansible_ssh_private_key_file: "{{ item.value.ansible_ssh_private_key_file | default(ssh_private_key_file) }}"
+        ansible_ssh_common_args: "{{ item.value.ansible_ssh_common_args | default(omit) }}"
         ansible_become: "{{ item.value.ansible_become | default(true) }}"
         ansible_become_method: "{{ item.value.ansible_become_method | default('sudo') }}"
       loop: "{{ runtime_inventory_hosts | dict2items }}"
@@ -129,3 +130,36 @@
       ansible.builtin.include_role:
         name: nominatim
       when: vm_role == 'nominatim'
+
+- name: Configure KVM ingress for laptop access
+  hosts: kvm_hosts
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+    - ../group_vars/all.yml
+  vars:
+    kvm_ingress_sites:
+      - name: uranus-dev-frontend-ingress
+        domain: "{{ uranus_domains.dev_frontend }}"
+        upstream_host: "{{ hostvars['dev01'].ansible_host }}"
+      - name: uranus-dev-backend-ingress
+        domain: "{{ uranus_domains.dev_backend }}"
+        upstream_host: "{{ hostvars['dev01'].ansible_host }}"
+      - name: uranus-prod-frontend-ingress
+        domain: "{{ uranus_domains.prod_frontend }}"
+        upstream_host: "{{ hostvars['prod01'].ansible_host }}"
+      - name: uranus-prod-backend-ingress
+        domain: "{{ uranus_domains.prod_backend }}"
+        upstream_host: "{{ hostvars['prod01'].ansible_host }}"
+      - name: uranus-monitoring-ingress
+        domain: "{{ uranus_domains.icinga }}"
+        upstream_host: "{{ hostvars['mon01'].ansible_host }}"
+      - name: uranus-nominatim-ingress
+        domain: "{{ uranus_domains.nominatim }}"
+        upstream_host: "{{ hostvars['nom01'].ansible_host }}"
+
+  tasks:
+    - name: Configure nginx ingress on KVM host
+      ansible.builtin.include_role:
+        name: kvm_ingress
