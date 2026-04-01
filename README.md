@@ -87,6 +87,16 @@ Reihenfolge grob:
 11. `monitoring`
 12. `nominatim`
 
+## Pluto-Metriken
+
+Auf `mon01` läuft zusätzlich InfluxDB für einfache Zeitreihen der Pluto-Bilddateien aus den Backend-VMs.
+
+- `dev01` und `prod01` zählen stündlich die Dateien unter `/opt/uranus/backend/pluto/images`
+- die Werte werden als Measurement `pluto_image_files` nach InfluxDB auf `mon01` geschrieben
+- Beispielabfrage auf `mon01`: `influx -database uranus_metrics -execute 'SELECT last(file_count) FROM pluto_image_files GROUP BY host'`
+- Grafana läuft zusätzlich unter `https://monitoring.uranus.home.arpa/grafana/`
+- das Dashboard `Uranus Pluto Images` wird automatisch provisioniert
+
 Die frühere Test-Rolle ist absichtlich nicht mehr im Hauptablauf eingebunden.
 
 ## Verzeichnisstruktur

@@ -2,8 +2,10 @@
 - name: Install monitoring packages
   ansible.builtin.apt:
     name:
+      - apt-transport-https
       - icinga2
       - icinga2-ido-pgsql
+      - influxdb
       - icingaweb2
       - icingaweb2-module-monitoring
       - icingacli
@@ -16,10 +18,52 @@
       - php-mbstring
       - php-xml
       - php-curl
+      - gnupg
+      - wget
     state: present
+
+- name: Ensure APT keyrings directory exists for Grafana
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: monitoring_grafana_enabled | bool
+
+- name: Install Grafana repository signing key
+  ansible.builtin.get_url:
+    url: "{{ monitoring_grafana_apt_key_url }}"
+    dest: /etc/apt/keyrings/grafana.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: monitoring_grafana_enabled | bool
+
+- name: Configure Grafana APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] {{ monitoring_grafana_repo_url }} stable main"
+    filename: grafana
+    state: present
+    update_cache: true
+  when: monitoring_grafana_enabled | bool
+
+- name: Install Grafana
+  ansible.builtin.apt:
+    name: grafana
+    state: present
+    update_cache: true
+  when: monitoring_grafana_enabled | bool
 
 - name: Gather service facts
   ansible.builtin.service_facts:
+
+- name: Wait for delegated database host SSH on db01
+  ansible.builtin.wait_for_connection:
+    timeout: 60
+    connect_timeout: 5
+    sleep: 2
+  delegate_to: "{{ monitoring_db_delegate_host }}"
 
 - name: Disable apache2 to serve Icinga Web 2 only via nginx
   ansible.builtin.systemd:
@@ -40,6 +84,105 @@
     name: php8.3-fpm
     enabled: true
     state: started
+
+- name: Ensure Grafana dashboard directory exists
+  ansible.builtin.file:
+    path: "{{ monitoring_grafana_dashboard_path }}"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+  when: monitoring_grafana_enabled | bool
+
+- name: Ensure InfluxDB data directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: influxdb
+    group: influxdb
+    mode: "0755"
+  loop:
+    - /var/lib/influxdb
+    - /var/lib/influxdb/data
+    - /var/lib/influxdb/meta
+    - /var/lib/influxdb/wal
+  when: monitoring_influx_enabled | bool
+
+- name: Configure InfluxDB HTTP bind address
+  ansible.builtin.lineinfile:
+    path: /etc/influxdb/influxdb.conf
+    regexp: '^\s*bind-address\s*='
+    line: 'bind-address = "{{ monitoring_influx_bind_address }}"'
+    insertafter: '^\[http\]'
+  when: monitoring_influx_enabled | bool
+  notify: Restart influxdb
+
+- name: Ensure InfluxDB auth remains disabled on trusted lab network
+  ansible.builtin.lineinfile:
+    path: /etc/influxdb/influxdb.conf
+    regexp: '^\s*auth-enabled\s*='
+    line: 'auth-enabled = false'
+    insertafter: '^\[http\]'
+  when: monitoring_influx_enabled | bool
+  notify: Restart influxdb
+
+- name: Enable and start InfluxDB
+  ansible.builtin.systemd:
+    name: influxdb
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: monitoring_influx_enabled | bool
+
+- name: Deploy Grafana server configuration
+  ansible.builtin.template:
+    src: grafana.ini.j2
+    dest: /etc/grafana/grafana.ini
+    owner: root
+    group: grafana
+    mode: "0640"
+  when: monitoring_grafana_enabled | bool
+  notify: Restart grafana
+
+- name: Deploy Grafana InfluxDB datasource
+  ansible.builtin.template:
+    src: grafana-datasource-influxdb.yml.j2
+    dest: /etc/grafana/provisioning/datasources/uranus-influxdb.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  when:
+    - monitoring_grafana_enabled | bool
+    - monitoring_influx_enabled | bool
+  notify: Restart grafana
+
+- name: Deploy Grafana dashboard provider
+  ansible.builtin.template:
+    src: grafana-dashboard-provider.yml.j2
+    dest: /etc/grafana/provisioning/dashboards/uranus.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  when: monitoring_grafana_enabled | bool
+  notify: Restart grafana
+
+- name: Deploy Grafana Pluto dashboard
+  ansible.builtin.template:
+    src: grafana-dashboard-pluto-images.json.j2
+    dest: "{{ monitoring_grafana_dashboard_path }}/pluto-images.json"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  when: monitoring_grafana_enabled | bool
+  notify: Restart grafana
+
+- name: Enable and start Grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: monitoring_grafana_enabled | bool
 
 - name: Ensure icingaweb2 configuration directory exists
   ansible.builtin.file:
@@ -230,6 +373,34 @@
       SET active = EXCLUDED.active, password_hash = EXCLUDED.password_hash;
   become_user: postgres
   delegate_to: "{{ monitoring_db_delegate_host }}"
+
+- name: Ensure InfluxDB metrics database exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8086/query"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      q: "CREATE DATABASE {{ monitoring_influx_database }}"
+    status_code: 200
+    return_content: true
+  changed_when: false
+  when: monitoring_influx_enabled | bool
+
+- name: Ensure InfluxDB retention policy exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:8086/query"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      q: "CREATE RETENTION POLICY {{ monitoring_influx_retention_name }} ON {{ monitoring_influx_database }} DURATION {{ monitoring_influx_retention_duration }} REPLICATION 1 DEFAULT"
+    status_code: 200
+    return_content: true
+  changed_when: false
+  failed_when:
+    - monitoring_influx_retention_result.status != 200
+    - "'retention policy already exists' not in (monitoring_influx_retention_result.content | default(''))"
+  register: monitoring_influx_retention_result
+  when: monitoring_influx_enabled | bool
 
 - name: Deploy Icinga Web 2 global config
   ansible.builtin.template:

@@ -127,3 +127,40 @@
     name: uranus-backend.service
     enabled: true
     state: started
+
+- name: Deploy Pluto image metrics push script
+  ansible.builtin.template:
+    src: pluto-image-metrics-push.sh.j2
+    dest: /usr/local/bin/pluto-image-metrics-push
+    owner: root
+    group: root
+    mode: "0755"
+  when: pluto_metrics_enabled | bool
+
+- name: Deploy Pluto image metrics service unit
+  ansible.builtin.template:
+    src: pluto-image-metrics.service.j2
+    dest: /etc/systemd/system/pluto-image-metrics.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: pluto_metrics_enabled | bool
+  notify: Reload systemd
+
+- name: Deploy Pluto image metrics timer unit
+  ansible.builtin.template:
+    src: pluto-image-metrics.timer.j2
+    dest: /etc/systemd/system/pluto-image-metrics.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: pluto_metrics_enabled | bool
+  notify: Reload systemd
+
+- name: Enable Pluto image metrics timer
+  ansible.builtin.systemd:
+    name: pluto-image-metrics.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: pluto_metrics_enabled | bool

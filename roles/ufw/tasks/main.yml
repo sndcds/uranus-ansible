@@ -47,6 +47,18 @@
     proto: tcp
   when: vm_role in (web_exposed_vm_roles | default([]))
 
+- name: Allow InfluxDB from configured internal networks on monitoring host
+  community.general.ufw:
+    rule: allow
+    port: "8086"
+    proto: tcp
+    src: "{{ item }}"
+  loop: "{{ monitoring_influx_allowed_networks | default([]) }}"
+  when:
+    - vm_role == 'monitoring'
+    - monitoring_influx_enabled | default(false) | bool
+    - item != '0.0.0.0/0'
+
 - name: Allow backend API port locally if app server
   community.general.ufw:
     rule: allow

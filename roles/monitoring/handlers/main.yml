@@ -1,0 +1,10 @@
+---
+- name: Restart influxdb
+  ansible.builtin.systemd:
+    name: influxdb
+    state: restarted
+
+- name: Restart grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    state: restarted

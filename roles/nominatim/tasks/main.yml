@@ -46,6 +46,13 @@
       group: www-data
       mode: "0755"
 
+- name: Wait for delegated database host SSH on db01
+  ansible.builtin.wait_for_connection:
+    timeout: 60
+    connect_timeout: 5
+    sleep: 2
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+
 - name: Allow remote PostgreSQL access for Nominatim
   ansible.builtin.blockinfile:
     path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"

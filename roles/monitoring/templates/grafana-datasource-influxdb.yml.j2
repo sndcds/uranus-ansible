@@ -1,0 +1,14 @@
+apiVersion: 1
+
+datasources:
+  - name: {{ monitoring_grafana_datasource_name }}
+    uid: {{ monitoring_grafana_datasource_uid }}
+    type: influxdb
+    access: proxy
+    url: http://127.0.0.1:8086
+    database: {{ monitoring_influx_database }}
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMode: GET
+      version: InfluxQL

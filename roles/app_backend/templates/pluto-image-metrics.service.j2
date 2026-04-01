@@ -1,0 +1,8 @@
+[Unit]
+Description=Push Pluto image file count to InfluxDB
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pluto-image-metrics-push

@@ -3,33 +3,33 @@ all:
     provisioned_vms:
       hosts:
         db01:
-          ansible_host: 192.168.122.195
+          ansible_host: 192.168.122.148
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.84"
           ansible_become: true
           ansible_become_method: sudo
         dev01:
-          ansible_host: 192.168.122.220
+          ansible_host: 192.168.122.103
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.84"
           ansible_become: true
           ansible_become_method: sudo
         mon01:
-          ansible_host: 192.168.122.6
+          ansible_host: 192.168.122.72
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.84"
           ansible_become: true
           ansible_become_method: sudo
         nom01:
-          ansible_host: 192.168.122.67
+          ansible_host: 192.168.122.183
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.84"
           ansible_become: true
           ansible_become_method: sudo
         prod01:
-          ansible_host: 192.168.122.155
+          ansible_host: 192.168.122.20
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.84"
           ansible_become: true
           ansible_become_method: sudo
     db:

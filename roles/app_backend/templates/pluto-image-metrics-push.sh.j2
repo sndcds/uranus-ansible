@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+image_dir="{{ pluto_metrics_directory }}"
+measurement="{{ pluto_metrics_measurement }}"
+host_tag="{{ inventory_hostname }}"
+env_tag="{{ app_env }}"
+influx_url="http://{{ pluto_metrics_influx_host }}:8086/write?db={{ monitoring_influx_database }}"
+
+if [[ ! -d "$image_dir" ]]; then
+  echo "missing image directory: $image_dir" >&2
+  exit 1
+fi
+
+file_count="$(find "$image_dir" -type f | wc -l | tr -d ' ')"
+
+exec curl --fail --silent --show-error \
+  --data-binary "${measurement},host=${host_tag},app_env=${env_tag} file_count=${file_count}i" \
+  "$influx_url"

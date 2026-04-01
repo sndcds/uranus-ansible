@@ -4,9 +4,11 @@ app_databases:
   - name: "uranus_dev"
     user: "uranus_dev"
     password: "{{ vault_db_password_dev }}"
+    dump_file: "uranus_dev.sql"
   - name: "uranus_prod"
     user: "uranus_prod"
     password: "{{ vault_db_password_prod }}"
+    dump_file: "uranus.sql"
 postgresql_listen_addresses: "localhost,{{ ansible_host }}"
 postgresql_allowed_networks:
   - "127.0.0.1/32"

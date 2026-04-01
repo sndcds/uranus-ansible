@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: {{ monitoring_grafana_dashboard_provider_name }}
+    orgId: 1
+    folder: Uranus
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: {{ monitoring_grafana_dashboard_path }}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Pluto image metrics push every hour
+
+[Timer]
+OnCalendar={{ pluto_metrics_push_schedule }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

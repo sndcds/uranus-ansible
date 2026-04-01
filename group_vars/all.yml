@@ -106,6 +106,28 @@ monitoring_admin_user: "icingaadmin"
 monitoring_admin_password: "{{ vault_monitoring_admin_password }}"
 monitoring_api_user: "icingaweb2"
 monitoring_api_password: "{{ vault_monitoring_api_password }}"
+monitoring_influx_enabled: true
+monitoring_influx_bind_address: ":8086"
+monitoring_influx_database: "uranus_metrics"
+monitoring_influx_retention_name: "thirty_days"
+monitoring_influx_retention_duration: "30d"
+monitoring_influx_allowed_networks:
+  - "192.168.122.0/24"
+pluto_metrics_enabled: true
+pluto_metrics_measurement: "pluto_image_files"
+pluto_metrics_directory: "/opt/uranus/backend/pluto/images"
+pluto_metrics_push_schedule: "hourly"
+pluto_metrics_influx_host: "{{ hostvars.get('mon01', {}).ansible_host | default('mon01', true) }}"
+monitoring_grafana_enabled: true
+monitoring_grafana_repo_url: "https://apt.grafana.com"
+monitoring_grafana_apt_key_url: "https://apt.grafana.com/gpg-full.key"
+monitoring_grafana_domain: "{{ uranus_domains.icinga }}"
+monitoring_grafana_admin_user: "admin"
+monitoring_grafana_admin_password: "{{ vault_monitoring_grafana_admin_password }}"
+monitoring_grafana_datasource_name: "uranus-influxdb"
+monitoring_grafana_datasource_uid: "uranus-influxdb"
+monitoring_grafana_dashboard_provider_name: "uranus"
+monitoring_grafana_dashboard_path: "/var/lib/grafana/dashboards"
 
 api_health_endpoint: "/api/events"
 frontend_health_endpoint: "/"

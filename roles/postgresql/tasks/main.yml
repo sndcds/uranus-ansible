@@ -69,32 +69,6 @@
     enabled: true
     state: started
 
-- name: Copy Uranus SQL dump to database host
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../uranus.sql"
-    dest: /var/lib/postgresql/uranus.sql
-    owner: postgres
-    group: postgres
-    mode: "0644"
-
-- name: Normalize schema name in Uranus SQL dump
-  ansible.builtin.replace:
-    path: /var/lib/postgresql/uranus.sql
-    regexp: 'CREATE SCHEMA uranus;'
-    replace: 'CREATE SCHEMA IF NOT EXISTS {{ db_schema | default(backend_db_schema) }};'
-
-- name: Rewrite Uranus schema references in SQL dump
-  ansible.builtin.replace:
-    path: /var/lib/postgresql/uranus.sql
-    regexp: '\buranus\.'
-    replace: '{{ db_schema | default(backend_db_schema) }}.'
-
-- name: Remove source-owner statements from Uranus SQL dump
-  ansible.builtin.replace:
-    path: /var/lib/postgresql/uranus.sql
-    regexp: '^ALTER (SCHEMA|TYPE|FUNCTION|TABLE|SEQUENCE) .* OWNER TO oklab;$'
-    replace: '-- stripped source owner statement'
-
 - name: Build managed application database list
   ansible.builtin.set_fact:
     managed_app_databases: >-
@@ -105,9 +79,54 @@
         [{
           'name': db_name,
           'user': db_user,
-          'password': db_password
+          'password': db_password,
+          'dump_file': 'uranus.sql'
         }]
       }}
+
+- name: Copy configured SQL dumps to database host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../{{ item.dump_file }}"
+    dest: "/var/lib/postgresql/{{ item.name }}.sql"
+    owner: postgres
+    group: postgres
+    mode: "0644"
+  register: app_db_dump_copy
+  loop: "{{ managed_app_databases }}"
+  when: item.dump_file is defined
+
+- name: Normalize schema name in configured SQL dumps
+  ansible.builtin.replace:
+    path: "/var/lib/postgresql/{{ item.name }}.sql"
+    regexp: 'CREATE SCHEMA uranus;'
+    replace: 'CREATE SCHEMA IF NOT EXISTS {{ db_schema | default(backend_db_schema) }};'
+  loop: "{{ managed_app_databases }}"
+  when: item.dump_file is defined
+
+- name: Rewrite Uranus schema references in configured SQL dumps
+  ansible.builtin.replace:
+    path: "/var/lib/postgresql/{{ item.name }}.sql"
+    regexp: '\buranus\.'
+    replace: '{{ db_schema | default(backend_db_schema) }}.'
+  loop: "{{ managed_app_databases }}"
+  when: item.dump_file is defined
+
+- name: Remove source-owner statements from configured SQL dumps
+  ansible.builtin.replace:
+    path: "/var/lib/postgresql/{{ item.name }}.sql"
+    regexp: '^ALTER (SCHEMA|TYPE|FUNCTION|TABLE|SEQUENCE) .* OWNER TO oklab;$'
+    replace: '-- stripped source owner statement'
+  loop: "{{ managed_app_databases }}"
+  when: item.dump_file is defined
+
+- name: Remove stale import marker when SQL dump changed
+  ansible.builtin.file:
+    path: "/var/lib/postgresql/.{{ item.item.name }}_sql_imported"
+    state: absent
+  loop: "{{ app_db_dump_copy.results | default([]) }}"
+  when:
+    - item is not skipped
+    - item.changed | default(false)
 
 - name: Configure postgresql.conf
   ansible.builtin.lineinfile:
@@ -206,14 +225,61 @@
   when:
     - item.stdout | trim != '1'
 
-- name: Import Uranus SQL dump into application databases
+- name: Check whether SQL import marker exists for application databases
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/.{{ item.name }}_sql_imported"
+  loop: "{{ managed_app_databases }}"
+  register: app_db_import_marker
+
+- name: Terminate active connections before clean SQL import
+  ansible.builtin.command:
+    cmd: >
+      psql -d postgres -tAc
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+      WHERE datname='{{ item.item.name }}' AND pid <> pg_backend_pid();"
+  become_user: postgres
+  loop: "{{ app_db_import_marker.results }}"
+  when:
+    - item.item.dump_file is defined
+    - not item.stat.exists
+
+- name: Drop application databases before clean SQL import
+  ansible.builtin.command:
+    cmd: dropdb --if-exists {{ item.item.name }}
+  become_user: postgres
+  loop: "{{ app_db_import_marker.results }}"
+  when:
+    - item.item.dump_file is defined
+    - not item.stat.exists
+
+- name: Recreate empty application databases before clean SQL import
+  ansible.builtin.command:
+    cmd: createdb -O {{ item.item.user }} {{ item.item.name }}
+  become_user: postgres
+  loop: "{{ app_db_import_marker.results }}"
+  when:
+    - item.item.dump_file is defined
+    - not item.stat.exists
+
+- name: Re-enable PostGIS before clean SQL import
+  community.postgresql.postgresql_ext:
+    name: postgis
+    db: "{{ item.item.name }}"
+  become_user: postgres
+  loop: "{{ app_db_import_marker.results }}"
+  when:
+    - item.item.dump_file is defined
+    - not item.stat.exists
+
+- name: Import configured SQL dump into application databases
   ansible.builtin.shell: >
-    psql -v ON_ERROR_STOP=1 -d {{ item.name }} -f /var/lib/postgresql/uranus.sql
+    psql -v ON_ERROR_STOP=1 -d {{ item.name }} -f /var/lib/postgresql/{{ item.name }}.sql
     && touch /var/lib/postgresql/.{{ item.name }}_sql_imported
   args:
     creates: "/var/lib/postgresql/.{{ item.name }}_sql_imported"
   become_user: postgres
   loop: "{{ managed_app_databases }}"
+  when: item.dump_file is defined
 
 - name: Grant schema usage to application users
   community.postgresql.postgresql_query:

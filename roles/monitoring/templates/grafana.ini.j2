@@ -1,0 +1,13 @@
+[server]
+http_addr = 127.0.0.1
+http_port = 3000
+domain = {{ monitoring_grafana_domain }}
+root_url = %(protocol)s://%(domain)s/grafana/
+serve_from_sub_path = true
+
+[security]
+admin_user = {{ monitoring_grafana_admin_user }}
+admin_password = {{ monitoring_grafana_admin_password }}
+
+[users]
+default_theme = light

@@ -163,3 +163,28 @@
     - name: Configure nginx ingress on KVM host
       ansible.builtin.include_role:
         name: kvm_ingress
+
+- name: Push initial Pluto metrics after monitoring is configured
+  hosts: "dev:prod"
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+    - ../group_vars/all.yml
+
+  pre_tasks:
+    - name: Load local vault variables if present
+      ansible.builtin.include_vars:
+        file: ../group_vars/vault.yml
+      ignore_errors: true
+
+    - name: Load host-specific vars
+      ansible.builtin.include_vars:
+        file: "../host_vars/{{ inventory_hostname }}.yml"
+
+  tasks:
+    - name: Push initial Pluto image metric sample
+      ansible.builtin.systemd:
+        name: pluto-image-metrics.service
+        state: started
+      when: pluto_metrics_enabled | bool
