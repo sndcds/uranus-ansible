@@ -5,7 +5,7 @@
 -- Dumped from database version 16.2 (Postgres.app)
 -- Dumped by pg_dump version 16.2 (Postgres.app)
 
--- Started on 2026-03-29 17:18:47 CEST
+-- Started on 2026-04-05 19:24:42 CEST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -29,7 +29,7 @@ CREATE SCHEMA uranus;
 ALTER SCHEMA uranus OWNER TO oklab;
 
 --
--- TOC entry 2498 (class 1247 OID 2307894)
+-- TOC entry 2501 (class 1247 OID 2307894)
 -- Name: event_release_status; Type: TYPE; Schema: uranus; Owner: oklab
 --
 
@@ -47,7 +47,7 @@ CREATE TYPE uranus.event_release_status AS ENUM (
 ALTER TYPE uranus.event_release_status OWNER TO oklab;
 
 --
--- TOC entry 2495 (class 1247 OID 2307874)
+-- TOC entry 2498 (class 1247 OID 2307874)
 -- Name: uranus_price_type; Type: TYPE; Schema: uranus; Owner: oklab
 --
 
@@ -63,7 +63,7 @@ CREATE TYPE uranus.uranus_price_type AS ENUM (
 ALTER TYPE uranus.uranus_price_type OWNER TO oklab;
 
 --
--- TOC entry 2492 (class 1247 OID 2307862)
+-- TOC entry 2495 (class 1247 OID 2307862)
 -- Name: uranus_ticket_flag; Type: TYPE; Schema: uranus; Owner: oklab
 --
 
@@ -398,7 +398,7 @@ ALTER TABLE uranus.currency ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
--- TOC entry 598 (class 1259 OID 2351825)
+-- TOC entry 597 (class 1259 OID 2351825)
 -- Name: event; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -461,7 +461,7 @@ CREATE TABLE uranus.event_category (
 ALTER TABLE uranus.event_category OWNER TO oklab;
 
 --
--- TOC entry 576 (class 1259 OID 2351604)
+-- TOC entry 575 (class 1259 OID 2351604)
 -- Name: event_date; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -494,8 +494,8 @@ CREATE TABLE uranus.event_date (
 ALTER TABLE uranus.event_date OWNER TO oklab;
 
 --
--- TOC entry 5854 (class 0 OID 0)
--- Dependencies: 576
+-- TOC entry 5863 (class 0 OID 0)
+-- Dependencies: 575
 -- Name: COLUMN event_date.venue_uuid; Type: COMMENT; Schema: uranus; Owner: oklab
 --
 
@@ -503,7 +503,7 @@ COMMENT ON COLUMN uranus.event_date.venue_uuid IS 'Overrides the parent event''s
 
 
 --
--- TOC entry 577 (class 1259 OID 2351617)
+-- TOC entry 576 (class 1259 OID 2351617)
 -- Name: event_date_projection; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -651,7 +651,7 @@ ALTER TABLE uranus.event_occasion_type ALTER COLUMN id ADD GENERATED ALWAYS AS I
 
 
 --
--- TOC entry 578 (class 1259 OID 2351626)
+-- TOC entry 577 (class 1259 OID 2351626)
 -- Name: event_projection; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -753,12 +753,12 @@ CREATE TABLE uranus.event_type (
 ALTER TABLE uranus.event_type OWNER TO oklab;
 
 --
--- TOC entry 575 (class 1259 OID 2351584)
+-- TOC entry 598 (class 1259 OID 2351839)
 -- Name: event_type_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
 CREATE TABLE uranus.event_type_link (
-    event_uuid integer NOT NULL,
+    event_uuid uuid NOT NULL,
     type_id integer NOT NULL,
     genre_id integer DEFAULT 0 NOT NULL
 );
@@ -911,7 +911,7 @@ CREATE TABLE uranus.link_type_i18n (
 ALTER TABLE uranus.link_type_i18n OWNER TO oklab;
 
 --
--- TOC entry 580 (class 1259 OID 2351641)
+-- TOC entry 579 (class 1259 OID 2351641)
 -- Name: message; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -930,7 +930,7 @@ CREATE TABLE uranus.message (
 ALTER TABLE uranus.message OWNER TO oklab;
 
 --
--- TOC entry 579 (class 1259 OID 2351640)
+-- TOC entry 578 (class 1259 OID 2351640)
 -- Name: message_id_seq; Type: SEQUENCE; Schema: uranus; Owner: oklab
 --
 
@@ -945,7 +945,7 @@ ALTER TABLE uranus.message ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
--- TOC entry 581 (class 1259 OID 2351659)
+-- TOC entry 580 (class 1259 OID 2351659)
 -- Name: organization; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -979,7 +979,7 @@ CREATE TABLE uranus.organization (
 ALTER TABLE uranus.organization OWNER TO oklab;
 
 --
--- TOC entry 582 (class 1259 OID 2351676)
+-- TOC entry 581 (class 1259 OID 2351676)
 -- Name: organization_member_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -998,7 +998,7 @@ CREATE TABLE uranus.organization_member_link (
 ALTER TABLE uranus.organization_member_link OWNER TO oklab;
 
 --
--- TOC entry 583 (class 1259 OID 2351687)
+-- TOC entry 582 (class 1259 OID 2351687)
 -- Name: password_reset; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1044,7 +1044,7 @@ CREATE TABLE uranus.permission_label (
 ALTER TABLE uranus.permission_label OWNER TO oklab;
 
 --
--- TOC entry 584 (class 1259 OID 2351695)
+-- TOC entry 583 (class 1259 OID 2351695)
 -- Name: pluto_cache; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1059,7 +1059,7 @@ CREATE TABLE uranus.pluto_cache (
 ALTER TABLE uranus.pluto_cache OWNER TO oklab;
 
 --
--- TOC entry 585 (class 1259 OID 2351703)
+-- TOC entry 584 (class 1259 OID 2351703)
 -- Name: pluto_context_rules; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1076,7 +1076,7 @@ CREATE TABLE uranus.pluto_context_rules (
 ALTER TABLE uranus.pluto_context_rules OWNER TO oklab;
 
 --
--- TOC entry 586 (class 1259 OID 2351709)
+-- TOC entry 585 (class 1259 OID 2351709)
 -- Name: pluto_image; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1105,7 +1105,7 @@ CREATE TABLE uranus.pluto_image (
 ALTER TABLE uranus.pluto_image OWNER TO oklab;
 
 --
--- TOC entry 587 (class 1259 OID 2351717)
+-- TOC entry 586 (class 1259 OID 2351717)
 -- Name: pluto_image_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1134,7 +1134,7 @@ CREATE TABLE uranus.price_type (
 ALTER TABLE uranus.price_type OWNER TO oklab;
 
 --
--- TOC entry 588 (class 1259 OID 2351724)
+-- TOC entry 587 (class 1259 OID 2351724)
 -- Name: space; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1152,13 +1152,7 @@ CREATE TABLE uranus.space (
     total_capacity integer,
     seating_capacity integer,
     accessibility_flags bigint,
-    accessibility_summary text,
-    environmental_features bigint,
-    audio_features bigint,
-    presentation_features bigint,
-    lighting_features bigint,
-    climate_features bigint,
-    misc_features bigint
+    accessibility_summary text
 );
 
 
@@ -1279,7 +1273,7 @@ CREATE TABLE uranus.team_member_role (
 ALTER TABLE uranus.team_member_role OWNER TO oklab;
 
 --
--- TOC entry 597 (class 1259 OID 2351814)
+-- TOC entry 596 (class 1259 OID 2351814)
 -- Name: todo; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1299,7 +1293,7 @@ CREATE TABLE uranus.todo (
 ALTER TABLE uranus.todo OWNER TO oklab;
 
 --
--- TOC entry 596 (class 1259 OID 2351813)
+-- TOC entry 595 (class 1259 OID 2351813)
 -- Name: todo_id_seq; Type: SEQUENCE; Schema: uranus; Owner: oklab
 --
 
@@ -1314,7 +1308,7 @@ ALTER TABLE uranus.todo ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
--- TOC entry 589 (class 1259 OID 2351740)
+-- TOC entry 588 (class 1259 OID 2351740)
 -- Name: transport_station; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1338,7 +1332,7 @@ CREATE TABLE uranus.transport_station (
 ALTER TABLE uranus.transport_station OWNER TO oklab;
 
 --
--- TOC entry 590 (class 1259 OID 2351751)
+-- TOC entry 589 (class 1259 OID 2351751)
 -- Name: user; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1362,7 +1356,7 @@ CREATE TABLE uranus."user" (
 ALTER TABLE uranus."user" OWNER TO oklab;
 
 --
--- TOC entry 591 (class 1259 OID 2351764)
+-- TOC entry 590 (class 1259 OID 2351764)
 -- Name: user_event_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1376,7 +1370,7 @@ CREATE TABLE uranus.user_event_link (
 ALTER TABLE uranus.user_event_link OWNER TO oklab;
 
 --
--- TOC entry 592 (class 1259 OID 2351768)
+-- TOC entry 591 (class 1259 OID 2351768)
 -- Name: user_organization_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1390,13 +1384,13 @@ CREATE TABLE uranus.user_organization_link (
 ALTER TABLE uranus.user_organization_link OWNER TO oklab;
 
 --
--- TOC entry 594 (class 1259 OID 2351776)
+-- TOC entry 593 (class 1259 OID 2351776)
 -- Name: user_space_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
 CREATE TABLE uranus.user_space_link (
     user_uuid uuid NOT NULL,
-    space_id uuid NOT NULL,
+    space_uuid uuid NOT NULL,
     permissions bigint DEFAULT '0'::bigint NOT NULL
 );
 
@@ -1404,7 +1398,7 @@ CREATE TABLE uranus.user_space_link (
 ALTER TABLE uranus.user_space_link OWNER TO oklab;
 
 --
--- TOC entry 593 (class 1259 OID 2351772)
+-- TOC entry 592 (class 1259 OID 2351772)
 -- Name: user_venue_link; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1418,7 +1412,7 @@ CREATE TABLE uranus.user_venue_link (
 ALTER TABLE uranus.user_venue_link OWNER TO oklab;
 
 --
--- TOC entry 595 (class 1259 OID 2351780)
+-- TOC entry 594 (class 1259 OID 2351780)
 -- Name: venue; Type: TABLE; Schema: uranus; Owner: oklab
 --
 
@@ -1549,7 +1543,7 @@ ALTER TABLE uranus.wkb_polygon ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY 
 
 
 --
--- TOC entry 5784 (class 0 OID 2265944)
+-- TOC entry 5793 (class 0 OID 2265944)
 -- Dependencies: 532
 -- Data for Name: accessibility_flag; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -1634,7 +1628,7 @@ COPY uranus.accessibility_flag (flag, iso_639_1, name, topic_id, key) FROM stdin
 
 
 --
--- TOC entry 5818 (class 0 OID 2325418)
+-- TOC entry 5827 (class 0 OID 2325418)
 -- Dependencies: 566
 -- Data for Name: accessibility_topic; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -1662,7 +1656,7 @@ COPY uranus.accessibility_topic (topic_id, iso_639_1, name, key) FROM stdin;
 
 
 --
--- TOC entry 5785 (class 0 OID 2265962)
+-- TOC entry 5794 (class 0 OID 2265962)
 -- Dependencies: 533
 -- Data for Name: country; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2419,7 +2413,7 @@ ZWE	Zimbabwe	da
 
 
 --
--- TOC entry 5786 (class 0 OID 2265967)
+-- TOC entry 5795 (class 0 OID 2265967)
 -- Dependencies: 534
 -- Data for Name: currency; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2474,17 +2468,18 @@ COPY uranus.currency (id, code, iso_639_1, name) FROM stdin;
 
 
 --
--- TOC entry 5848 (class 0 OID 2351825)
--- Dependencies: 598
+-- TOC entry 5856 (class 0 OID 2351825)
+-- Dependencies: 597
 -- Data for Name: event; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event (uuid, external_id, created_by, created_at, modified_by, modified_at, release_date, release_status, org_uuid, venue_uuid, space_uuid, content_iso_639_1, title, description, subtitle, summary, categories, languages, tags, occasion_type_id, min_age, max_age, participation_info, max_attendees, visitor_info_flags, meeting_point, source_link, online_link, ticket_link, ticket_flags, price_type, currency, min_price, max_price, custom, style, search_text) FROM stdin;
+019d4e9a-aa28-7f7e-845f-252213276c53	\N	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-02 16:30:52.19132	\N	2026-04-05 17:00:04.361452	\N	released	019d2eed-a25a-7caf-a762-a2a71917c6a1	019d3e19-c044-75bf-820b-c96fd5fe07ee	019d44c6-26bf-77d5-a7ca-e82ddd099757	\N	Konzert	aaa	111	ccc	{1,2,5}	{sq,da}	{modular,mixer}	\N	4	8	aaa	86	4690104287233	Beim Eisladen	\N	https://aktivitetshuset.de	\N	{advance_ticket,ticket_required,on_site_ticket_sales,registration_required}	regular_price	EUR	8	16	\N	\N	konzert 111 aaa ccc aaa modular mixer
 \.
 
 
 --
--- TOC entry 5819 (class 0 OID 2351146)
+-- TOC entry 5828 (class 0 OID 2351146)
 -- Dependencies: 567
 -- Data for Name: event_category; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2512,27 +2507,51 @@ COPY uranus.event_category (category_id, iso_639_1, name, schema_org_type) FROM 
 
 
 --
--- TOC entry 5826 (class 0 OID 2351604)
--- Dependencies: 576
+-- TOC entry 5834 (class 0 OID 2351604)
+-- Dependencies: 575
 -- Data for Name: event_date; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event_date (uuid, created_by, created_at, modified_by, modified_at, release_status, event_uuid, venue_uuid, space_uuid, start_date, start_time, end_date, end_time, entry_time, duration, all_day, ticket_link, availability_status_id, accessibility_info, sold_out, limited_tickets_remaining, custom) FROM stdin;
+019d5425-5c98-7837-95ed-23865668abbe	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-03 18:20:27.923702	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	019d358b-2946-7c2f-afc0-0cb0e8049f2f	019d44c5-0efb-78d5-a4a6-7e49c6b548b7	2026-04-10	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5425-d938-79d0-80a7-7d9bfb074fb7	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-03 18:20:59.81211	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	019d3e19-c044-75bf-820b-c96fd5fe07ee	019d4924-5882-78cb-8e59-0d32b2dcee08	2026-04-19	20:00:00	\N	\N	19:00:00	\N	\N	\N	\N	\N	\N	\N	\N
+019d5426-7a7c-7f9e-9a0f-db33b71625c9	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-03 18:21:41.113512	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	019d3f5c-ba16-7c74-a7ba-533f26446ddf	019d44c0-64c0-79d7-ba1d-6e9a51da9742	2026-04-25	20:00:00	\N	\N	19:30:00	\N	\N	\N	\N	\N	\N	\N	\N
+019d577b-8a78-73a9-ac75-6b50636f7bb1	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-04 09:53:27.395669	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-04-30	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb3-7a54-8142-e1d7690eef4a	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-01	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb7-7d02-b000-ef25f1c84744	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-02	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb8-7b2c-8d23-a31a3aa9332c	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-03	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb8-742c-95bc-d2e6bca7e786	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-04	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb8-7db0-a7c4-b484908c4854	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-05	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb9-78d5-8ac8-fa10fc603a51	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-06	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb9-7fb3-a7fa-4ca5fe4cb312	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-07	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d5cec-5eb9-756d-b84e-4d0b7c3b6d17	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-05 11:14:47.80988	\N	\N	inherited	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	2026-05-08	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
 --
--- TOC entry 5827 (class 0 OID 2351617)
--- Dependencies: 577
+-- TOC entry 5835 (class 0 OID 2351617)
+-- Dependencies: 576
 -- Data for Name: event_date_projection; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event_date_projection (created_at, modified_at, release_status, event_date_uuid, event_uuid, venue_uuid, space_uuid, venue_name, venue_street, venue_house_number, venue_postal_code, venue_city, venue_country, venue_state, venue_point, venue_link, space_name, space_description, space_type, space_total_capacity, space_seating_capacity, space_building_level, space_link, space_accessibility_summary, space_accessibility_flags, start_date, start_time, end_date, end_time, entry_time, duration, all_day, ticket_link, availability_status_id, accessibility_info, custom) FROM stdin;
+2026-04-03 18:20:27.923702	2026-04-05 17:00:04.361452	inherited	019d5425-5c98-7837-95ed-23865668abbe	019d4e9a-aa28-7f7e-845f-252213276c53	019d358b-2946-7c2f-afc0-0cb0e8049f2f	019d44c5-0efb-78d5-a4a6-7e49c6b548b7	[SoundCodes~	Am Nordertor	2	24939	Flensburg	DEU	SH	0101000020E610000060A06DE86DDC2240BCB2B27DE7654B40	https://soundcodes.grain.one	Studio	Analoges(digitales Synthesizerstudio, 40 Kanal Mischpult und quadrophonischer Lautsprecheranlage.	studio	6	4	0	\N	\N	\N	2026-04-10	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-03 18:21:41.113512	2026-04-05 17:00:04.361452	inherited	019d5426-7a7c-7f9e-9a0f-db33b71625c9	019d4e9a-aa28-7f7e-845f-252213276c53	019d3f5c-ba16-7c74-a7ba-533f26446ddf	019d44c0-64c0-79d7-ba1d-6e9a51da9742	Kühlhaus	Mühlendamm	25	24937	Flensburg	DEU	SH	0101000020E6100000E0DDB640ABE12240D49DA58124634B40	https://kuehlhaus.net	Biergarten	\N	\N	\N	\N	\N	\N	\N	\N	2026-04-25	20:00:00	\N	\N	19:30:00	\N	\N	\N	\N	\N	\N
+2026-04-04 09:53:27.395669	2026-04-05 17:00:04.361452	inherited	019d577b-8a78-73a9-ac75-6b50636f7bb1	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-04-30	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-03 18:20:59.81211	2026-04-05 17:00:04.361452	inherited	019d5425-d938-79d0-80a7-7d9bfb074fb7	019d4e9a-aa28-7f7e-845f-252213276c53	019d3e19-c044-75bf-820b-c96fd5fe07ee	019d4924-5882-78cb-8e59-0d32b2dcee08	Aktivitetshuset	Norderstraße	49	24939	Flensburg	DEU	SH	0101000020E610000040CBFF7AD2DC2240F4178C0853654B40	https://aktivitetshuset.de	Aktiv Ro	Aktiv Ro er et rum, hvor du kan finde ro i hverdagen. Du kan dyrke yoga, meditere eller læse en bog, lave håndarbejde, danse alene til musik – rummet giver plads til mange muligheder. Der er en højtaler, du kan tilslutte din mobil til, der er yogamåtter, yogapuder, tæpper og klanginstrumenter.	\N	\N	\N	\N	\N	\N	263917200867359	2026-04-19	20:00:00	\N	\N	19:00:00	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb3-7a54-8142-e1d7690eef4a	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-01	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb7-7d02-b000-ef25f1c84744	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-02	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb8-742c-95bc-d2e6bca7e786	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-04	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb8-7b2c-8d23-a31a3aa9332c	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-03	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb8-7db0-a7c4-b484908c4854	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-05	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb9-756d-b84e-4d0b7c3b6d17	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-08	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb9-78d5-8ac8-fa10fc603a51	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-06	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
+2026-04-05 11:14:47.80988	2026-04-05 17:00:04.361452	inherited	019d5cec-5eb9-7fb3-a7fa-4ca5fe4cb312	019d4e9a-aa28-7f7e-845f-252213276c53	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	2026-05-07	20:00:00	\N	\N	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
 --
--- TOC entry 5822 (class 0 OID 2351555)
+-- TOC entry 5831 (class 0 OID 2351555)
 -- Dependencies: 572
 -- Data for Name: event_filter; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2542,17 +2561,18 @@ COPY uranus.event_filter (uuid, user_id, params, slug, name, description) FROM s
 
 
 --
--- TOC entry 5824 (class 0 OID 2351572)
+-- TOC entry 5833 (class 0 OID 2351572)
 -- Dependencies: 574
 -- Data for Name: event_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event_link (id, created_at, modified_at, event_uuid, type, label, url) FROM stdin;
+3	2026-04-04 11:16:58.173405	\N	019d4e9a-aa28-7f7e-845f-252213276c53	website	Bandwebsite	https://band.grain.one
 \.
 
 
 --
--- TOC entry 5788 (class 0 OID 2266018)
+-- TOC entry 5797 (class 0 OID 2266018)
 -- Dependencies: 536
 -- Data for Name: event_occasion_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2586,17 +2606,18 @@ COPY uranus.event_occasion_type (id, type_id, iso_639_1, name) FROM stdin;
 
 
 --
--- TOC entry 5828 (class 0 OID 2351626)
--- Dependencies: 578
+-- TOC entry 5836 (class 0 OID 2351626)
+-- Dependencies: 577
 -- Data for Name: event_projection; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event_projection (created_at, modified_at, event_uuid, external_id, release_status, org_uuid, venue_uuid, space_uuid, title, subtitle, description, summary, org_name, org_contact_email, org_contact_phone, org_link, venue_name, venue_street, venue_house_number, venue_postal_code, venue_city, venue_country, venue_state, venue_point, venue_link, space_type, space_name, space_description, space_building_level, space_total_capacity, space_seating_capacity, space_link, space_accessibility_flags, space_accessibility_summary, occasion_type_id, categories, types, tags, languages, source_link, online_link, max_attendees, min_age, max_age, participation_info, meeting_point, currency, min_price, max_price, image_alt_text, image_license_id, image_creator_name, image_copyright, image_description, ticket_flags, price_type, visitor_info_flags, image_uuid, search_text, custom, style) FROM stdin;
+2026-04-03 18:09:56.671651	2026-04-05 17:00:04.361452	019d4e9a-aa28-7f7e-845f-252213276c53	\N	released	019d2eed-a25a-7caf-a762-a2a71917c6a1	019d3e19-c044-75bf-820b-c96fd5fe07ee	019d44c6-26bf-77d5-a7ca-e82ddd099757	Konzert	111	aaa	ccc	[SoundCodes~	soundcodes@grain.one	0176 59 97 80 74	https://soundcodes.grain.one	Aktivitetshuset	Norderstraße	49	24939	Flensburg	DEU	SH	0101000020E610000040CBFF7AD2DC2240F4178C0853654B40	https://aktivitetshuset.de	\N	Info	\N	\N	\N	\N	\N	\N	\N	\N	{1,2,5}	[[56, 0], [52, 0], [1, 1001], [1, 1008], [1, 1003], [3, 3002], [32, 0]]	{modular,mixer}	{sq,da}	\N	https://aktivitetshuset.de	86	4	8	aaa	Beim Eisladen	EUR	8	16	\N	\N	\N	\N	\N	{advance_ticket,ticket_required,on_site_ticket_sales,registration_required}	regular_price	4690104287233	019d5427-554d-7fd4-a73c-6fa70b6098f6	konzert 111 aaa ccc aaa modular mixer	\N	\N
 \.
 
 
 --
--- TOC entry 5790 (class 0 OID 2266024)
+-- TOC entry 5799 (class 0 OID 2266024)
 -- Dependencies: 538
 -- Data for Name: event_release_status_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2627,7 +2648,7 @@ en	Review	review	20
 
 
 --
--- TOC entry 5804 (class 0 OID 2283091)
+-- TOC entry 5813 (class 0 OID 2283091)
 -- Dependencies: 552
 -- Data for Name: event_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -2826,17 +2847,24 @@ COPY uranus.event_type (type_id, iso_639_1, name, schema_org_type) FROM stdin;
 
 
 --
--- TOC entry 5825 (class 0 OID 2351584)
--- Dependencies: 575
+-- TOC entry 5857 (class 0 OID 2351839)
+-- Dependencies: 598
 -- Data for Name: event_type_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.event_type_link (event_uuid, type_id, genre_id) FROM stdin;
+019d4e9a-aa28-7f7e-845f-252213276c53	56	0
+019d4e9a-aa28-7f7e-845f-252213276c53	52	0
+019d4e9a-aa28-7f7e-845f-252213276c53	1	1001
+019d4e9a-aa28-7f7e-845f-252213276c53	1	1008
+019d4e9a-aa28-7f7e-845f-252213276c53	1	1003
+019d4e9a-aa28-7f7e-845f-252213276c53	3	3002
+019d4e9a-aa28-7f7e-845f-252213276c53	32	0
 \.
 
 
 --
--- TOC entry 5791 (class 0 OID 2266047)
+-- TOC entry 5800 (class 0 OID 2266047)
 -- Dependencies: 539
 -- Data for Name: genre_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -3716,7 +3744,7 @@ Jam session	11002	11	en
 
 
 --
--- TOC entry 5792 (class 0 OID 2266054)
+-- TOC entry 5801 (class 0 OID 2266054)
 -- Dependencies: 540
 -- Data for Name: image_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -3735,7 +3763,7 @@ COPY uranus.image_type (id, name, description, type_id, iso_639_1) FROM stdin;
 
 
 --
--- TOC entry 5794 (class 0 OID 2266060)
+-- TOC entry 5803 (class 0 OID 2266060)
 -- Dependencies: 542
 -- Data for Name: language; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -3940,7 +3968,7 @@ cy	Galés	es
 
 
 --
--- TOC entry 5813 (class 0 OID 2317098)
+-- TOC entry 5822 (class 0 OID 2317098)
 -- Dependencies: 561
 -- Data for Name: legal_form; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -3965,7 +3993,7 @@ independent_operator	LegalService
 
 
 --
--- TOC entry 5814 (class 0 OID 2317105)
+-- TOC entry 5823 (class 0 OID 2317105)
 -- Dependencies: 562
 -- Data for Name: legal_form_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4020,7 +4048,7 @@ independent_operator	en	Independently operated	\N
 
 
 --
--- TOC entry 5815 (class 0 OID 2317191)
+-- TOC entry 5824 (class 0 OID 2317191)
 -- Dependencies: 563
 -- Data for Name: license; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4040,7 +4068,7 @@ pd	\N	\N
 
 
 --
--- TOC entry 5816 (class 0 OID 2317198)
+-- TOC entry 5825 (class 0 OID 2317198)
 -- Dependencies: 564
 -- Data for Name: license_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4080,7 +4108,7 @@ pd	da	Offentlig ejendom	\N
 
 
 --
--- TOC entry 5810 (class 0 OID 2317029)
+-- TOC entry 5819 (class 0 OID 2317029)
 -- Dependencies: 558
 -- Data for Name: link_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4102,7 +4130,7 @@ youtube
 
 
 --
--- TOC entry 5811 (class 0 OID 2317036)
+-- TOC entry 5820 (class 0 OID 2317036)
 -- Dependencies: 559
 -- Data for Name: link_type_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4148,8 +4176,8 @@ mastodon	en	Mastodon	\N
 
 
 --
--- TOC entry 5830 (class 0 OID 2351641)
--- Dependencies: 580
+-- TOC entry 5838 (class 0 OID 2351641)
+-- Dependencies: 579
 -- Data for Name: message; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4158,20 +4186,23 @@ COPY uranus.message (id, created_at, modified_at, to_user_uuid, from_user_uuid, 
 
 
 --
--- TOC entry 5831 (class 0 OID 2351659)
--- Dependencies: 581
+-- TOC entry 5839 (class 0 OID 2351659)
+-- Dependencies: 580
 -- Data for Name: organization; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.organization (uuid, created_by, created_at, modified_by, modified_at, name, description, contact_email, contact_phone, web_link, street, house_number, address_addition, postal_code, city, country, state, holding_org_uuid, legal_form, nonprofit, point, api_import_token, api_import_enabled) FROM stdin;
-019d35a0-3cd6-7c28-b3ca-537e8577defe	\N	2026-03-28 19:06:27.030075	\N	\N	OK Lab Flensburg	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	1u32dWGYuWywcEnzwiK67r	f
-019d2eed-a25a-7caf-a762-a2a71917c6a1	\N	2026-03-27 11:53:38.77816	\N	2026-03-29 15:23:31.30799	[SoundCodes~ 1	\\[SoundCodes~ ist ein Projekt des Flensburger Programmierers und Klangforschers Roald Christesen	soundcodes@grain.one	0176 59 97 80 74	https://sndcds.grain.one	Am Nordertor	2	\N	24939	Flensburg	DEU	SH	\N	initiative	\N	0101000020E6100000B0B53DE372DC2240A8DF9D2BE7654B40	2csMkuV3tQ2RdON7KXZEKr	f
+019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	\N	2026-03-30 11:35:46.715494	\N	2026-03-30 12:07:42.773635	Sydslesvigs danske Ungdomsforeninger e.V.	Sydslesvigs danske Ungdomsforeninger (SdU) ist der Dachverband der dänischen Jugendorganisationen in Südschleswig mit Sitz in Flensburg. Er fördert die Kultur und Identität der dänischen Minderheit durch 12 Freizeitheime, 10 Klubhäuser, Sportplätze und das Zentrum Flensborghus. SdU bietet vielfältige pädagogische Aktivitäten, Kinderhorte und Sportmöglichkeiten.	kontoret@sdu.de	+49 (0) 461 14408–0	https://sdu.de	Norderstraße	76	\N	24939	Flensburg	DEU	SH	\N	registered_association	\N	0101000020E61000004068088EE0DC2240DC42959787654B40	3cbEp6ECByoaeb0Y71vRGU	f
+019d3f54-0db6-731f-8e18-03cb0c70b3fe	\N	2026-03-30 17:19:26.387293	\N	2026-03-30 17:22:44.914301	Kulturwerkstatt Kühlhaus e. V.	Die Einzigartigkeit des Kühlhauses zeigt sich bereits in der Geschichte des Hauses. Ehemals war das Kühlhaus in Flensburg Eigentum der Deutschen Bahn: ein Obst- und Kühllager direkt an den Gleisen des Flensburger Güterbahnhofsgelegen. Gebäude und Gelände standen schon einige Jahre leer, als eine handvoll junger Flensburger und Flensburgerinnen begannen, die Räume für Veranstaltungen und zur eigenen kreativen und künstlerischen Entfaltung zu nutzen.  \n  \nSie gründeten im November 1994 den Verein „Kulturwerkstatt Kühlhaus e.V.“, um eine rechtliche und organisatorische Grundlage für die gemeinsame Arbeit zu schaffen und die Möglichkeit einer öffentlichen Förderung zu gewährleisten. In ehrenamtlicher Arbeit wurde die alte Lagerhalle zum Veranstaltungssaal ausgebaut, sodass schon im Dezember 1994 die Eröffnung des Hauses mit einem Doppelkonzert stattfinden konnte. Seither lädt das Kühlhaus jährlich an den Weihnachtsfeiertagen zum Geburtstag.	info@kuehlhaus.net/	\N	https://kuehlhaus.net/	Mühlendamm	25	\N	24937^	Flensburg	DEU	SH	\N	registered_association	\N	0101000020E6100000D0B685E1A4E122405C2D94A526634B40	Apctjl1rEZxwPK39r91ea	f
+019d3e2d-5c6e-78df-9fbc-930adb904621	\N	2026-03-30 11:57:33.420847	\N	2026-03-30 17:26:51.80112	Landesarbeitsgemeinschaft Soziokultur Schleswig-Holstein e. V.	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0101000020E610000050D700EA1549244008613701D3294B40	73iFUMHzQXfcoEWS8C1C37	f
+019d2eed-a25a-7caf-a762-a2a71917c6a1	\N	2026-03-27 11:53:38.77816	\N	2026-04-04 18:24:54.774852	[SoundCodes~	\\[SoundCodes~ ist ein Projekt des Flensburger Programmierers und Klangforschers Roald Christesen	soundcodes@grain.one	0176 59 97 80 74	https://soundcodes.grain.one	Am Nordertor	2	\N	24939	Flensburg	DEU	SH	\N	initiative	\N	0101000020E61000006028679D73DC2240A4524E81E7654B40	2csMkuV3tQ2RdON7KXZEKr	f
+019d35a0-3cd6-7c28-b3ca-537e8577defe	\N	2026-03-28 19:06:27.030075	\N	2026-03-30 11:35:21.494096	OK Lab Flensburg	Das **OK Lab Flensburg** ist eine offene Gruppe engagierter Menschen aus Flensburg und Umgebung, die jeden **Mittwochabend** zusammenkommt. Wir arbeiten gemeinsam an spannenden lokalen Projekten rund um **Technologie, Daten und Verwaltung** – von nutzerfreundlichen Apps bis zu Prototypen, die Transparenz und Innovation in der Region fördern.\n\nEgal ob du Interesse an **Civic Tech**, **Open Data** oder an **lokaler Digitalisierung** hast – bei uns kannst du aktiv mitgestalten. Einige unserer Projekte stellen wir hier vor – schau gerne vorbei und lass dich inspirieren!	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	1u32dWGYuWywcEnzwiK67r	f
 \.
 
 
 --
--- TOC entry 5832 (class 0 OID 2351676)
--- Dependencies: 582
+-- TOC entry 5840 (class 0 OID 2351676)
+-- Dependencies: 581
 -- Data for Name: organization_member_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4179,12 +4210,18 @@ COPY uranus.organization_member_link (org_uuid, user_uuid, created_at, modified_
 019d2eed-a25a-7caf-a762-a2a71917c6a1	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-27 11:53:38.77816	\N	\N	\N	\N	t
 019d359c-b8f6-75d6-a5fd-ae1f303e3bbe	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-28 19:02:36.66238	\N	\N	\N	\N	t
 019d35a0-3cd6-7c28-b3ca-537e8577defe	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-28 19:06:27.030075	\N	\N	\N	\N	t
+019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:35:46.715494	\N	\N	\N	\N	t
+019d3e2d-5c6e-78df-9fbc-930adb904621	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:57:33.420847	\N	\N	\N	\N	t
+019d3f54-0db6-731f-8e18-03cb0c70b3fe	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:19:26.387293	\N	\N	\N	\N	t
+019d3f68-5b90-7af5-b4f6-55e592acb0d4	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:41:37.039682	\N	\N	\N	\N	t
+019d5946-16c3-7f0d-95d7-7b73c4f4d42d	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-04 18:14:18.817191	\N	\N	\N	\N	t
+019d594d-cc9a-7f77-bac8-e3307f0faa75	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-04 18:22:44.12172	\N	\N	\N	\N	t
 \.
 
 
 --
--- TOC entry 5833 (class 0 OID 2351687)
--- Dependencies: 583
+-- TOC entry 5841 (class 0 OID 2351687)
+-- Dependencies: 582
 -- Data for Name: password_reset; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4193,7 +4230,7 @@ COPY uranus.password_reset (user_uuid, token, expires_at, used) FROM stdin;
 
 
 --
--- TOC entry 5795 (class 0 OID 2266118)
+-- TOC entry 5804 (class 0 OID 2266118)
 -- Dependencies: 543
 -- Data for Name: permission_bit; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4223,7 +4260,7 @@ event	ImportEvents	29	536870912
 
 
 --
--- TOC entry 5796 (class 0 OID 2266123)
+-- TOC entry 5805 (class 0 OID 2266123)
 -- Dependencies: 544
 -- Data for Name: permission_label; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4293,8 +4330,8 @@ event	ImportEvents	en	Import events	Imports events from external sources into th
 
 
 --
--- TOC entry 5834 (class 0 OID 2351695)
--- Dependencies: 584
+-- TOC entry 5842 (class 0 OID 2351695)
+-- Dependencies: 583
 -- Data for Name: pluto_cache; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4304,12 +4341,52 @@ COPY uranus.pluto_cache (created_at, pluto_image_uuid, mime_type, receipt) FROM 
 2026-03-28 14:35:51.387134	019d34a8-7fed-7ce8-a7ca-ef5abf112a45	webp	019d34a8-7fed-7ce8-a7ca-ef5abf112a45_qw_5000dc
 2026-03-28 14:40:51.67115	019d34a8-7fed-7ce8-a7ca-ef5abf112a45	png	019d34a8-7fed-7ce8-a7ca-ef5abf112a45_qw_500078
 2026-03-28 14:40:55.562664	019d348a-e0e4-7466-99da-c3e0c9242b3f	png	019d348a-e0e4-7466-99da-c3e0c9242b3f_qw_500078
+2026-03-30 11:38:35.728944	019d3e1b-fffd-7312-a32c-fe0c3d344cb3	webp	019d3e1b-fffd-7312-a32c-fe0c3d344cb3_qw_5000dc
+2026-03-30 11:38:45.881701	019d3e1b-fffd-7312-a32c-fe0c3d344cb3	png	019d3e1b-fffd-7312-a32c-fe0c3d344cb3_qw_500078
+2026-03-30 11:48:07.026399	019d3e24-b7a5-7f04-8139-fd2bbf8ff61e	webp	019d3e24-b7a5-7f04-8139-fd2bbf8ff61e_qw_5000dc
+2026-03-30 11:48:21.153567	019d3e24-eeda-7b15-8c4b-202972f2a844	webp	019d3e24-eeda-7b15-8c4b-202972f2a844_qw_5000dc
+2026-03-30 11:48:31.209344	019d3e25-1620-734d-a85d-668fe9925182	webp	019d3e25-1620-734d-a85d-668fe9925182_qw_5000dc
+2026-03-30 11:48:33.990337	019d3e25-1620-734d-a85d-668fe9925182	png	019d3e25-1620-734d-a85d-668fe9925182_qw_500078
+2026-03-30 11:48:40.702233	019d3e24-eeda-7b15-8c4b-202972f2a844	png	019d3e24-eeda-7b15-8c4b-202972f2a844_qw_500078
+2026-03-30 11:58:21.274408	019d3e2e-1714-758b-bc5f-c48df7c380ce	webp	019d3e2e-1714-758b-bc5f-c48df7c380ce_qw_5000dc
+2026-03-30 11:58:32.434647	019d3e2e-42b7-71b1-80b8-08c33ca0e3bc	webp	019d3e2e-42b7-71b1-80b8-08c33ca0e3bc_qw_5000dc
+2026-03-30 11:58:36.666754	019d3e2e-42b7-71b1-80b8-08c33ca0e3bc	png	019d3e2e-42b7-71b1-80b8-08c33ca0e3bc_qw_500078
+2026-03-30 12:09:04.521321	019d3e2e-1714-758b-bc5f-c48df7c380ce	png	019d3e2e-1714-758b-bc5f-c48df7c380ce_qw_500078
+2026-03-30 12:30:07.910964	019d3e4b-2eb4-73ea-9ed8-2026addc5cbd	webp	019d3e4b-2eb4-73ea-9ed8-2026addc5cbd_qw_5000dc
+2026-03-30 12:30:16.607118	019d3e4b-50e2-7455-b70a-fbe78fb9aa90	webp	019d3e4b-50e2-7455-b70a-fbe78fb9aa90_qw_5000dc
+2026-03-30 12:31:04.760497	019d3e4b-2eb4-73ea-9ed8-2026addc5cbd	webp	019d3e4b-2eb4-73ea-9ed8-2026addc5cbd_qw_5a0320
+2026-03-30 14:14:20.507815	019d3e4b-50e2-7455-b70a-fbe78fb9aa90	png	019d3e4b-50e2-7455-b70a-fbe78fb9aa90_qw_500078
+2026-03-30 17:24:47.308559	019d3f58-f302-7792-a69c-15d12137aa98	webp	019d3f58-f302-7792-a69c-15d12137aa98_qw_5000dc
+2026-03-30 17:25:15.075577	019d3f59-5f80-74fa-b4cf-9d672a38bec8	webp	019d3f59-5f80-74fa-b4cf-9d672a38bec8_qw_5000dc
+2026-03-30 17:25:23.020765	019d3f59-7e7d-7ad9-bbd2-05bcfd81906a	webp	019d3f59-7e7d-7ad9-bbd2-05bcfd81906a_qw_5000dc
+2026-03-30 17:25:46.395962	019d3f59-7e7d-7ad9-bbd2-05bcfd81906a	png	019d3f59-7e7d-7ad9-bbd2-05bcfd81906a_qw_500078
+2026-03-30 17:25:56.287738	019d3f59-5f80-74fa-b4cf-9d672a38bec8	png	019d3f59-5f80-74fa-b4cf-9d672a38bec8_qw_500078
+2026-03-30 17:30:40.234759	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e	webp	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e_qw_5000dc
+2026-03-30 20:25:03.196548	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e	png	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e_qw_500078
+2026-03-30 20:25:12.19071	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e	webp	019d3f5e-5591-7e2e-a0b9-df1e93d61c1e_qw_5a0320
+2026-04-01 12:08:01.505477	019d4883-a95b-7e05-9b93-fc12b2267865	webp	019d4883-a95b-7e05-9b93-fc12b2267865_qw_5000dc
+2026-04-01 12:08:03.905582	019d4883-a95b-7e05-9b93-fc12b2267865	webp	019d4883-a95b-7e05-9b93-fc12b2267865_qw_5a0320
+2026-04-01 12:08:32.578197	019d4883-a95b-7e05-9b93-fc12b2267865	png	019d4883-a95b-7e05-9b93-fc12b2267865_qw_500078
+2026-04-01 20:22:24.168042	019d4a48-4755-73a2-a49b-b7c2ec603b19	webp	019d4a48-4755-73a2-a49b-b7c2ec603b19_qw_5000dc
+2026-04-01 20:22:31.065805	019d4a48-6250-7fc3-b9dd-69613aa628f9	webp	019d4a48-6250-7fc3-b9dd-69613aa628f9_qw_5000dc
+2026-04-01 20:22:41.528885	019d4a48-8b12-7813-a54c-d59a6d28f5fe	webp	019d4a48-8b12-7813-a54c-d59a6d28f5fe_qw_5000dc
+2026-04-01 20:22:49.853696	019d4a48-ab71-7c8d-8095-6019a9c26873	webp	019d4a48-ab71-7c8d-8095-6019a9c26873_qw_5000dc
+2026-04-01 20:37:54.903923	019d4a48-6250-7fc3-b9dd-69613aa628f9	webp	019d4a48-6250-7fc3-b9dd-69613aa628f9_qw_5a0320
+2026-04-02 10:08:15.136552	019d44c4-d0b4-79b5-adb2-b89e08271ccf	webp	019d44c4-d0b4-79b5-adb2-b89e08271ccf_qw_5a0320
+2026-04-03 18:22:37.242011	019d5427-554d-7fd4-a73c-6fa70b6098f6	webp	019d5427-554d-7fd4-a73c-6fa70b6098f6_qw_5001a4
+2026-04-03 18:27:41.751268	019d5427-554d-7fd4-a73c-6fa70b6098f6	jpg	019d5427-554d-7fd4-a73c-6fa70b6098f6_qwhr_5000a0005a_3fe38e39
+2026-04-03 18:57:14.459782	019d5427-554d-7fd4-a73c-6fa70b6098f6	webp	019d5427-554d-7fd4-a73c-6fa70b6098f6_qw_5a0320
+2026-04-04 14:39:09.077967	019d5427-554d-7fd4-a73c-6fa70b6098f6	jpg	019d5427-554d-7fd4-a73c-6fa70b6098f6_q_50
+2026-04-05 11:03:13.691635	019d5427-554d-7fd4-a73c-6fa70b6098f6	jpg	019d5427-554d-7fd4-a73c-6fa70b6098f6_qwhr_5001e0010e_3fe38e39
+2026-04-05 17:45:57.805253	019d5427-554d-7fd4-a73c-6fa70b6098f6	jpg	019d5427-554d-7fd4-a73c-6fa70b6098f6_qwhr_50050002d0_3fe38e39
+2026-03-31 18:40:42.506157	019d44c4-d0b4-79b5-adb2-b89e08271ccf	webp	019d44c4-d0b4-79b5-adb2-b89e08271ccf_qw_5000dc
+2026-03-31 18:40:44.315375	019d44c4-d0b4-79b5-adb2-b89e08271ccf	png	019d44c4-d0b4-79b5-adb2-b89e08271ccf_qw_500078
 \.
 
 
 --
--- TOC entry 5835 (class 0 OID 2351703)
--- Dependencies: 585
+-- TOC entry 5843 (class 0 OID 2351703)
+-- Dependencies: 584
 -- Data for Name: pluto_context_rules; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4319,31 +4396,69 @@ event	main	1920	1280	85	5242880
 
 
 --
--- TOC entry 5836 (class 0 OID 2351709)
--- Dependencies: 586
+-- TOC entry 5844 (class 0 OID 2351709)
+-- Dependencies: 585
 -- Data for Name: pluto_image; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.pluto_image (uuid, created_by, created_at, modified_at, expiration_date, file_name, gen_file_name, mime_type, width, height, description, alt_text, exif, creator_name, copyright, license, focus_x, focus_y) FROM stdin;
+019d3f59-5f80-74fa-b4cf-9d672a38bec8	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:25:14.986348	2026-03-30 17:25:14.986348	\N	kuehlhaus white.png	org_019d3f59-5f80-74fa-b4cf-9d672a38bec8.png	image/png	1280	502	\N	\N	{}	\N	\N	\N	\N	\N
+019d3f59-7e7d-7ad9-bbd2-05bcfd81906a	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:25:22.931179	2026-03-30 17:25:22.931179	\N	kuehlhaus black.png	org_019d3f59-7e7d-7ad9-bbd2-05bcfd81906a.png	image/png	1280	502	\N	\N	{}	\N	\N	\N	\N	\N
+019d3f5e-5591-7e2e-a0b9-df1e93d61c1e	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:30:40.123125	2026-03-30 17:30:40.123125	\N	kuehlhaus color.png	venue_019d3f5e-5591-7e2e-a0b9-df1e93d61c1e.png	image/png	1280	502	\N	Kühhaus Logo	{}	\N	\N	\N	\N	\N
 019d348a-e0e4-7466-99da-c3e0c9242b3f	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-28 14:03:30.013343	2026-03-28 14:03:30.013343	\N	sound-codes-logo-512-dark-theme.webp	org_019d348a-e0e4-7466-99da-c3e0c9242b3f.webp	image/webp	512	180	\N	\N	{}	\N	\N	\N	\N	\N
 019d34a8-7fed-7ce8-a7ca-ef5abf112a45	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-28 14:35:51.24312	2026-03-28 14:35:51.24312	\N	sound-codes-logo-512-light-theme.webp	org_019d34a8-7fed-7ce8-a7ca-ef5abf112a45.webp	image/webp	512	180	\N	\N	{}	\N	\N	\N	\N	\N
+019d3e1b-fffd-7312-a32c-fe0c3d344cb3	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:38:35.598389	2026-03-30 11:38:35.598389	\N	codefor_de_fl_blau_weiss.png	org_019d3e1b-fffd-7312-a32c-fe0c3d344cb3.png	image/png	1024	1024	\N	OK Lab Flensburg Logo	{}	Roald Christesen	OK Lab Flensburg	cc0	\N	\N
+019d3e24-b7a5-7f04-8139-fd2bbf8ff61e	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:48:06.904959	2026-03-30 11:48:06.904959	\N	SdU Logo RGB.png	org_019d3e24-b7a5-7f04-8139-fd2bbf8ff61e.png	image/png	2500	1000	\N	SdU Logo	{}	\N	\N	\N	\N	\N
+019d3e24-eeda-7b15-8c4b-202972f2a844	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:48:21.039038	2026-03-30 11:48:21.039038	\N	SdU Logo_white.png	org_019d3e24-eeda-7b15-8c4b-202972f2a844.png	image/png	2500	1000	\N	SdU Logo	{}	\N	\N	\N	\N	\N
+019d3e25-1620-734d-a85d-668fe9925182	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:48:31.068017	2026-03-30 11:48:31.068017	\N	SdU Logo_black.png	org_019d3e25-1620-734d-a85d-668fe9925182.png	image/png	2500	1000	\N	SdU Logo	{}	\N	\N	\N	\N	\N
+019d3e2e-1714-758b-bc5f-c48df7c380ce	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:58:21.184836	2026-03-30 11:58:21.184836	\N	LAG white logo.png	org_019d3e2e-1714-758b-bc5f-c48df7c380ce.png	image/png	720	800	\N	\N	{}	\N	\N	\N	\N	\N
+019d3e2e-42b7-71b1-80b8-08c33ca0e3bc	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 11:58:32.357397	2026-03-30 11:58:32.357397	\N	LAG black logo.png	org_019d3e2e-42b7-71b1-80b8-08c33ca0e3bc.png	image/png	720	800	\N	\N	{}	\N	\N	\N	\N	\N
+019d3e4b-2eb4-73ea-9ed8-2026addc5cbd	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 12:30:07.768784	2026-03-30 12:30:07.768784	\N	Akti white.png	venue_019d3e4b-2eb4-73ea-9ed8-2026addc5cbd.png	image/png	1280	600	\N	\N	{}	\N	\N	\N	\N	\N
+019d3e4b-50e2-7455-b70a-fbe78fb9aa90	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 12:30:16.529888	2026-03-30 12:30:16.529888	\N	Akti black.png	venue_019d3e4b-50e2-7455-b70a-fbe78fb9aa90.png	image/png	1280	600	\N	\N	{}	\N	\N	\N	\N	\N
+019d3f58-f302-7792-a69c-15d12137aa98	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-30 17:24:47.196141	2026-03-30 17:24:47.196141	\N	kuehlhaus color.png	org_019d3f58-f302-7792-a69c-15d12137aa98.png	image/png	1280	502	\N	\N	{}	\N	\N	\N	\N	\N
+019d4a48-ab71-7c8d-8095-6019a9c26873	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-01 20:22:49.634331	2026-04-01 20:22:49.634331	\N	458651964_493693810295999_7527287658839608914_n.jpg	venue_019d4a48-ab71-7c8d-8095-6019a9c26873.jpg	image/jpeg	2048	2048	\N	\N	{}	\N	\N	\N	\N	\N
+019d5427-554d-7fd4-a73c-6fa70b6098f6	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-03 18:22:37.006713	2026-04-03 18:22:37.006713	\N	454259078_923524169582901_3005651455478534908_n.jpeg	event_019d5427-554d-7fd4-a73c-6fa70b6098f6.jpeg	image/jpeg	1920	1076	\N	\N	{}	\N	\N	\N	\N	\N
+019d44c4-d0b4-79b5-adb2-b89e08271ccf	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-31 18:40:42.358243	2026-03-31 18:40:42.358243	\N	SoundCodes Logo 1000 x 400 px Orange.png	venue_019d44c4-d0b4-79b5-adb2-b89e08271ccf.png	image/png	1000	400	\N	SoundCodes Logo	{}	\N	\N	\N	\N	\N
+019d4883-a95b-7e05-9b93-fc12b2267865	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-01 12:08:01.328317	2026-04-01 12:08:17.316738	\N	461120632_903235038520949_4542890900643009370_n.jpg	venue_019d4883-a95b-7e05-9b93-fc12b2267865.jpg	image/jpeg	1168	1185	\N	\N	{}	\N	\N	\N	0.5064670712129405	0.48345960324495896
+019d4a48-4755-73a2-a49b-b7c2ec603b19	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-01 20:22:24.026677	2026-04-01 20:22:24.026677	\N	0-Roads-to-Rome-1024x640.jpg	venue_019d4a48-4755-73a2-a49b-b7c2ec603b19.jpg	image/jpeg	1024	640	\N	\N	{}	\N	\N	\N	\N	\N
+019d4a48-6250-7fc3-b9dd-69613aa628f9	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-01 20:22:30.947154	2026-04-01 20:22:30.947154	\N	386202150_865748518252978_2817582410512565382_n.jpg	venue_019d4a48-6250-7fc3-b9dd-69613aa628f9.jpg	image/jpeg	1080	1080	\N	\N	{}	\N	\N	\N	\N	\N
+019d4a48-8b12-7813-a54c-d59a6d28f5fe	019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-04-01 20:22:41.384923	2026-04-01 20:22:41.384923	\N	440150458_10232966597371209_6433723719965907448_n.jpg	venue_019d4a48-8b12-7813-a54c-d59a6d28f5fe.jpg	image/jpeg	960	960	\N	\N	{}	\N	\N	\N	\N	\N
 \.
 
 
 --
--- TOC entry 5837 (class 0 OID 2351717)
--- Dependencies: 587
+-- TOC entry 5845 (class 0 OID 2351717)
+-- Dependencies: 586
 -- Data for Name: pluto_image_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.pluto_image_link (pluto_image_uuid, context, context_uuid, identifier) FROM stdin;
 019d348a-e0e4-7466-99da-c3e0c9242b3f	organization	019d2eed-a25a-7caf-a762-a2a71917c6a1	dark_theme_logo
 019d34a8-7fed-7ce8-a7ca-ef5abf112a45	organization	019d2eed-a25a-7caf-a762-a2a71917c6a1	light_theme_logo
+019d3e1b-fffd-7312-a32c-fe0c3d344cb3	organization	019d35a0-3cd6-7c28-b3ca-537e8577defe	main_logo
+019d3e24-b7a5-7f04-8139-fd2bbf8ff61e	organization	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	main_logo
+019d3e24-eeda-7b15-8c4b-202972f2a844	organization	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	dark_theme_logo
+019d3e25-1620-734d-a85d-668fe9925182	organization	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	light_theme_logo
+019d3e2e-1714-758b-bc5f-c48df7c380ce	organization	019d3e2d-5c6e-78df-9fbc-930adb904621	dark_theme_logo
+019d3e2e-42b7-71b1-80b8-08c33ca0e3bc	organization	019d3e2d-5c6e-78df-9fbc-930adb904621	main_logo
+019d3e4b-2eb4-73ea-9ed8-2026addc5cbd	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	dark_theme_logo
+019d3e4b-50e2-7455-b70a-fbe78fb9aa90	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	light_theme_logo
+019d3f58-f302-7792-a69c-15d12137aa98	organization	019d3f54-0db6-731f-8e18-03cb0c70b3fe	main_logo
+019d3f59-5f80-74fa-b4cf-9d672a38bec8	organization	019d3f54-0db6-731f-8e18-03cb0c70b3fe	dark_theme_logo
+019d3f59-7e7d-7ad9-bbd2-05bcfd81906a	organization	019d3f54-0db6-731f-8e18-03cb0c70b3fe	light_theme_logo
+019d3f5e-5591-7e2e-a0b9-df1e93d61c1e	venue	019d3f5c-ba16-7c74-a7ba-533f26446ddf	main_logo
+019d44c4-d0b4-79b5-adb2-b89e08271ccf	venue	019d358b-2946-7c2f-afc0-0cb0e8049f2f	main_logo
+019d4883-a95b-7e05-9b93-fc12b2267865	venue	019d358b-2946-7c2f-afc0-0cb0e8049f2f	dark_theme_logo
+019d4a48-4755-73a2-a49b-b7c2ec603b19	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	main_photo
+019d4a48-6250-7fc3-b9dd-69613aa628f9	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	gallery_photo_1
+019d4a48-8b12-7813-a54c-d59a6d28f5fe	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	gallery_photo_2
+019d4a48-ab71-7c8d-8095-6019a9c26873	venue	019d3e19-c044-75bf-820b-c96fd5fe07ee	gallery_photo_3
+019d5427-554d-7fd4-a73c-6fa70b6098f6	event	019d4e9a-aa28-7f7e-845f-252213276c53	main
 \.
 
 
 --
--- TOC entry 5797 (class 0 OID 2266135)
+-- TOC entry 5806 (class 0 OID 2266135)
 -- Dependencies: 545
 -- Data for Name: price_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4368,17 +4483,34 @@ COPY uranus.price_type (type_id, iso_639_1, name) FROM stdin;
 
 
 --
--- TOC entry 5838 (class 0 OID 2351724)
--- Dependencies: 588
+-- TOC entry 5846 (class 0 OID 2351724)
+-- Dependencies: 587
 -- Data for Name: space; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
-COPY uranus.space (uuid, created_at, modified_at, venue_uuid, name, description, web_link, space_type, building_level, area_sqm, total_capacity, seating_capacity, accessibility_flags, accessibility_summary, environmental_features, audio_features, presentation_features, lighting_features, climate_features, misc_features) FROM stdin;
+COPY uranus.space (uuid, created_at, modified_at, venue_uuid, name, description, web_link, space_type, building_level, area_sqm, total_capacity, seating_capacity, accessibility_flags, accessibility_summary) FROM stdin;
+019d44bb-5f99-74e6-9b61-257d8ba25e5b	2026-03-31 18:30:23.589696	\N	019d3f5c-ba16-7c74-a7ba-533f26446ddf	Saal	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c0-64c0-79d7-ba1d-6e9a51da9742	2026-03-31 18:35:52.572644	\N	019d3f5c-ba16-7c74-a7ba-533f26446ddf	Biergarten	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c0-87da-77ba-83ef-4ad7f42404fd	2026-03-31 18:36:01.626016	\N	019d3f5c-ba16-7c74-a7ba-533f26446ddf	Café	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c6-26bf-77d5-a7ca-e82ddd099757	2026-03-31 18:42:09.930443	\N	019d3e19-c044-75bf-820b-c96fd5fe07ee	Info	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c8-b482-75d0-811c-f71735246263	2026-03-31 18:44:57.341441	\N	019d3e19-c044-75bf-820b-c96fd5fe07ee	Serigrafi	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d4925-9f75-75a2-a270-2fd2eae2bfdb	2026-04-01 15:04:55.668074	2026-04-01 15:06:57.661975	019d3e19-c044-75bf-820b-c96fd5fe07ee	Musik	Alle kan låne vores lydisolerede musikøvelokale. På ca. 16 m2 er der et trommesæt, keyboard, guitar, bas og lydanlæg med mikrofoner og højtalere. Andre instrumenter skal du selv medbrin­ge. Der er plads til ca. seks personer. Alle bands har faste øvetider. Som til alle lokaler, skal du også have kørekort til Musikværkstedet. Desuden vejleder vi dig gerne, hvis du vil planlægge en kon­cert eller en workshop.  \n  \nTo gange om året afholdes der et møde for alle musikere. Vi holder en hyggelig aften og drøfter forholdene vedrørende værkstedet, fælles inte­resser og fordeler faste øvetider.	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c6-4471-7e94-a8c4-c0975e844b1a	2026-03-31 18:42:17.583746	2026-04-01 15:07:07.966821	019d3e19-c044-75bf-820b-c96fd5fe07ee	RISO	I vores RISO værksted kan du trykke postkort, kalendere, illustrationer, foldere, visitkort, flyere og plakater, desuden kan RISO bruges til publikationer af enhver slags og kunstneriske produktioner på fint papir. Vores maskine kan printe både i A4 og A3-format og mindre. For tiden har vi 3 farver, der også kan kombineres: Fluo Pink, Blue og Yellow. Papiret kan gerne medbringes, men du kan også købe papiret i huset. De papirer, vi bruger, er ideelle til RISO. Du er også velkommen til at bruge værkstedet, hvis du har brug for en arbejdsplads, hvor du kan sidde i fred og ro eller hvis du vil bruge vores computere til både grafiske projekter eller filmredigering.	\N	\N	\N	\N	\N	\N	\N	\N
+019d44c9-3ac2-751a-b218-dd88e00bea8f	2026-03-31 18:45:31.71199	2026-04-01 15:07:42.601779	019d3e19-c044-75bf-820b-c96fd5fe07ee	Trykkeri	I Trykkeriet er der mulighed for at designe logoer eller billeder i programmet Illustrator CC, skære dem i folier på en skæreplotter og trykke dem på stof efterfølgende. Både folier og varmepresser står til rådighed. Der kan også fås vejledning til forskellige projekter som fx Blå Bog eller layout af foldere, postkort og flyere. Derudover er der mulighed for at samle, skære, hæfte, spiralbinde og limbinde papir.	\N	\N	\N	\N	\N	\N	\N	\N
+019d4925-da2c-7ca1-9921-155f80dbc590	2026-04-01 15:05:10.698181	2026-04-01 15:08:02.815307	019d3e19-c044-75bf-820b-c96fd5fe07ee	Træ	I Træværkstedet kan du primært fremstille, reparere og arbejde med projekter i træ. Det kan fx være en reol, et skærebræt, blomsterkasser, en opslagstavle eller også genstande i beton. Du kan høvle brædder, reparere din cykel eller dreje på drejebænken. Der er åben vejledning en gang om ugen og desuden emnerelaterede introduktioner hver anden/tredje uge.	\N	\N	\N	\N	\N	\N	\N	\N
+019d5798-5948-78d5-a716-49c52278a5b4	2026-04-04 10:24:55.326258	\N	019d358b-2946-7c2f-afc0-0cb0e8049f2f	Gruppenraum	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d4924-5882-78cb-8e59-0d32b2dcee08	2026-04-01 15:03:31.957224	2026-04-02 09:38:11.204688	019d3e19-c044-75bf-820b-c96fd5fe07ee	Aktiv Ro	Aktiv Ro er et rum, hvor du kan finde ro i hverdagen. Du kan dyrke yoga, meditere eller læse en bog, lave håndarbejde, danse alene til musik – rummet giver plads til mange muligheder. Der er en højtaler, du kan tilslutte din mobil til, der er yogamåtter, yogapuder, tæpper og klanginstrumenter.	\N	\N	\N	\N	\N	\N	263917200867359	\N
+019d44c5-0efb-78d5-a4a6-7e49c6b548b7	2026-03-31 18:40:58.345742	2026-04-01 15:02:18.551145	019d358b-2946-7c2f-afc0-0cb0e8049f2f	Studio	Analoges(digitales Synthesizerstudio, 40 Kanal Mischpult und quadrophonischer Lautsprecheranlage.	\N	studio	0	20.00	6	4	\N	\N
+019d44c6-83ac-7bfd-9ba9-ccfe074220c4	2026-03-31 18:42:33.771228	2026-04-01 15:05:56.815745	019d3e19-c044-75bf-820b-c96fd5fe07ee	Atelier	Atelieret har udstyr til forskellige teknikker og materialer, du kan bruge til at være kreativ med. Blandt andet er der en glasovn og materiale til glasarbejde, udstyr og værktøj til at lave smykker, fremstille glasperler, male og tegne, såvel som til at lave papirflet, filte eller farve garn. Der er også mulighed for at sy på symaskine. Aktivitetshuset tilbyder mange kurser på det kreative område, men du er også velkommen til at bruge Atelieret frit til egne projekter eller komme i vejledningstimerne og få hjælp.	\N	art_studio	1	\N	16	12	\N	\N
+019d4924-9445-7b59-a0b0-a7ec6ad23657	2026-04-01 15:03:47.265326	2026-04-01 15:06:10.670784	019d3e19-c044-75bf-820b-c96fd5fe07ee	Foto	Når du har et kørekort til Foto har du mulighed for at låne fire forskellige digitale spejlreflekskameraer (Nikon D5000, Nikon D5100, Fuji X-T2) med forskellige objektiver og et blitzanlæg. Desuden kan du få individuel vejledning til fotoprojekter og fotoshootings. Det er muligt at afholde fotoshootings i Fotoværkstedet med lærreder i forskellige farver.	\N	\N	\N	\N	\N	\N	\N	\N
+019d4924-e0f4-72f6-9723-bfebc756aeab	2026-04-01 15:04:06.898394	2026-04-01 15:06:27.476416	019d3e19-c044-75bf-820b-c96fd5fe07ee	Keramik	Aktivitetshusets værksted for Keramik ligger i Duborg-Skolens lerkælder. Når du står på skolens skolegård og vender dit ansigt mod den gamle hovedbygning, er der på venstre side en gennemgang. Her gå du ind og åbner den sidste dør til venstre. Så går du ned af trapperne og står allerede foran værkstedet!  \nLokalet er udstyret med forskellige arbejdsborde, fire drejeskiver, værktøj til arbejdet med ler, en stor vask og køkkenudstyr, så du også kan få en kop kaffe. Og selvfølgelig kan du finde ler her!	\N	\N	\N	\N	\N	\N	\N	\N
+019d4925-223c-7c0b-9dbe-179743cf7761	2026-04-01 15:04:23.610408	2026-04-01 15:06:37.66351	019d3e19-c044-75bf-820b-c96fd5fe07ee	Lyd	Vi har et veludstyret lydstudie med professionel soft- og hardware, som kan bruges til forskellige lydprojekter - lige fra indtalte tekster og musik til båndoptagelser, du skal redigere. Du kan des­uden låne et digitalt portastudie med 16 spor og indbygget harddisk og cd-brænder.	\N	\N	\N	\N	\N	\N	\N	\N
+019d4925-7c00-7745-a96c-31056cec9b2b	2026-04-01 15:04:46.590065	2026-04-01 15:06:46.878607	019d3e19-c044-75bf-820b-c96fd5fe07ee	Multimedia Studio	I vores Multimedia Studio er der uanede muligheder! Du kan producere din egen podcast, fotografere, filme og streame. Vi har det tekniske udstyr til at dække dit behov, når du vil komme og boltre dig i den multimediale verden. Vil du lære noget om at streame og vil gå i gang med Youtube/Twitch, eller vil du tage produktbilleder? Vi har den tekniske hardware og er glad for at kunne hjælpe med at vejlede dig i at bruge den.	\N	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
 --
--- TOC entry 5806 (class 0 OID 2316967)
+-- TOC entry 5815 (class 0 OID 2316967)
 -- Dependencies: 554
 -- Data for Name: space_feature; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4425,7 +4557,7 @@ presentation	presentation-flip-charts
 
 
 --
--- TOC entry 5807 (class 0 OID 2316993)
+-- TOC entry 5816 (class 0 OID 2316993)
 -- Dependencies: 555
 -- Data for Name: space_feature_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4435,7 +4567,7 @@ COPY uranus.space_feature_link (space_id, key) FROM stdin;
 
 
 --
--- TOC entry 5808 (class 0 OID 2317010)
+-- TOC entry 5817 (class 0 OID 2317010)
 -- Dependencies: 556
 -- Data for Name: space_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4471,7 +4603,7 @@ group_room	MeetingRoom
 
 
 --
--- TOC entry 5809 (class 0 OID 2317017)
+-- TOC entry 5818 (class 0 OID 2317017)
 -- Dependencies: 557
 -- Data for Name: space_type_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4559,7 +4691,7 @@ hall	de	Saal	\N
 
 
 --
--- TOC entry 5798 (class 0 OID 2266155)
+-- TOC entry 5807 (class 0 OID 2266155)
 -- Dependencies: 546
 -- Data for Name: state; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4590,7 +4722,7 @@ HS	DNK	Region Hovedstaden
 
 
 --
--- TOC entry 5799 (class 0 OID 2266160)
+-- TOC entry 5808 (class 0 OID 2266160)
 -- Dependencies: 547
 -- Data for Name: system_email_template; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4609,7 +4741,7 @@ COPY uranus.system_email_template (id, context, iso_639_1, template, subject) FR
 
 
 --
--- TOC entry 5801 (class 0 OID 2266166)
+-- TOC entry 5810 (class 0 OID 2266166)
 -- Dependencies: 549
 -- Data for Name: team_member_role; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4643,20 +4775,21 @@ COPY uranus.team_member_role (type_id, name, iso_639_1, description) FROM stdin;
 
 
 --
--- TOC entry 5847 (class 0 OID 2351814)
--- Dependencies: 597
+-- TOC entry 5855 (class 0 OID 2351814)
+-- Dependencies: 596
 -- Data for Name: todo; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.todo (id, created_at, modified_at, user_uuid, title, description, due_date, completed, importance) FROM stdin;
-2	2026-03-26 18:11:09.42654	2026-03-27 08:39:21.693669	019d237b-3563-74c6-8085-6d5fc5afb2b3	Wirklich Verlag anrufen	Infotermin zur API vereinbaren	2026-03-30	f	high
-5	2026-03-27 08:39:30.727889	2026-03-27 10:01:19.34596	019d237b-3563-74c6-8085-6d5fc5afb2b3	Bild für Carolina Eyck Konzert anfragen	Bei der Agentur anrufen: 030 - 87293781	2026-04-14	t	low
+8	2026-04-04 15:53:47.458761	\N	019d237b-3563-74c6-8085-6d5fc5afb2b3	IDG verkaufen	Höchstpreis derzeit 700.000.000 $	\N	f	high
+5	2026-03-27 08:39:30.727889	2026-04-04 18:09:08.069815	019d237b-3563-74c6-8085-6d5fc5afb2b3	Bild für Carolina Eyck Konzert anfragen	Bei der Agentur anrufen: 030 - 87293781	2026-08-15	f	low
+2	2026-03-26 18:11:09.42654	2026-04-04 18:09:12.355614	019d237b-3563-74c6-8085-6d5fc5afb2b3	Wirklich Verlag anrufen	Infotermin zur API vereinbaren	2026-05-30	f	high
 \.
 
 
 --
--- TOC entry 5839 (class 0 OID 2351740)
--- Dependencies: 589
+-- TOC entry 5847 (class 0 OID 2351740)
+-- Dependencies: 588
 -- Data for Name: transport_station; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4665,20 +4798,20 @@ COPY uranus.transport_station (uuid, created_at, modified_at, name, city, countr
 
 
 --
--- TOC entry 5840 (class 0 OID 2351751)
--- Dependencies: 590
+-- TOC entry 5848 (class 0 OID 2351751)
+-- Dependencies: 589
 -- Data for Name: user; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus."user" (uuid, created_at, modified_at, email, password_hash, is_active, username, display_name, first_name, last_name, locale, theme, activate_token) FROM stdin;
-019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-25 06:32:50.404455	2026-03-28 16:06:39.780003	roald@grain.one	$2a$12$8Mj7iXkMTyNyhjP1YjNZweNfmUmOq0HcvEtLJ6vp1Wkt7f9Xe/yxq	t	roald	mapmeister	Roald	Christesen	de	light	\N
+019d237b-3563-74c6-8085-6d5fc5afb2b3	2026-03-25 06:32:50.404455	2026-04-05 16:31:35.17663	roald@grain.one	$2a$12$8Mj7iXkMTyNyhjP1YjNZweNfmUmOq0HcvEtLJ6vp1Wkt7f9Xe/yxq	t	roald	mapmeister	Roald	Christesen	de	light	\N
 019d2fa1-dc87-7ab4-b063-8c784b5a2440	2026-03-27 15:10:30.152703	2026-03-27 15:27:50.442228	pippa@grain.one	$2a$12$02AF0tPw.R31tSGZNzWSA.9nxE1A/bghvoCahCgmiCcxX2wYZul6q	t	\N	\N	\N	\N	de	light	\N
 \.
 
 
 --
--- TOC entry 5841 (class 0 OID 2351764)
--- Dependencies: 591
+-- TOC entry 5849 (class 0 OID 2351764)
+-- Dependencies: 590
 -- Data for Name: user_event_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4687,8 +4820,8 @@ COPY uranus.user_event_link (user_uuid, event_uuid, permissions) FROM stdin;
 
 
 --
--- TOC entry 5842 (class 0 OID 2351768)
--- Dependencies: 592
+-- TOC entry 5850 (class 0 OID 2351768)
+-- Dependencies: 591
 -- Data for Name: user_organization_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4696,22 +4829,28 @@ COPY uranus.user_organization_link (user_uuid, org_uuid, permissions) FROM stdin
 019d237b-3563-74c6-8085-6d5fc5afb2b3	019d2eed-a25a-7caf-a762-a2a71917c6a1	520556415
 019d237b-3563-74c6-8085-6d5fc5afb2b3	019d359c-b8f6-75d6-a5fd-ae1f303e3bbe	520556415
 019d237b-3563-74c6-8085-6d5fc5afb2b3	019d35a0-3cd6-7c28-b3ca-537e8577defe	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d3e2d-5c6e-78df-9fbc-930adb904621	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d3f54-0db6-731f-8e18-03cb0c70b3fe	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d3f68-5b90-7af5-b4f6-55e592acb0d4	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d5946-16c3-7f0d-95d7-7b73c4f4d42d	520556415
+019d237b-3563-74c6-8085-6d5fc5afb2b3	019d594d-cc9a-7f77-bac8-e3307f0faa75	520556415
 \.
 
 
 --
--- TOC entry 5844 (class 0 OID 2351776)
--- Dependencies: 594
+-- TOC entry 5852 (class 0 OID 2351776)
+-- Dependencies: 593
 -- Data for Name: user_space_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
-COPY uranus.user_space_link (user_uuid, space_id, permissions) FROM stdin;
+COPY uranus.user_space_link (user_uuid, space_uuid, permissions) FROM stdin;
 \.
 
 
 --
--- TOC entry 5843 (class 0 OID 2351772)
--- Dependencies: 593
+-- TOC entry 5851 (class 0 OID 2351772)
+-- Dependencies: 592
 -- Data for Name: user_venue_link; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
@@ -4720,18 +4859,21 @@ COPY uranus.user_venue_link (user_uuid, venue_uuid, permissions) FROM stdin;
 
 
 --
--- TOC entry 5845 (class 0 OID 2351780)
--- Dependencies: 595
+-- TOC entry 5853 (class 0 OID 2351780)
+-- Dependencies: 594
 -- Data for Name: venue; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
 
 COPY uranus.venue (uuid, created_by, created_at, modified_by, modified_at, org_uuid, type, name, description, summary, contact_email, contact_phone, web_link, street, house_number, postal_code, city, country, state, point, opened_at, closed_at, ticket_info, ticket_link, opening_hours, accessibility_flags, accessibility_summary) FROM stdin;
-019d358b-2946-7c2f-afc0-0cb0e8049f2f	\N	2026-03-28 18:43:25.753071	\N	\N	019d2eed-a25a-7caf-a762-a2a71917c6a1	\N	KRAN	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
+019d358b-2946-7c2f-afc0-0cb0e8049f2f	\N	2026-03-28 18:43:25.753071	\N	2026-04-04 18:36:19.317674	019d2eed-a25a-7caf-a762-a2a71917c6a1	workshop	[SoundCodes~	Studio und Werkstatt für elektroakustische, elektronische und experimentelle Musik und Programmierung.	\N	soundcodes@grain.one	\N	https://soundcodes.grain.one	Am Nordertor	2	24939	Flensburg	DEU	SH	0101000020E610000060A06DE86DDC2240BCB2B27DE7654B40	2022-09-29	\N	\N	\N	\N	\N	\N
+019d3e19-c044-75bf-820b-c96fd5fe07ee	\N	2026-03-30 11:36:08.256597	\N	2026-03-30 12:11:46.222423	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	cultural_center	Aktivitetshuset	Das **Aktivitetshuset** ist ein Projekt- und Kulturhaus, das als Plattform für die **Entwicklung und Präsentation** dänischer Kunst und Kultur im Grenzgebiet dient. Dabei geht es nicht nur um die Vermittlung von Kunst und Kultur, sondern auch darum, die Nutzerinnen und Nutzer zu unterstützen, damit sie selbst aktiv werden und Kunst und Kultur entwickeln können.\n\nAls Kulturhaus für die dänische Minderheit in Südschleswig bietet das Aktivitätshaus einen **freien Raum**, in dem Aktivitäten und Lernen freiwillig sind. Das „aktiv sein“ wird gefördert, aber niemand wird dazu gezwungen. Angeboten werden vielfältige Aktivitäten: Kurse, Kulturprojekte, Diskussionsrunden, Ausstellungen, Konzerte und vieles mehr – alles, was begeistert, herausfordert und neue Möglichkeiten für persönliche Entwicklung in einem freien, gemeinschaftlichen Rahmen eröffnet.	\N	akti@sdu.de	0461 150 140	https://aktivitetshuset.de	Norderstraße	49	24939	Flensburg	DEU	SH	0101000020E610000040CBFF7AD2DC2240F4178C0853654B40	\N	\N	\N	\N	\N	\N	\N
+019d3f5c-ba16-7c74-a7ba-533f26446ddf	\N	2026-03-30 17:28:54.802457	\N	2026-03-31 10:38:25.33187	019d3f54-0db6-731f-8e18-03cb0c70b3fe	cultural_center	Kühlhaus	\N	\N	info@kuehlhaus.net	\N	https://kuehlhaus.net	Mühlendamm	25	24937	Flensburg	DEU	SH	0101000020E6100000E0DDB640ABE12240D49DA58124634B40	1994-10-01	\N	\N	\N	\N	\N	\N
+019d44ca-0797-7658-914c-3b47bf05acfc	\N	2026-03-31 18:46:24.150425	\N	2026-03-31 18:47:36.065966	019d3e19-6c1c-7bf0-ad59-b1f15fb20c5c	\N	Idrætshallen	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	0101000020E6100000B0D7B7F904D82240F421089FCA644B40	\N	\N	\N	\N	\N	\N	\N
 \.
 
 
 --
--- TOC entry 5812 (class 0 OID 2317087)
+-- TOC entry 5821 (class 0 OID 2317087)
 -- Dependencies: 560
 -- Data for Name: venue_type; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4770,7 +4912,7 @@ makerspace	CoworkingSpace
 
 
 --
--- TOC entry 5805 (class 0 OID 2283098)
+-- TOC entry 5814 (class 0 OID 2283098)
 -- Dependencies: 553
 -- Data for Name: venue_type_i18n; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -4867,7 +5009,7 @@ club_house	en	Clubhouse	\N
 
 
 --
--- TOC entry 5802 (class 0 OID 2266245)
+-- TOC entry 5811 (class 0 OID 2266245)
 -- Dependencies: 550
 -- Data for Name: visitor_information_flag; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -5003,7 +5145,7 @@ COPY uranus.visitor_information_flag (flag, iso_639_1, name, topic_id, key) FROM
 
 
 --
--- TOC entry 5817 (class 0 OID 2325409)
+-- TOC entry 5826 (class 0 OID 2325409)
 -- Dependencies: 565
 -- Data for Name: visitor_information_topic; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -5028,7 +5170,7 @@ COPY uranus.visitor_information_topic (topic_id, iso_639_1, name, key) FROM stdi
 
 
 --
--- TOC entry 5821 (class 0 OID 2351186)
+-- TOC entry 5830 (class 0 OID 2351186)
 -- Dependencies: 571
 -- Data for Name: wkb_polygon; Type: TABLE DATA; Schema: uranus; Owner: oklab
 --
@@ -5051,7 +5193,7 @@ COPY uranus.wkb_polygon (id, context, context_id, geometry, name, description, k
 
 
 --
--- TOC entry 5855 (class 0 OID 0)
+-- TOC entry 5864 (class 0 OID 0)
 -- Dependencies: 535
 -- Name: currency_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5060,7 +5202,7 @@ SELECT pg_catalog.setval('uranus.currency_id_seq', 45, true);
 
 
 --
--- TOC entry 5856 (class 0 OID 0)
+-- TOC entry 5865 (class 0 OID 0)
 -- Dependencies: 551
 -- Name: event_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5069,16 +5211,16 @@ SELECT pg_catalog.setval('uranus.event_id_seq', 1540, true);
 
 
 --
--- TOC entry 5857 (class 0 OID 0)
+-- TOC entry 5866 (class 0 OID 0)
 -- Dependencies: 573
 -- Name: event_link_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
 
-SELECT pg_catalog.setval('uranus.event_link_id_seq', 1, false);
+SELECT pg_catalog.setval('uranus.event_link_id_seq', 3, true);
 
 
 --
--- TOC entry 5858 (class 0 OID 0)
+-- TOC entry 5867 (class 0 OID 0)
 -- Dependencies: 537
 -- Name: event_occasion_type_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5087,7 +5229,7 @@ SELECT pg_catalog.setval('uranus.event_occasion_type_id_seq', 24, true);
 
 
 --
--- TOC entry 5859 (class 0 OID 0)
+-- TOC entry 5868 (class 0 OID 0)
 -- Dependencies: 541
 -- Name: image_type_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5096,8 +5238,8 @@ SELECT pg_catalog.setval('uranus.image_type_id_seq', 9, true);
 
 
 --
--- TOC entry 5860 (class 0 OID 0)
--- Dependencies: 579
+-- TOC entry 5869 (class 0 OID 0)
+-- Dependencies: 578
 -- Name: message_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
 
@@ -5105,7 +5247,7 @@ SELECT pg_catalog.setval('uranus.message_id_seq', 1, false);
 
 
 --
--- TOC entry 5861 (class 0 OID 0)
+-- TOC entry 5870 (class 0 OID 0)
 -- Dependencies: 548
 -- Name: system_email_template_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5114,16 +5256,16 @@ SELECT pg_catalog.setval('uranus.system_email_template_id_seq', 11, true);
 
 
 --
--- TOC entry 5862 (class 0 OID 0)
--- Dependencies: 596
+-- TOC entry 5871 (class 0 OID 0)
+-- Dependencies: 595
 -- Name: todo_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
 
-SELECT pg_catalog.setval('uranus.todo_id_seq', 5, true);
+SELECT pg_catalog.setval('uranus.todo_id_seq', 8, true);
 
 
 --
--- TOC entry 5863 (class 0 OID 0)
+-- TOC entry 5872 (class 0 OID 0)
 -- Dependencies: 570
 -- Name: wkb_poly_id_seq; Type: SEQUENCE SET; Schema: uranus; Owner: oklab
 --
@@ -5138,6 +5280,24 @@ SELECT pg_catalog.setval('uranus.wkb_poly_id_seq', 13, true);
 
 ALTER TABLE ONLY uranus.currency
     ADD CONSTRAINT currency_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5586 (class 2606 OID 2351848)
+-- Name: event_date_projection event_date_projection_event_date_uuid_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_date_projection
+    ADD CONSTRAINT event_date_projection_event_date_uuid_key UNIQUE (event_date_uuid);
+
+
+--
+-- TOC entry 5584 (class 2606 OID 2351882)
+-- Name: event_date event_date_uuid_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_date
+    ADD CONSTRAINT event_date_uuid_key UNIQUE (uuid);
 
 
 --
@@ -5168,12 +5328,21 @@ ALTER TABLE ONLY uranus.event_occasion_type
 
 
 --
--- TOC entry 5614 (class 2606 OID 2351835)
+-- TOC entry 5618 (class 2606 OID 2351835)
 -- Name: event event_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
 ALTER TABLE ONLY uranus.event
     ADD CONSTRAINT event_pkey PRIMARY KEY (uuid);
+
+
+--
+-- TOC entry 5588 (class 2606 OID 2351846)
+-- Name: event_projection event_projection_event_uuid_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_projection
+    ADD CONSTRAINT event_projection_event_uuid_key UNIQUE (event_uuid);
 
 
 --
@@ -5186,12 +5355,12 @@ ALTER TABLE ONLY uranus.event_release_status_i18n
 
 
 --
--- TOC entry 5584 (class 2606 OID 2351589)
--- Name: event_type_link event_type_link_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
+-- TOC entry 5620 (class 2606 OID 2351850)
+-- Name: event_type_link event_type_link_unique; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
 ALTER TABLE ONLY uranus.event_type_link
-    ADD CONSTRAINT event_type_link_pkey PRIMARY KEY (event_uuid, type_id, genre_id);
+    ADD CONSTRAINT event_type_link_unique UNIQUE (event_uuid, type_id, genre_id);
 
 
 --
@@ -5204,7 +5373,7 @@ ALTER TABLE ONLY uranus.event_type
 
 
 --
--- TOC entry 5596 (class 2606 OID 2351723)
+-- TOC entry 5600 (class 2606 OID 2351723)
 -- Name: pluto_image_link image_context_identifier_unique; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5276,7 +5445,7 @@ ALTER TABLE ONLY uranus.link_type
 
 
 --
--- TOC entry 5586 (class 2606 OID 2351649)
+-- TOC entry 5590 (class 2606 OID 2351649)
 -- Name: message message_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5285,7 +5454,7 @@ ALTER TABLE ONLY uranus.message
 
 
 --
--- TOC entry 5588 (class 2606 OID 2351667)
+-- TOC entry 5592 (class 2606 OID 2351667)
 -- Name: organization organization_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5294,7 +5463,7 @@ ALTER TABLE ONLY uranus.organization
 
 
 --
--- TOC entry 5590 (class 2606 OID 2351694)
+-- TOC entry 5594 (class 2606 OID 2351694)
 -- Name: password_reset password_reset_token_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5321,7 +5490,7 @@ ALTER TABLE ONLY uranus.permission_label
 
 
 --
--- TOC entry 5592 (class 2606 OID 2351702)
+-- TOC entry 5596 (class 2606 OID 2351702)
 -- Name: pluto_cache pluto_cache_receipt_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5330,7 +5499,7 @@ ALTER TABLE ONLY uranus.pluto_cache
 
 
 --
--- TOC entry 5594 (class 2606 OID 2351716)
+-- TOC entry 5598 (class 2606 OID 2351716)
 -- Name: pluto_image pluto_image_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5366,7 +5535,7 @@ ALTER TABLE ONLY uranus.space_feature
 
 
 --
--- TOC entry 5598 (class 2606 OID 2351731)
+-- TOC entry 5602 (class 2606 OID 2351731)
 -- Name: space space_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5402,7 +5571,7 @@ ALTER TABLE ONLY uranus.system_email_template
 
 
 --
--- TOC entry 5612 (class 2606 OID 2351822)
+-- TOC entry 5616 (class 2606 OID 2351822)
 -- Name: todo todo_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5411,7 +5580,7 @@ ALTER TABLE ONLY uranus.todo
 
 
 --
--- TOC entry 5600 (class 2606 OID 2351749)
+-- TOC entry 5604 (class 2606 OID 2351749)
 -- Name: transport_station transport_station_gtfs_station_code_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5420,7 +5589,7 @@ ALTER TABLE ONLY uranus.transport_station
 
 
 --
--- TOC entry 5602 (class 2606 OID 2351747)
+-- TOC entry 5606 (class 2606 OID 2351747)
 -- Name: transport_station transport_station_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5429,7 +5598,7 @@ ALTER TABLE ONLY uranus.transport_station
 
 
 --
--- TOC entry 5604 (class 2606 OID 2351761)
+-- TOC entry 5608 (class 2606 OID 2351761)
 -- Name: user user_email_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5438,7 +5607,7 @@ ALTER TABLE ONLY uranus."user"
 
 
 --
--- TOC entry 5606 (class 2606 OID 2351759)
+-- TOC entry 5610 (class 2606 OID 2351759)
 -- Name: user user_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5447,7 +5616,7 @@ ALTER TABLE ONLY uranus."user"
 
 
 --
--- TOC entry 5608 (class 2606 OID 2351763)
+-- TOC entry 5612 (class 2606 OID 2351763)
 -- Name: user user_user_name_key; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5456,7 +5625,7 @@ ALTER TABLE ONLY uranus."user"
 
 
 --
--- TOC entry 5610 (class 2606 OID 2351788)
+-- TOC entry 5614 (class 2606 OID 2351788)
 -- Name: venue venue_pkey; Type: CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5517,7 +5686,7 @@ CREATE INDEX genre_type_type_id_idx ON uranus.genre_type USING btree (genre_id);
 
 
 --
--- TOC entry 5623 (class 2620 OID 2351805)
+-- TOC entry 5632 (class 2620 OID 2351805)
 -- Name: event_date_projection set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5525,7 +5694,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.event_date_projection FOR
 
 
 --
--- TOC entry 5621 (class 2620 OID 2351806)
+-- TOC entry 5630 (class 2620 OID 2351806)
 -- Name: event_link set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5533,7 +5702,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.event_link FOR EACH ROW E
 
 
 --
--- TOC entry 5624 (class 2620 OID 2351807)
+-- TOC entry 5633 (class 2620 OID 2351807)
 -- Name: event_projection set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5541,7 +5710,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.event_projection FOR EACH
 
 
 --
--- TOC entry 5625 (class 2620 OID 2351808)
+-- TOC entry 5634 (class 2620 OID 2351808)
 -- Name: message set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5549,7 +5718,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.message FOR EACH ROW EXEC
 
 
 --
--- TOC entry 5626 (class 2620 OID 2351809)
+-- TOC entry 5635 (class 2620 OID 2351809)
 -- Name: organization set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5557,7 +5726,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.organization FOR EACH ROW
 
 
 --
--- TOC entry 5627 (class 2620 OID 2351683)
+-- TOC entry 5636 (class 2620 OID 2351683)
 -- Name: organization_member_link set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5565,7 +5734,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.organization_member_link 
 
 
 --
--- TOC entry 5628 (class 2620 OID 2351810)
+-- TOC entry 5637 (class 2620 OID 2351810)
 -- Name: pluto_image set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5573,7 +5742,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.pluto_image FOR EACH ROW 
 
 
 --
--- TOC entry 5629 (class 2620 OID 2351732)
+-- TOC entry 5638 (class 2620 OID 2351732)
 -- Name: space set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5581,7 +5750,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.space FOR EACH ROW EXECUT
 
 
 --
--- TOC entry 5633 (class 2620 OID 2351823)
+-- TOC entry 5642 (class 2620 OID 2351823)
 -- Name: todo set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5589,7 +5758,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.todo FOR EACH ROW EXECUTE
 
 
 --
--- TOC entry 5630 (class 2620 OID 2351750)
+-- TOC entry 5639 (class 2620 OID 2351750)
 -- Name: transport_station set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5597,7 +5766,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.transport_station FOR EAC
 
 
 --
--- TOC entry 5631 (class 2620 OID 2351812)
+-- TOC entry 5640 (class 2620 OID 2351812)
 -- Name: user set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5605,7 +5774,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus."user" FOR EACH ROW EXECU
 
 
 --
--- TOC entry 5632 (class 2620 OID 2351789)
+-- TOC entry 5641 (class 2620 OID 2351789)
 -- Name: venue set_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5613,7 +5782,7 @@ CREATE TRIGGER set_modified_at BEFORE UPDATE ON uranus.venue FOR EACH ROW EXECUT
 
 
 --
--- TOC entry 5634 (class 2620 OID 2351836)
+-- TOC entry 5643 (class 2620 OID 2351836)
 -- Name: event trg_update_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5621,7 +5790,7 @@ CREATE TRIGGER trg_update_modified_at BEFORE UPDATE ON uranus.event FOR EACH ROW
 
 
 --
--- TOC entry 5622 (class 2620 OID 2351611)
+-- TOC entry 5631 (class 2620 OID 2351611)
 -- Name: event_date trg_update_modified_at; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5629,7 +5798,7 @@ CREATE TRIGGER trg_update_modified_at BEFORE UPDATE ON uranus.event_date FOR EAC
 
 
 --
--- TOC entry 5635 (class 2620 OID 2351837)
+-- TOC entry 5644 (class 2620 OID 2351837)
 -- Name: event trg_update_search_text; Type: TRIGGER; Schema: uranus; Owner: oklab
 --
 
@@ -5637,7 +5806,34 @@ CREATE TRIGGER trg_update_search_text BEFORE INSERT OR UPDATE ON uranus.event FO
 
 
 --
--- TOC entry 5619 (class 2606 OID 2317112)
+-- TOC entry 5627 (class 2606 OID 2351871)
+-- Name: event_date event_date_event_uuid_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_date
+    ADD CONSTRAINT event_date_event_uuid_fkey FOREIGN KEY (event_uuid) REFERENCES uranus.event(uuid) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5628 (class 2606 OID 2351883)
+-- Name: event_date_projection event_date_projection_event_date_uuid_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_date_projection
+    ADD CONSTRAINT event_date_projection_event_date_uuid_fkey FOREIGN KEY (event_date_uuid) REFERENCES uranus.event_date(uuid) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5629 (class 2606 OID 2351876)
+-- Name: event_projection event_projection_event_uuid_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
+--
+
+ALTER TABLE ONLY uranus.event_projection
+    ADD CONSTRAINT event_projection_event_uuid_fkey FOREIGN KEY (event_uuid) REFERENCES uranus.event(uuid) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5625 (class 2606 OID 2317112)
 -- Name: legal_form_i18n legal_form_i18n_key_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5646,7 +5842,7 @@ ALTER TABLE ONLY uranus.legal_form_i18n
 
 
 --
--- TOC entry 5620 (class 2606 OID 2317205)
+-- TOC entry 5626 (class 2606 OID 2317205)
 -- Name: license_i18n license_i18n_key_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5655,7 +5851,7 @@ ALTER TABLE ONLY uranus.license_i18n
 
 
 --
--- TOC entry 5618 (class 2606 OID 2317043)
+-- TOC entry 5624 (class 2606 OID 2317043)
 -- Name: link_type_i18n link_type_i18n_key_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5664,7 +5860,7 @@ ALTER TABLE ONLY uranus.link_type_i18n
 
 
 --
--- TOC entry 5615 (class 2606 OID 2283040)
+-- TOC entry 5621 (class 2606 OID 2283040)
 -- Name: permission_label permission_label_group_id_name_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5673,7 +5869,7 @@ ALTER TABLE ONLY uranus.permission_label
 
 
 --
--- TOC entry 5616 (class 2606 OID 2317005)
+-- TOC entry 5622 (class 2606 OID 2317005)
 -- Name: space_feature_link space_feature_link_feature_name_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5682,7 +5878,7 @@ ALTER TABLE ONLY uranus.space_feature_link
 
 
 --
--- TOC entry 5617 (class 2606 OID 2317024)
+-- TOC entry 5623 (class 2606 OID 2317024)
 -- Name: space_type_i18n space_type_i18n_key_fkey; Type: FK CONSTRAINT; Schema: uranus; Owner: oklab
 --
 
@@ -5690,7 +5886,7 @@ ALTER TABLE ONLY uranus.space_type_i18n
     ADD CONSTRAINT space_type_i18n_key_fkey FOREIGN KEY (key) REFERENCES uranus.space_type(key) ON DELETE CASCADE;
 
 
--- Completed on 2026-03-29 17:18:47 CEST
+-- Completed on 2026-04-05 19:24:42 CEST
 
 --
 -- PostgreSQL database dump complete
