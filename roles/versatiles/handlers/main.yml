@@ -1,0 +1,6 @@
+---
+- name: Restart versatiles
+  ansible.builtin.systemd:
+    name: versatiles
+    state: restarted
+    daemon_reload: true

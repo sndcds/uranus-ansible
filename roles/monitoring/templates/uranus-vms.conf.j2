@@ -31,6 +31,17 @@ apply Service for (service_name => config in host.vars.uranus_pgsql_checks) {
   assign where host.vars.uranus_pgsql_checks
 }
 
+apply Service for (service_name => config in host.vars.uranus_ssh_checks) {
+  import "generic-service"
+
+  check_command = "by_ssh"
+  vars += config
+
+  display_name = service_name
+
+  assign where host.vars.uranus_ssh_checks
+}
+
 {% for target in monitoring_targets | rejectattr('address', 'equalto', '') %}
 {% if target.name != inventory_hostname %}
 object Host "{{ target.name }}" {
@@ -73,6 +84,17 @@ object Host "{{ target.name }}" {
 {% endfor %}
   }
 {% endif %}
+{% if target.ssh_checks is defined and target.ssh_checks | length > 0 %}
+  vars.uranus_ssh_checks = {
+{% for service_name, config in target.ssh_checks.items() %}
+    "{{ service_name }}" = {
+{% for key, value in config.items() %}
+      {{ key }} = {{ value | to_json }}
+{% endfor %}
+    }
+{% endfor %}
+  }
+{% endif %}
 }
 
 {% endif %}
@@ -86,6 +108,20 @@ object Service "{{ service_name }}" {
 
   host_name = NodeName
   check_command = "http"
+{% for key, value in config.items() %}
+  vars.{{ key }} = {{ value | to_json }}
+{% endfor %}
+}
+
+{% endfor %}
+{% endif %}
+{% if self_target and self_target.ssh_checks is defined and self_target.ssh_checks | length > 0 %}
+{% for service_name, config in self_target.ssh_checks.items() %}
+object Service "{{ service_name }}" {
+  import "generic-service"
+
+  host_name = NodeName
+  check_command = "by_ssh"
 {% for key, value in config.items() %}
   vars.{{ key }} = {{ value | to_json }}
 {% endfor %}

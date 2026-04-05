@@ -10,6 +10,7 @@
       - icingaweb2-module-monitoring
       - icingacli
       - monitoring-plugins
+      - openssh-client
       - postgresql-client
       - php-fpm
       - php-pgsql
@@ -57,6 +58,33 @@
 
 - name: Gather service facts
   ansible.builtin.service_facts:
+
+- name: Ensure Icinga SSH directory exists for bandwidth checks
+  ansible.builtin.file:
+    path: /var/lib/icinga2/.ssh
+    state: directory
+    owner: nagios
+    group: nagios
+    mode: "0700"
+  when: monitoring_bandwidth_enabled | bool
+
+- name: Deploy bandwidth monitoring private SSH key
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../.ansible/monitoring-bandwidth-ed25519"
+    dest: "{{ monitoring_bandwidth_ssh_identity_path }}"
+    owner: nagios
+    group: nagios
+    mode: "0600"
+  when: monitoring_bandwidth_enabled | bool
+
+- name: Deploy bandwidth monitoring public SSH key
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../.ansible/monitoring-bandwidth-ed25519.pub"
+    dest: "{{ monitoring_bandwidth_ssh_identity_path }}.pub"
+    owner: nagios
+    group: nagios
+    mode: "0644"
+  when: monitoring_bandwidth_enabled | bool
 
 - name: Wait for delegated database host SSH on db01
   ansible.builtin.wait_for_connection:
@@ -256,6 +284,59 @@
       - name: "db01"
         address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
         os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: &monitoring_ssh_options
+              - "BatchMode=yes"
+              - "StrictHostKeyChecking=no"
+              - "UserKnownHostsFile=/dev/null"
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('db01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('db01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
         tcp_checks:
           postgresql:
             tcp_port: 5432
@@ -269,6 +350,56 @@
       - name: "dev01"
         address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.dev_frontend ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
         os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('dev01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('dev01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('dev01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('dev01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('dev01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
         http_checks:
           nginx:
             http_ssl: true
@@ -288,6 +419,56 @@
       - name: "prod01"
         address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.prod_frontend ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
         os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('prod01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('prod01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('prod01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('prod01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('prod01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
         http_checks:
           nginx:
             http_ssl: true
@@ -307,6 +488,56 @@
       - name: "mon01"
         address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.icinga ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
         os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('mon01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('mon01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('mon01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('mon01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('mon01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
         http_checks:
           nginx:
             http_ssl: true
@@ -321,6 +552,56 @@
       - name: "nom01"
         address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.nominatim ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
         os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('nom01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('nom01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('nom01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('nom01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('nom01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
         http_checks:
           nginx:
             http_ssl: true
@@ -331,6 +612,65 @@
             http_ssl: true
             http_sni: true
             http_vhost: "{{ uranus_domains.nominatim }}"
+            http_uri: "/"
+      - name: "vers01"
+        address: "{{ lookup('pipe', \"getent hosts \" ~ uranus_domains.versatiles ~ \" 2>/dev/null | cut -d' ' -f1 | head -n1\") | trim }}"
+        os: "Linux"
+        ssh_checks:
+          bandwidth:
+            by_ssh_address: "{{ hostvars.get('vers01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_network --check-link
+              --ifname '{{ hostvars.get('vers01', {}).monitoring_bandwidth_interface_fact | default(monitoring_bandwidth_interface_fallback, true) }}'
+              -w {{ monitoring_bandwidth_warning }}
+              -c {{ monitoring_bandwidth_critical }}
+              {{ monitoring_bandwidth_sample_seconds }}
+          remote-cpu:
+            by_ssh_address: "{{ hostvars.get('vers01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_cpu
+              -w {{ monitoring_cpu_warning }}
+              -c {{ monitoring_cpu_critical }}
+              1 2
+          remote-load:
+            by_ssh_address: "{{ hostvars.get('vers01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_load
+              --percpu
+              -w {{ monitoring_load_warning }}
+              -c {{ monitoring_load_critical }}
+          remote-memory:
+            by_ssh_address: "{{ hostvars.get('vers01', {}).ansible_host | default('', true) }}"
+            by_ssh_logname: "{{ monitoring_bandwidth_ssh_user }}"
+            by_ssh_identity: "{{ monitoring_bandwidth_ssh_identity_path }}"
+            by_ssh_quiet: true
+            by_ssh_timeout: 20
+            by_ssh_options: *monitoring_ssh_options
+            by_ssh_command: >-
+              /usr/lib/nagios/plugins/check_memory
+              --available
+              -w {{ monitoring_memory_warning }}
+              -c {{ monitoring_memory_critical }}
+        http_checks:
+          versatiles:
+            http_ssl: true
+            http_sni: true
+            http_vhost: "{{ uranus_domains.versatiles }}"
             http_uri: "/"
 
 - name: Import Icinga Web 2 schema into monitoring web database

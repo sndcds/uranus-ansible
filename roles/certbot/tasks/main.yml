@@ -10,6 +10,8 @@
         ([nominatim_domain] if nominatim_domain is defined else [])
         +
         ([icinga_web_domain] if icinga_web_domain is defined else [])
+        +
+        ([versatiles_domain] if versatiles_domain is defined else [])
       }}
 
 - name: Ensure local certificate directory exists

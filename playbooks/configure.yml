@@ -13,6 +13,7 @@
       - prod
       - monitoring
       - nominatim
+      - versatiles
 
   tasks:
     - name: Load local vault variables if present
@@ -52,6 +53,35 @@
 
 - name: Configure provisioned VMs
   hosts: "{{ target_hosts | default('provisioned_vms') }}"
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../vars.yml
+    - ../group_vars/all.yml
+
+  pre_tasks:
+    - name: Load local vault variables if present
+      ansible.builtin.include_vars:
+        file: ../group_vars/vault.yml
+      ignore_errors: true
+
+    - name: Load host-specific vars
+      ansible.builtin.include_vars:
+        file: "../host_vars/{{ inventory_hostname }}.yml"
+
+    - name: Gather network facts for monitoring metadata
+      ansible.builtin.setup:
+        gather_subset:
+          - min
+          - network
+      become: false
+
+    - name: Store default network interface for central monitoring
+      ansible.builtin.set_fact:
+        monitoring_bandwidth_interface_fact: "{{ ansible_default_ipv4.interface | default('ens3') }}"
+
+- name: Configure provisioned VMs
+  hosts: "{{ target_hosts | default('provisioned_vms') }}"
   serial: 1
   become: true
   gather_facts: false
@@ -83,6 +113,11 @@
       ansible.builtin.include_role:
         name: common
 
+    - name: Configure bandwidth monitoring agent bits
+      ansible.builtin.include_role:
+        name: vm_bandwidth_monitoring
+      when: monitoring_bandwidth_enabled | bool
+
     - name: Apply firewall baseline
       ansible.builtin.include_role:
         name: ufw
@@ -99,12 +134,12 @@
     - name: Configure local TLS or ACME certificates
       ansible.builtin.include_role:
         name: certbot
-      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim']
+      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles']
 
     - name: Configure reverse proxy
       ansible.builtin.include_role:
         name: nginx
-      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim']
+      when: vm_role in ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles']
 
     - name: Configure backend application
       ansible.builtin.include_role:
@@ -130,6 +165,11 @@
       ansible.builtin.include_role:
         name: nominatim
       when: vm_role == 'nominatim'
+
+    - name: Configure VersaTiles
+      ansible.builtin.include_role:
+        name: versatiles
+      when: vm_role == 'versatiles'
 
 - name: Configure KVM ingress for laptop access
   hosts: kvm_hosts
@@ -158,6 +198,9 @@
       - name: uranus-nominatim-ingress
         domain: "{{ uranus_domains.nominatim }}"
         upstream_host: "{{ hostvars['nom01'].ansible_host }}"
+      - name: uranus-versatiles-ingress
+        domain: "{{ uranus_domains.versatiles }}"
+        upstream_host: "{{ hostvars['vers01'].ansible_host }}"
 
   tasks:
     - name: Configure nginx ingress on KVM host

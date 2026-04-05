@@ -12,7 +12,7 @@ all:
           ansible_become: {{ host_data.ansible_become | default(true) | bool | lower }}
           ansible_become_method: {{ host_data.ansible_become_method | default('sudo') }}
 {% endfor %}
-{% for group_name in ['db', 'dev', 'prod', 'monitoring', 'nominatim'] %}
+{% for group_name in ['db', 'dev', 'prod', 'monitoring', 'nominatim', 'versatiles'] %}
     {{ group_name }}:
       hosts:
 {% for host_name, host_data in (runtime_inventory_hosts | default({}) | dictsort) %}

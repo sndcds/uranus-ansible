@@ -1,0 +1,18 @@
+[Unit]
+Description=VersaTiles tile server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ versatiles_system_user }}
+Group={{ versatiles_system_user }}
+WorkingDirectory={{ versatiles_data_dir }}
+ExecStart=/usr/local/bin/versatiles serve -i 127.0.0.1 -p {{ versatiles_port }} -s {{ versatiles_data_dir }}/frontend/frontend.br.tar.gz [osm]{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/versatiles/service.log
+StandardError=append:/var/log/versatiles/service.log
+
+[Install]
+WantedBy=multi-user.target

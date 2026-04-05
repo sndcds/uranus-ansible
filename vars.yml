@@ -67,3 +67,9 @@ vms:
     memory: 4096
     disk: 200
     cpu: 6
+
+  - name: vers01
+    group: versatiles
+    memory: 4096
+    disk: 80
+    cpu: 4

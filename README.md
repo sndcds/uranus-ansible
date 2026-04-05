@@ -8,12 +8,13 @@ Das Repository baut mehrere Ubuntu-VMs, verteilt Rollen je Host und konfiguriert
 - Uranus Backend und Frontend auf `dev01` und `prod01`
 - Monitoring auf `mon01`
 - Nominatim mit Schleswig-Holstein-Extrakt auf `nom01`
+- VersaTiles mit Schleswig-Holstein-Extrakt auf `vers01`
 
 Die Umgebung ist auf einen lokalen Einzelhost mit libvirt-NAT ausgelegt. Aktuell sind die VM-RAM-Werte auf einen Host mit 16 GB RAM abgestimmt.
 
 ## Überblick
 
-Die Umgebung besteht standardmäßig aus fünf VMs:
+Die Umgebung besteht standardmäßig aus sechs VMs:
 
 | VM | Rolle | RAM | Disk | CPU |
 | --- | --- | ---: | ---: | ---: |
@@ -22,6 +23,7 @@ Die Umgebung besteht standardmäßig aus fünf VMs:
 | `prod01` | Prod-Frontend + Prod-Backend | 4096 MB | 120 GB | 4 |
 | `mon01` | Monitoring | 2048 MB | 40 GB | 2 |
 | `nom01` | Nominatim | 4096 MB | 200 GB | 6 |
+| `vers01` | VersaTiles | 4096 MB | 80 GB | 4 |
 
 VM-Definitionen stehen in `vars.yml`.
 
@@ -35,6 +37,7 @@ Verwendet werden lokale Domains unter `home.arpa`:
 | `prod01` | `uranus.home.arpa`, `api.uranus.home.arpa`, `mail.uranus.home.arpa` |
 | `mon01` | `monitoring.uranus.home.arpa` |
 | `nom01` | `nominatim.uranus.home.arpa` |
+| `vers01` | `tiles.uranus.home.arpa` |
 
 Die Basiswerte stehen in `group_vars/all.yml`, die host-spezifischen Zuweisungen in `host_vars/`.
 
@@ -45,6 +48,7 @@ Damit diese Domains vom Laptop oder einem anderen Gerät im LAN erreichbar sind,
 192.168.1.118 uranus.home.arpa api.uranus.home.arpa
 192.168.1.118 monitoring.uranus.home.arpa
 192.168.1.118 nominatim.uranus.home.arpa
+192.168.1.118 tiles.uranus.home.arpa
 ```
 
 Der KVM-Host terminiert dabei TLS mit lokalen Test-Zertifikaten und leitet die Requests intern an die jeweils aktuellen VM-IP-Adressen aus `inventory/runtime_hosts.yml` weiter.
@@ -86,6 +90,7 @@ Reihenfolge grob:
 10. `postfix`
 11. `monitoring`
 12. `nominatim`
+13. `versatiles`
 
 ## Pluto-Metriken
 
@@ -124,6 +129,7 @@ Wichtige Dateien:
 - `host_vars/db01.yml`: Datenbank-Setup
 - `host_vars/dev01.yml`: Dev-App-Setup
 - `host_vars/prod01.yml`: Prod-App-Setup
+- `host_vars/vers01.yml`: VersaTiles-Setup
 - `uranus.sql`: importierter Datenbank-Dump
 
 ## Voraussetzungen

@@ -19,6 +19,15 @@ common_packages:
   - ufw
   - certbot
   - python3-certbot-nginx
+  - bmon
+  - iftop
+  - vnstat
+  - nload
+  - iotop
+  - sysstat
+  - logrotate
+  - unattended-upgrades
+  - fail2ban
 
 ntp_allowed_networks:
   - "0.0.0.0/0"
@@ -29,6 +38,7 @@ web_exposed_vm_roles:
   - prod
   - monitoring
   - nominatim
+  - versatiles
 ufw_logging: "low"
 
 uranus_domains:
@@ -38,6 +48,7 @@ uranus_domains:
   prod_backend: "api.uranus.home.arpa"
   nominatim: "nominatim.uranus.home.arpa"
   icinga: "monitoring.uranus.home.arpa"
+  versatiles: "tiles.uranus.home.arpa"
   mail_mx: "mail.uranus.home.arpa"
 
 postgresql_version: 17
@@ -95,6 +106,15 @@ nominatim_db_password: "{{ vault_nominatim_db_password }}"
 nominatim_db_allowed_networks:
   - "192.168.122.0/24"
 
+versatiles_port: 8080
+versatiles_system_user: "versatiles"
+versatiles_data_dir: "/srv/versatiles"
+versatiles_frontend_url: "https://github.com/versatiles-org/versatiles-frontend/releases/latest/download/frontend.br.tar.gz"
+versatiles_tiles_url: "https://download.versatiles.org/osm.versatiles"
+versatiles_tileset_name: "schleswig-holstein.versatiles"
+versatiles_bbox: "8.35,53.25,11.40,55.10"
+versatiles_bbox_border: 3
+
 monitoring_db_delegate_host: "db01"
 monitoring_web_db_name: "icingaweb2"
 monitoring_web_db_user: "icingaweb2"
@@ -128,6 +148,19 @@ monitoring_grafana_datasource_name: "uranus-influxdb"
 monitoring_grafana_datasource_uid: "uranus-influxdb"
 monitoring_grafana_dashboard_provider_name: "uranus"
 monitoring_grafana_dashboard_path: "/var/lib/grafana/dashboards"
+monitoring_bandwidth_enabled: true
+monitoring_bandwidth_ssh_user: "monitoring-check"
+monitoring_bandwidth_warning: "12500000"
+monitoring_bandwidth_critical: "25000000"
+monitoring_bandwidth_sample_seconds: 15
+monitoring_bandwidth_ssh_identity_path: "/var/lib/icinga2/.ssh/monitoring-bandwidth-ed25519"
+monitoring_bandwidth_interface_fallback: "enp1s0|ens3"
+monitoring_cpu_warning: "85%"
+monitoring_cpu_critical: "95%"
+monitoring_memory_warning: "20%:"
+monitoring_memory_critical: "10%:"
+monitoring_load_warning: "4,3,2"
+monitoring_load_critical: "6,5,4"
 
 api_health_endpoint: "/api/events"
 frontend_health_endpoint: "/"
