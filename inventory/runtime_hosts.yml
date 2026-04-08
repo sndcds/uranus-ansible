@@ -3,39 +3,39 @@ all:
     provisioned_vms:
       hosts:
         db01:
-          ansible_host: 192.168.122.195
+          ansible_host: 192.168.122.146
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
         dev01:
-          ansible_host: 192.168.122.220
+          ansible_host: 192.168.122.237
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
         mon01:
-          ansible_host: 192.168.122.6
+          ansible_host: 192.168.122.203
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
         nom01:
-          ansible_host: 192.168.122.67
+          ansible_host: 192.168.122.34
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
         prod01:
-          ansible_host: 192.168.122.155
+          ansible_host: 192.168.122.117
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
         vers01:
-          ansible_host: 192.168.122.84
+          ansible_host: 192.168.122.35
           ansible_user: ubuntu
-          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.1.118"
+          ansible_ssh_common_args: "-o ProxyJump=oklab@192.168.216.90"
           ansible_become: true
           ansible_become_method: sudo
     db:

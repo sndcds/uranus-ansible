@@ -1,0 +1,26 @@
+object InfluxdbWriter "influxdb" {
+  host = "{{ monitoring_influx_icinga_host }}"
+  port = {{ monitoring_influx_icinga_port }}
+  database = "{{ monitoring_influx_database }}"
+  flush_threshold = 1024
+  flush_interval = 10s
+  enable_send_metadata = true
+  enable_send_thresholds = true
+
+  host_template = {
+    measurement = "{{ monitoring_influx_icinga_host_measurement }}"
+    tags = {
+      hostname = "$host.name$"
+      check_command = "$host.check_command$"
+    }
+  }
+
+  service_template = {
+    measurement = "{{ monitoring_influx_icinga_service_measurement }}"
+    tags = {
+      hostname = "$host.name$"
+      service = "$service.name$"
+      check_command = "$service.check_command$"
+    }
+  }
+}

@@ -1,0 +1,373 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "{{ monitoring_grafana_datasource_uid }}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "{{ monitoring_grafana_datasource_uid }}"
+          },
+          "groupBy": [],
+          "measurement": "{{ item.0.measurement }}",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "query": "SELECT last(\"value\") FROM \"{{ item.0.measurement }}\" WHERE $timeFilter AND \"hostname\" =~ /^$hostname$/ AND \"check_command\" = '{{ item.0.check_command }}'{% if item.0.service %} AND \"service\" = '{{ item.0.service | replace('\\\\', '\\\\\\\\') }}'{% endif %} AND \"metric\" = '{{ item.1 }}'",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "field"
+              },
+              {
+                "params": [],
+                "type": "last"
+              }
+            ]
+          ],
+          "tags": []
+        }
+      ],
+      "title": "Letzter Wert",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "{{ monitoring_grafana_datasource_uid }}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 14,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 3,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "alias": "$tag_hostname",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "{{ monitoring_grafana_datasource_uid }}"
+          },
+          "groupBy": [
+            {
+              "params": [
+                "$__interval"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "tag"
+            },
+            {
+              "params": [
+                "null"
+              ],
+              "type": "fill"
+            }
+          ],
+          "measurement": "{{ item.0.measurement }}",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "query": "SELECT mean(\"value\") FROM \"{{ item.0.measurement }}\" WHERE $timeFilter AND \"hostname\" =~ /^$hostname$/ AND \"check_command\" = '{{ item.0.check_command }}'{% if item.0.service %} AND \"service\" = '{{ item.0.service | replace('\\\\', '\\\\\\\\') }}'{% endif %} AND \"metric\" = '{{ item.1 }}' GROUP BY time($__interval), \"hostname\" fill(null)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "field"
+              },
+              {
+                "params": [],
+                "type": "mean"
+              }
+            ]
+          ],
+          "tags": []
+        }
+      ],
+      "title": "Zeitverlauf",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "{{ monitoring_grafana_datasource_uid }}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "{{ monitoring_grafana_datasource_uid }}"
+          },
+          "groupBy": [
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "tag"
+            }
+          ],
+          "measurement": "{{ item.0.measurement }}",
+          "orderByTime": "ASC",
+          "policy": "default",
+          "query": "SELECT last(\"value\"), last(\"warn\"), last(\"crit\") FROM \"{{ item.0.measurement }}\" WHERE $timeFilter AND \"hostname\" =~ /^$hostname$/ AND \"check_command\" = '{{ item.0.check_command }}'{% if item.0.service %} AND \"service\" = '{{ item.0.service | replace('\\\\', '\\\\\\\\') }}'{% endif %} AND \"metric\" = '{{ item.1 }}' GROUP BY \"hostname\"",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "table",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "field"
+              },
+              {
+                "params": [],
+                "type": "last"
+              }
+            ]
+          ],
+          "tags": []
+        }
+      ],
+      "title": "Aktuelle Werte und Schwellwerte",
+      "type": "table"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "tags": [
+    "uranus",
+    "icinga",
+    "influxdb",
+    "metric"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": ".*",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "influxdb",
+          "uid": "{{ monitoring_grafana_datasource_uid }}"
+        },
+        "definition": "SHOW TAG VALUES FROM \"{{ item.0.measurement }}\" WITH KEY = \"hostname\" WHERE \"check_command\" = '{{ item.0.check_command }}'{% if item.0.service %} AND \"service\" = '{{ item.0.service | replace('\\\\', '\\\\\\\\') }}'{% endif %} AND \"metric\" = '{{ item.1 }}'",
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "hostname",
+        "options": [],
+        "query": "SHOW TAG VALUES FROM \"{{ item.0.measurement }}\" WITH KEY = \"hostname\" WHERE \"check_command\" = '{{ item.0.check_command }}'{% if item.0.service %} AND \"service\" = '{{ item.0.service | replace('\\\\', '\\\\\\\\') }}'{% endif %} AND \"metric\" = '{{ item.1 }}'",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Uranus Metric {{ item.0.title_prefix }} {{ item.1 }}",
+  "uid": "uranus-metric-{{ item.0.slug_prefix }}-{{ (item.1 | lower | regex_replace('[^a-z0-9]+', '-') | regex_replace('^-+|-+$', '')) or 'root' }}",
+  "version": 1,
+  "weekStart": ""
+}

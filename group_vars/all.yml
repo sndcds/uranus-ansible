@@ -131,6 +131,10 @@ monitoring_influx_bind_address: ":8086"
 monitoring_influx_database: "uranus_metrics"
 monitoring_influx_retention_name: "thirty_days"
 monitoring_influx_retention_duration: "30d"
+monitoring_influx_icinga_host: "127.0.0.1"
+monitoring_influx_icinga_port: 8086
+monitoring_influx_icinga_service_measurement: "icinga2_service_perfdata"
+monitoring_influx_icinga_host_measurement: "icinga2_host_perfdata"
 monitoring_influx_allowed_networks:
   - "192.168.122.0/24"
 pluto_metrics_enabled: true

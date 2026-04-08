@@ -204,6 +204,32 @@
   when: monitoring_grafana_enabled | bool
   notify: Restart grafana
 
+- name: Deploy Grafana Icinga dashboards
+  ansible.builtin.template:
+    src: grafana-dashboard-icinga-metric.json.j2
+    dest: "{{ monitoring_grafana_dashboard_path }}/metric-{{ item.0.slug_prefix }}-{{ (item.1 | lower | regex_replace('[^a-z0-9]+', '-') | regex_replace('^-+|-+$', '')) or 'root' }}.json"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  loop: "{{ query('subelements', monitoring_grafana_metric_dashboard_groups, 'metrics') }}"
+  when:
+    - monitoring_grafana_enabled | bool
+    - monitoring_influx_enabled | bool
+  notify: Restart grafana
+
+- name: Remove legacy Grafana dashboards
+  ansible.builtin.file:
+    path: "{{ monitoring_grafana_dashboard_path }}/{{ item }}"
+    state: absent
+  loop:
+    - icinga-perfdata.json
+    - icinga-host-perfdata.json
+    - icinga-service-perfdata.json
+  when:
+    - monitoring_grafana_enabled | bool
+    - monitoring_influx_enabled | bool
+  notify: Restart grafana
+
 - name: Enable and start Grafana
   ansible.builtin.systemd:
     name: grafana-server
@@ -808,6 +834,13 @@
     dest: /etc/icinga2/features-available/ido-pgsql.conf
     mode: "0644"
 
+- name: Deploy Icinga 2 InfluxDB feature config
+  ansible.builtin.template:
+    src: influxdb.conf.j2
+    dest: /etc/icinga2/features-available/influxdb.conf
+    mode: "0644"
+  when: monitoring_influx_enabled | bool
+
 - name: Deploy Icinga 2 Uranus VM checks
   ansible.builtin.template:
     src: uranus-vms.conf.j2
@@ -836,6 +869,16 @@
   failed_when:
     - icinga2_ido_enable.rc != 0
     - "'already enabled' not in (icinga2_ido_enable.stderr | default(''))"
+
+- name: Enable Icinga 2 InfluxDB feature
+  ansible.builtin.command:
+    cmd: icinga2 feature enable influxdb
+  register: icinga2_influx_enable
+  changed_when: "'enabled' in icinga2_influx_enable.stdout"
+  failed_when:
+    - icinga2_influx_enable.rc != 0
+    - "'already enabled' not in (icinga2_influx_enable.stderr | default(''))"
+  when: monitoring_influx_enabled | bool
 
 - name: Restart icinga2 after feature changes
   ansible.builtin.systemd:

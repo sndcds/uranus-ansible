@@ -92,15 +92,25 @@ Reihenfolge grob:
 12. `nominatim`
 13. `versatiles`
 
-## Pluto-Metriken
+## Monitoring
 
-Auf `mon01` läuft zusätzlich InfluxDB für einfache Zeitreihen der Pluto-Bilddateien aus den Backend-VMs.
+Auf `mon01` läuft jetzt die vollständige Kette `Icinga2 -> InfluxDB -> Grafana`.
+
+- `Icinga2` übernimmt Status-Checks und schreibt deren Perfdata über den `InfluxdbWriter` nach InfluxDB
+- `InfluxDB` speichert sowohl Icinga-Perfdata als auch die separaten Pluto-Metriken aus den Backend-VMs
+- `Grafana` liest aus InfluxDB und wird unter `https://monitoring.uranus.home.arpa/grafana/` per Nginx ausgeliefert
+
+Provisionierte Dashboards:
+
+- pro gespeicherter Icinga-Metrik ein eigenes Grafana-Dashboard
+  Stand der aktuellen `show series`-Liste: 142 einzelne Icinga-Metrik-Dashboards
+- `Uranus Pluto Images` für die Measurement `pluto_image_files`
+
+Zusätzliche Pluto-Metriken:
 
 - `dev01` und `prod01` zählen stündlich die Dateien unter `/opt/uranus/backend/pluto/images`
 - die Werte werden als Measurement `pluto_image_files` nach InfluxDB auf `mon01` geschrieben
 - Beispielabfrage auf `mon01`: `influx -database uranus_metrics -execute 'SELECT last(file_count) FROM pluto_image_files GROUP BY host'`
-- Grafana läuft zusätzlich unter `https://monitoring.uranus.home.arpa/grafana/`
-- das Dashboard `Uranus Pluto Images` wird automatisch provisioniert
 
 Die frühere Test-Rolle ist absichtlich nicht mehr im Hauptablauf eingebunden.
 

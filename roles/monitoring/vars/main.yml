@@ -1,0 +1,230 @@
+monitoring_grafana_metric_dashboard_groups:
+  - measurement: "{{ monitoring_influx_icinga_host_measurement }}"
+    check_command: hostalive
+    service: ""
+    slug_prefix: hostalive
+    title_prefix: "hostalive"
+    metrics: [pl, rta]
+  - measurement: "{{ monitoring_influx_icinga_host_measurement }}"
+    check_command: tcp
+    service: ""
+    slug_prefix: host-tcp
+    title_prefix: "host tcp"
+    metrics: [time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: apt
+    service: apt
+    slug_prefix: apt
+    title_prefix: "apt"
+    metrics: [available_upgrades, critical_updates]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: by_ssh
+    service: remote-cpu
+    slug_prefix: remote-cpu
+    title_prefix: "remote cpu"
+    metrics: [cpu_idle, cpu_iowait, cpu_steal, cpu_system, cpu_user]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: by_ssh
+    service: bandwidth
+    slug_prefix: bandwidth
+    title_prefix: "bandwidth"
+    metrics: [enp1s0_coll/s, enp1s0_mcast/s, enp1s0_rxbyte/s, enp1s0_rxdrop/s, enp1s0_rxerr/s, enp1s0_rxpck/s, enp1s0_txbyte/s, enp1s0_txdrop/s, enp1s0_txerr/s, enp1s0_txpck/s]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: by_ssh
+    service: remote-load
+    slug_prefix: remote-load
+    title_prefix: "remote load"
+    metrics: [load1, load15, load5, scaled_load1, scaled_load15, scaled_load5]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: by_ssh
+    service: remote-memory
+    slug_prefix: remote-memory
+    title_prefix: "remote memory"
+    metrics: [mem_active, mem_anonpages, mem_available, mem_buffers, mem_cached, mem_committed, mem_dirty, mem_free, mem_inactive, mem_shared, mem_total, mem_used]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: disk
+    service: disk
+    slug_prefix: disk
+    title_prefix: "disk"
+    metrics: [/, /boot, /boot/efi]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: disk
+    service: "disk /"
+    slug_prefix: disk-root
+    title_prefix: "disk root"
+    metrics: [/]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: backend
+    slug_prefix: http-backend
+    title_prefix: "http backend"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: frontend
+    slug_prefix: http-frontend
+    title_prefix: "http frontend"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: nginx
+    slug_prefix: http-nginx
+    title_prefix: "http nginx"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: http
+    slug_prefix: http-http
+    title_prefix: "http"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: icingaweb2
+    slug_prefix: http-icingaweb2
+    title_prefix: "http icingaweb2"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: nominatim
+    slug_prefix: http-nominatim
+    title_prefix: "http nominatim"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: http
+    service: versatiles
+    slug_prefix: http-versatiles
+    title_prefix: "http versatiles"
+    metrics: [size, time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: icinga
+    service: icinga
+    slug_prefix: icinga
+    title_prefix: "icinga"
+    metrics:
+      - active_host_checks
+      - active_host_checks_15min
+      - active_host_checks_1min
+      - active_host_checks_5min
+      - active_service_checks
+      - active_service_checks_15min
+      - active_service_checks_1min
+      - active_service_checks_5min
+      - api_num_conn_endpoints
+      - api_num_endpoints
+      - api_num_http_clients
+      - api_num_json_rpc_anonymous_clients
+      - api_num_json_rpc_relay_queue_item_rate
+      - api_num_json_rpc_relay_queue_items
+      - api_num_json_rpc_sync_queue_item_rate
+      - api_num_json_rpc_sync_queue_items
+      - api_num_json_rpc_work_queue_item_rate
+      - api_num_not_conn_endpoints
+      - avg_execution_time
+      - avg_latency
+      - checkercomponent_checker_idle
+      - checkercomponent_checker_pending
+      - current_concurrent_checks
+      - current_pending_callbacks
+      - idopgsqlconnection_ido-pgsql_queries_15mins
+      - idopgsqlconnection_ido-pgsql_queries_1min
+      - idopgsqlconnection_ido-pgsql_queries_5mins
+      - idopgsqlconnection_ido-pgsql_queries_rate
+      - idopgsqlconnection_ido-pgsql_query_queue_item_rate
+      - idopgsqlconnection_ido-pgsql_query_queue_items
+      - influxdbwriter_influxdb_data_queue_items
+      - influxdbwriter_influxdb_work_queue_item_rate
+      - influxdbwriter_influxdb_work_queue_items
+      - last_messages_received
+      - last_messages_sent
+      - max_execution_time
+      - max_latency
+      - min_execution_time
+      - min_latency
+      - num_hosts_acknowledged
+      - num_hosts_down
+      - num_hosts_flapping
+      - num_hosts_handled
+      - num_hosts_in_downtime
+      - num_hosts_pending
+      - num_hosts_problem
+      - num_hosts_unreachable
+      - num_hosts_up
+      - num_services_acknowledged
+      - num_services_critical
+      - num_services_flapping
+      - num_services_handled
+      - num_services_in_downtime
+      - num_services_ok
+      - num_services_pending
+      - num_services_problem
+      - num_services_unknown
+      - num_services_unreachable
+      - num_services_warning
+      - passive_host_checks
+      - passive_host_checks_15min
+      - passive_host_checks_1min
+      - passive_host_checks_5min
+      - passive_service_checks
+      - passive_service_checks_15min
+      - passive_service_checks_1min
+      - passive_service_checks_5min
+      - remote_check_queue
+      - sum_bytes_received_per_second
+      - sum_bytes_sent_per_second
+      - sum_messages_received_per_second
+      - sum_messages_sent_per_second
+      - uptime
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: load
+    service: load
+    slug_prefix: load
+    title_prefix: "load"
+    metrics: [load1, load15, load5]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: pgsql
+    service: postgresql-db
+    slug_prefix: pgsql
+    title_prefix: "postgresql db"
+    metrics: [time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: ping4
+    service: ping4
+    slug_prefix: ping4
+    title_prefix: "ping4"
+    metrics: [pl, rta]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: ping6
+    service: ping6
+    slug_prefix: ping6
+    title_prefix: "ping6"
+    metrics: [pl, rta]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: procs
+    service: procs
+    slug_prefix: procs
+    title_prefix: "procs"
+    metrics: [procs]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: ssh
+    service: ssh
+    slug_prefix: ssh
+    title_prefix: "ssh"
+    metrics: [time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: swap
+    service: swap
+    slug_prefix: swap
+    title_prefix: "swap"
+    metrics: [swap]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: tcp
+    service: postgresql
+    slug_prefix: tcp-postgresql
+    title_prefix: "tcp postgresql"
+    metrics: [time]
+  - measurement: "{{ monitoring_influx_icinga_service_measurement }}"
+    check_command: users
+    service: users
+    slug_prefix: users
+    title_prefix: "users"
+    metrics: [users]
