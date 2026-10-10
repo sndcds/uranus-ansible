@@ -84,6 +84,29 @@ def create_user(postgres, name):
     sql(postgres, f'CREATE USER {name} NOSUPERUSER NOCREATEDB NOCREATEROLE')
 
 
+def test_database_acl_parses_and_limits_nominatim_maintenance_connection(postgres, render):
+    hba = postgres['directory'] / 'data/pg_hba.conf'
+    original = hba.read_text()
+    try:
+        hba.write_text(render('roles/debian13_postgresql/templates/pg_hba.conf.j2',
+                              monitoring_web_db_name='icingaweb2', monitoring_web_db_user='icingaweb2',
+                              monitoring_ido_db_name='icinga', monitoring_ido_db_user='icinga',
+                              nominatim_db_name='nominatim', nominatim_db_user='nominatim'))
+        # PostgreSQL parses the file directly; do not reload or alter live access.
+        assert sql(postgres, 'SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL') == '0'
+        rules = json.loads(sql(postgres, """
+            SELECT json_agg(json_build_object('database',database,'user',user_name,
+                                             'address',address,'method',auth_method))
+            FROM pg_hba_file_rules WHERE type='host' AND 'nominatim'=ANY(user_name)
+        """))
+        assert rules == [
+            {'database': ['nominatim'], 'user': ['nominatim'], 'address': '10.77.0.15', 'method': 'scram-sha-256'},
+            {'database': ['postgres'], 'user': ['nominatim'], 'address': '10.77.0.15', 'method': 'scram-sha-256'},
+        ]
+    finally:
+        hba.write_text(original)
+
+
 def test_initial_import_then_changed_dump_and_missing_marker_preserve_live_data(postgres, tmp_path):
     name = 'safe_initial'
     create_user(postgres, name)

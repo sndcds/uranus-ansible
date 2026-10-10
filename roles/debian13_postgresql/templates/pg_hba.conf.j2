@@ -8,5 +8,7 @@ host uranus_prod uranus_prod 10.77.0.13/32 scram-sha-256
 host {{ monitoring_web_db_name }} {{ monitoring_web_db_user }} 10.77.0.14/32 scram-sha-256
 host {{ monitoring_ido_db_name }} {{ monitoring_ido_db_user }} 10.77.0.14/32 scram-sha-256
 host {{ nominatim_db_name }} {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
+# createdb connects to postgres before creating the initial Nominatim database.
+host postgres {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
 host all all 0.0.0.0/0 reject
 host all all ::/0 reject

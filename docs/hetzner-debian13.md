@@ -188,6 +188,12 @@ werden auch bei einem fehlgeschlagenen Import wieder entzogen. Monitoring-
 Schemas werden nur in leere Datenbanken importiert; ein bekanntes bestehendes
 Schema wird erhalten, unbekannte vorhandene Objekte führen zum Abbruch.
 
+Nominatim installiert die PostgreSQL-17-Clientprogramme für den Erstimport.
+Die zusätzliche SCRAM-Regel auf der Wartungsdatenbank `postgres` gilt nur für
+den Nominatim-Benutzer von `10.77.0.15`; sie ermöglicht dessen `createdb`-Aufruf.
+Außerhalb des expliziten Erstimports besitzt dieser Benutzer keine
+Superuser-, Datenbankerstellungs- oder Rollenverwaltungsrechte.
+
 Wiederherstellungen, Migrationen oder ein bewusstes Neuaufbauen bestehender
 Datenbanken sind eigene, separat zu autorisierende Betriebsaufgaben. Sie sind
 keine Nebenwirkung eines Konfigurationslaufs. Ein frischer Aufbau ohne
@@ -221,8 +227,8 @@ Sensitive Werte getrennt und verschlüsselt vorbereiten:
 ```sh
 cp environments/hetzner/vault.yml.example environments/hetzner/vault.yml
 openssl rand -hex 32
-ansible-vault edit environments/hetzner/vault.yml
 ansible-vault encrypt environments/hetzner/vault.yml
+ansible-vault edit environments/hetzner/vault.yml
 ```
 
 Jedes Secret muss einen eigenen zufälligen Wert erhalten. Für die bestehenden
@@ -319,7 +325,7 @@ Check-Mode-Läufe auf dem Dedicated-Server. Diese Prüfungen ersetzen noch keine
 separat freizugebenden vollständigen KVM-/App-End-to-End-Test auf einem
 isolierten Debian-13-Testhost.
 
-Lokaler Prüfstand vom 10.10.2026: **73 Tests bestanden**, alle **14 Playbooks**
+Lokaler Prüfstand vom 10.10.2026: **74 Tests bestanden**, alle **14 Playbooks**
 auf Syntax geprüft, `ansible-lint production` ohne Regelverstöße. **84 Dateien**
 des bisherigen Ubuntu-Pfads stimmen mit dem Referenzmanifest überein.
 Zusätzliche Prüfungen der zuletzt geänderten Netzwerk-/Parser-/Image-Dateien
@@ -367,4 +373,5 @@ Referenzen: [Debian-Cloud-Build und SHA512SUMS](https://cloud.debian.org/images/
 [Debian virt-install](https://manpages.debian.org/trixie/virt-install/virt-install.1.en.html),
 [libvirt-NAT-Format](https://libvirt.org/formatnetwork.html),
 [Debian PHP-FPM](https://packages.debian.org/trixie/php-fpm),
+[Nominatim-5.1-Erstimport](https://github.com/osm-search/Nominatim/blob/v5.1.0/src/nominatim_db/tools/database_import.py),
 [VersaTiles v5.0.0](https://github.com/versatiles-org/versatiles-rs/releases/tag/v5.0.0).

@@ -34,7 +34,7 @@
 
 - name: Install Nominatim prerequisites
   ansible.builtin.apt:
-    name: [osm2pgsql, pkg-config, libicu-dev, python3-venv, python3-pip, curl]
+    name: [osm2pgsql, postgresql-client-17, pkg-config, libicu-dev, python3-venv, python3-pip, curl]
     state: present
 
 - name: Create Nominatim service user

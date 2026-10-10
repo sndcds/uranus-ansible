@@ -43,7 +43,7 @@ def test_cloud_init_disables_passwords_and_validates_with_real_schema(name, sett
                     '-d', str(converted), '-D', 'debian', '-O', 'eni', '-m', f"ens3,{vm['mac']}"],
                    check=True, capture_output=True, text=True)
     eni = (converted / 'etc/network/interfaces.d/50-cloud-init').read_text()
-    assert 'iface ens3 inet dhcp' in eni and 'accept-ra 0' in eni
+    assert 'iface ens3 inet dhcp' in eni and re.search(r'accept[-_]ra\s+0', eni)
     rules = (converted / 'etc/udev/rules.d/70-persistent-net.rules').read_text()
     assert vm['mac'] in rules and 'NAME="ens3"' in rules
     metadata = yaml.safe_load(render('roles/debian13_hypervisor/templates/meta-data.yml.j2', item=vm))
