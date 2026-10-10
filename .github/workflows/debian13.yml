@@ -37,7 +37,7 @@ jobs:
           chmod 0755 /usr/sbin/policy-rc.d
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            git ca-certificates python3 python3-venv python3-psycopg2 \
+            git make ca-certificates python3 python3-venv python3-psycopg2 \
             cloud-init cloud-image-utils qemu-utils nginx \
             postgresql-17 postgresql-17-postgis-3
       - name: Check out repository
