@@ -1,0 +1,140 @@
+---
+- name: Ensure NodeSource keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Install NodeSource signing key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/uranus-nodesource.asc
+    mode: '0644'
+
+- name: Configure maintained Node.js release for Debian guests
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/uranus-nodesource.asc]
+      https://deb.nodesource.com/node_{{ hetzner_nodejs_major }}.x nodistro main
+    filename: uranus-nodesource
+    state: present
+
+- name: Install Node.js with its npm client
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+
+- name: Ensure application build user exists
+  ansible.builtin.user:
+    name: uranus
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create frontend checkout directory
+  ansible.builtin.file:
+    path: /opt/uranus/frontend
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: '0755'
+
+- name: Check out frontend source without overwriting local modifications
+  ansible.builtin.git:
+    repo: "{{ frontend_repo_url }}"
+    dest: /opt/uranus/frontend
+    version: "{{ frontend_repo_version }}"
+    update: true
+    force: false
+  become: true
+  become_user: uranus
+  register: debian13_frontend_source
+
+- name: Deploy environment for the public TLS origin
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/app_frontend/templates/frontend.env.local.j2"
+    dest: /opt/uranus/frontend/.env.local
+    owner: uranus
+    group: uranus
+    mode: '0644'
+  register: debian13_frontend_environment
+
+- name: Inspect supported frontend lockfiles
+  ansible.builtin.stat:
+    path: "/opt/uranus/frontend/{{ item }}"
+    checksum_algorithm: sha256
+  loop: [package-lock.json, pnpm-lock.yaml]
+  register: debian13_frontend_lockfiles
+
+- name: Require exactly one reproducible dependency lockfile
+  ansible.builtin.assert:
+    that: debian13_frontend_lockfiles.results | selectattr('stat.exists') | list | length == 1
+    fail_msg: The frontend must provide exactly one npm or pnpm lockfile.
+
+- name: Read declared package manager
+  ansible.builtin.slurp:
+    src: /opt/uranus/frontend/package.json
+  register: debian13_frontend_package_json
+
+- name: Determine the locked build inputs
+  ansible.builtin.set_fact:
+    debian13_frontend_pnpm: "{{ debian13_frontend_lockfiles.results[1].stat.exists }}"
+    debian13_frontend_package_manager: >-
+      {{ (debian13_frontend_package_json.content | b64decode | from_json).packageManager | default('npm') }}
+    debian13_frontend_build_signature: >-
+      {{ debian13_frontend_source.after ~ ':' ~ debian13_frontend_environment.checksum ~ ':' ~
+         (debian13_frontend_lockfiles.results | selectattr('stat.exists') | first).stat.checksum }}
+
+- name: Require a pinned pnpm package manager when the pnpm lockfile is present
+  ansible.builtin.assert:
+    that: debian13_frontend_package_manager is match('^pnpm@[0-9]+\.[0-9]+\.[0-9]+$')
+  when: debian13_frontend_pnpm | bool
+
+- name: Inspect successful build signature
+  ansible.builtin.stat:
+    path: /opt/uranus/frontend/.uranus-build-revision
+  register: debian13_frontend_build_marker
+
+- name: Read successful build signature
+  ansible.builtin.slurp:
+    src: /opt/uranus/frontend/.uranus-build-revision
+  register: debian13_frontend_last_build
+  when: debian13_frontend_build_marker.stat.exists
+
+- name: Build only changed or unfinished frontend revisions
+  when: >-
+    (debian13_frontend_last_build.content | default('') | b64decode | trim)
+    != debian13_frontend_build_signature
+  block:
+    - name: Install npm dependencies with the repository lockfile
+      ansible.builtin.command:
+        argv: [npm, ci]
+        chdir: /opt/uranus/frontend
+      become: true
+      become_user: uranus
+      changed_when: true
+      when: not debian13_frontend_pnpm | bool
+    - name: Install pnpm dependencies with the pinned package manager
+      ansible.builtin.command:
+        argv: [npm, exec, --yes, "--package={{ debian13_frontend_package_manager }}", --, pnpm, install, --frozen-lockfile]
+        chdir: /opt/uranus/frontend
+      become: true
+      become_user: uranus
+      changed_when: true
+      when: debian13_frontend_pnpm | bool
+    - name: Build the frontend using its package manager
+      ansible.builtin.command:
+        argv: >-
+          {{ ['npm', 'exec', '--yes', '--package=' ~ debian13_frontend_package_manager, '--', 'pnpm', 'run', 'build']
+             if debian13_frontend_pnpm else ['npm', 'run', 'build'] }}
+        chdir: /opt/uranus/frontend
+      become: true
+      become_user: uranus
+      changed_when: true
+    - name: Record only the successfully built inputs
+      ansible.builtin.copy:
+        dest: /opt/uranus/frontend/.uranus-build-revision
+        content: "{{ debian13_frontend_build_signature }}\n"
+        owner: uranus
+        group: uranus
+        mode: '0644'

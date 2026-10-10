@@ -1,0 +1,79 @@
+# Only the NAT gateway may reach port 80 (enforced by the guest firewall).
+set_real_ip_from {{ hetzner_gateway }};
+real_ip_header X-Real-IP;
+real_ip_recursive off;
+server {
+    listen {{ ansible_host }}:80 default_server;
+    server_name _;
+    return 444;
+}
+{% if vm_role in ['dev', 'prod'] %}
+server {
+    listen {{ ansible_host }}:80;
+    server_name {{ frontend_domain }};
+    root /opt/uranus/frontend/dist;
+    index index.html;
+    location / { try_files $uri $uri/ /index.html; }
+}
+server {
+    listen {{ ansible_host }}:80;
+    server_name {{ backend_domain }};
+    location / {
+        proxy_pass http://127.0.0.1:{{ backend_port }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+{% elif vm_role == 'monitoring' %}
+server {
+    listen {{ ansible_host }}:80;
+    server_name {{ icinga_web_domain }};
+    root /usr/share/icingaweb2/public;
+    index index.php;
+    location = /grafana { return 302 /grafana/; }
+    location /grafana/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_pass http://127.0.0.1:3000/grafana/;
+    }
+    location / { try_files $uri $uri/ /index.php$is_args$args; }
+    location ~ ^/index\.php(.*)$ {
+        fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_param ICINGAWEB_CONFIGDIR /etc/icingaweb2;
+        fastcgi_param SCRIPT_FILENAME /usr/share/icingaweb2/public/index.php;
+        fastcgi_param HTTPS on;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    }
+    location ~ \.php$ { return 404; }
+}
+{% elif vm_role == 'nominatim' %}
+server {
+    listen {{ ansible_host }}:80;
+    server_name {{ nominatim_domain }};
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass http://unix:/run/nominatim.sock:;
+    }
+}
+{% elif vm_role == 'versatiles' %}
+server {
+    listen {{ ansible_host }}:80;
+    server_name {{ versatiles_domain }};
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass http://127.0.0.1:{{ versatiles_port }};
+    }
+}
+{% endif %}

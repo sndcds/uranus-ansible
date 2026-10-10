@@ -1,0 +1,23 @@
+# Only this table is replaced; libvirt's NAT/filter tables are preserved.
+destroy table inet uranus_debian13
+table inet uranus_debian13 {
+    chain input {
+        type filter hook input priority 10; policy drop;
+        iifname "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        iifname "{{ hetzner_bridge }}" udp dport { 53, 67 } accept
+        iifname "{{ hetzner_bridge }}" tcp dport 53 accept
+        ip saddr { {{ hetzner_management_networks | join(', ') }} } tcp dport 22 accept
+{% if hetzner_management_ipv6_networks | length %}
+        ip6 saddr { {{ hetzner_management_ipv6_networks | join(', ') }} } tcp dport 22 accept
+{% endif %}
+        tcp dport { 80, 443 } accept
+    }
+    chain forward {
+        type filter hook forward priority 10; policy accept;
+        ct state established,related accept
+        iifname != "{{ hetzner_bridge }}" oifname "{{ hetzner_bridge }}" ct state new drop
+    }
+}

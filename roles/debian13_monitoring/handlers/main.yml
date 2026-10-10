@@ -1,0 +1,13 @@
+---
+- name: Restart Debian Icinga
+  ansible.builtin.systemd_service:
+    name: icinga2
+    state: restarted
+- name: Restart Debian InfluxDB
+  ansible.builtin.systemd_service:
+    name: influxdb
+    state: restarted
+- name: Restart Debian Grafana
+  ansible.builtin.systemd_service:
+    name: grafana-server
+    state: restarted

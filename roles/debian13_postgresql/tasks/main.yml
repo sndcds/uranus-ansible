@@ -1,0 +1,93 @@
+---
+- name: Require native PostgreSQL 17 and a fixed application schema
+  ansible.builtin.assert:
+    that:
+      - postgresql_version | int == 17
+      - db_schema == 'uranus'
+      - backend_db_schema == 'uranus'
+
+- name: Install PostgreSQL and PostGIS from Debian 13 repositories
+  ansible.builtin.apt:
+    name: [postgresql-17, postgresql-client-17, postgresql-17-postgis-3, python3-psycopg2]
+    state: present
+
+- name: Enable PostgreSQL
+  ansible.builtin.systemd_service:
+    name: postgresql
+    enabled: true
+    state: started
+
+- name: Bind PostgreSQL to loopback and the private database address
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/17/main/postgresql.conf
+    regexp: '^#?listen_addresses\s*='
+    line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+  notify: Restart Debian PostgreSQL
+
+- name: Require SCRAM password storage
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/17/main/postgresql.conf
+    regexp: '^#?password_encryption\s*='
+    line: "password_encryption = 'scram-sha-256'"
+  notify: Restart Debian PostgreSQL
+
+- name: Restrict PostgreSQL clients to application and monitoring VMs
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/17/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify: Restart Debian PostgreSQL
+
+- name: Apply private database listener settings
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure application users exist without elevated database privileges
+  community.postgresql.postgresql_user:
+    name: "{{ item.user }}"
+    password: "{{ item.password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
+  become_user: postgres
+  loop: "{{ app_databases }}"
+  no_log: true
+
+- name: Bootstrap application databases with preservation of existing data
+  ansible.builtin.include_tasks: application-database.yml
+  loop: "{{ app_databases }}"
+  loop_control:
+    loop_var: application_db
+    label: "{{ application_db.name }}"
+
+- name: Create monitoring database users
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
+  become_user: postgres
+  loop:
+    - {name: "{{ monitoring_web_db_user }}", password: "{{ monitoring_web_db_password }}"}
+    - {name: "{{ monitoring_ido_db_user }}", password: "{{ monitoring_ido_db_password }}"}
+  no_log: true
+
+- name: Ensure monitoring databases exist
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    owner: "{{ item.owner }}"
+    state: present
+  become: true
+  become_user: postgres
+  loop:
+    - {name: "{{ monitoring_web_db_name }}", owner: "{{ monitoring_web_db_user }}"}
+    - {name: "{{ monitoring_ido_db_name }}", owner: "{{ monitoring_ido_db_user }}"}
+
+- name: Create unprivileged Nominatim database user
+  community.postgresql.postgresql_user:
+    name: "{{ nominatim_db_user }}"
+    password: "{{ nominatim_db_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
+  become_user: postgres
+  no_log: true

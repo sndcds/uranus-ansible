@@ -1,0 +1,27 @@
+flush ruleset
+table inet uranus_guest {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        iifname "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        ip saddr {{ hetzner_gateway }} udp sport 67 udp dport 68 accept
+        ip saddr {{ hetzner_gateway }} tcp dport 22 accept
+{% if vm_role != 'db' %}
+        ip saddr {{ hetzner_gateway }} tcp dport 80 accept
+{% endif %}
+{% if vm_role == 'db' %}
+        ip saddr { 10.77.0.12, 10.77.0.13, 10.77.0.14, 10.77.0.15 } tcp dport 5432 accept
+{% endif %}
+{% if vm_role == 'monitoring' %}
+        ip saddr { 10.77.0.12, 10.77.0.13 } tcp dport 8086 accept
+{% endif %}
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}

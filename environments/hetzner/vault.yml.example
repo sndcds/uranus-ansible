@@ -1,0 +1,13 @@
+---
+# Generate separate values with: openssl rand -hex 32
+# Copy to vault.yml, replace every value and encrypt with ansible-vault.
+vault_db_password_dev: REPLACE_WITH_GENERATED_SECRET
+vault_db_password_prod: REPLACE_WITH_GENERATED_SECRET
+vault_nominatim_db_password: REPLACE_WITH_GENERATED_SECRET
+vault_backend_jwt_secret: REPLACE_WITH_GENERATED_SECRET
+vault_backend_secret_key: REPLACE_WITH_GENERATED_SECRET
+vault_monitoring_web_db_password: REPLACE_WITH_GENERATED_SECRET
+vault_monitoring_ido_db_password: REPLACE_WITH_GENERATED_SECRET
+vault_monitoring_admin_password: REPLACE_WITH_GENERATED_SECRET
+vault_monitoring_api_password: REPLACE_WITH_GENERATED_SECRET
+vault_monitoring_grafana_admin_password: REPLACE_WITH_GENERATED_SECRET

@@ -1,0 +1,12 @@
+---
+- name: Provision Debian 13 guests on the dedicated host
+  hosts: debian13_hypervisors
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization before contacting the host
+      ansible.builtin.import_tasks: gate.yml
+    - name: Gather host facts
+      ansible.builtin.setup:
+  roles:
+    - role: debian13_hypervisor

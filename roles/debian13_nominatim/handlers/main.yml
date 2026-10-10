@@ -1,0 +1,11 @@
+---
+- name: Restart Debian Nominatim socket
+  ansible.builtin.systemd_service:
+    name: nominatim.socket
+    daemon_reload: true
+    state: restarted
+- name: Restart Debian Nominatim
+  ansible.builtin.systemd_service:
+    name: nominatim.service
+    daemon_reload: true
+    state: restarted

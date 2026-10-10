@@ -1,0 +1,97 @@
+---
+- name: Require a pinned release archive and frontend
+  ansible.builtin.assert:
+    that:
+      - hetzner_versatiles_archive_url is match('^https://')
+      - hetzner_versatiles_archive_sha256 is match('^[0-9a-f]{64}$')
+      - hetzner_versatiles_frontend_sha256 is match('^[0-9a-f]{64}$')
+    fail_msg: Provide verified release assets and checksums; remote installer scripts are not executed.
+
+- name: Create VersaTiles service user
+  ansible.builtin.user:
+    name: "{{ versatiles_system_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ versatiles_data_dir }}"
+    create_home: true
+
+- name: Create VersaTiles data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ versatiles_system_user }}"
+    group: "{{ versatiles_system_user }}"
+    mode: '0750'
+  loop:
+    - "{{ versatiles_data_dir }}"
+    - "{{ versatiles_data_dir }}/frontend"
+    - "{{ versatiles_data_dir }}/tiles"
+    - /var/log/versatiles
+
+- name: Create protected release archive cache
+  ansible.builtin.file:
+    path: /var/cache/uranus
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Download pinned VersaTiles release archive
+  ansible.builtin.get_url:
+    url: "{{ hetzner_versatiles_archive_url }}"
+    dest: "/var/cache/uranus/versatiles-{{ hetzner_versatiles_archive_sha256[:16] }}.tar.gz"
+    checksum: "sha256:{{ hetzner_versatiles_archive_sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: debian13_versatiles_archive
+
+- name: Extract only the verified VersaTiles executable
+  ansible.builtin.unarchive:
+    src: "/var/cache/uranus/versatiles-{{ hetzner_versatiles_archive_sha256[:16] }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    include: [versatiles]
+    owner: root
+    group: root
+    mode: '0755'
+  notify: Restart Debian VersaTiles
+
+- name: Download map frontend bundle
+  ansible.builtin.get_url:
+    url: "{{ hetzner_versatiles_frontend_url }}"
+    dest: "{{ versatiles_data_dir }}/frontend/frontend.br.tar.gz"
+    owner: "{{ versatiles_system_user }}"
+    group: "{{ versatiles_system_user }}"
+    mode: '0640'
+    force: false
+    checksum: "sha256:{{ hetzner_versatiles_frontend_sha256 }}"
+
+- name: Download the tile subset only when no tileset exists
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/versatiles
+      - convert
+      - --bbox-border
+      - "{{ versatiles_bbox_border | string }}"
+      - --bbox
+      - "{{ versatiles_bbox }}"
+      - "{{ versatiles_tiles_url }}"
+      - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
+    creates: "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
+  become: true
+  become_user: "{{ versatiles_system_user }}"
+
+- name: Install private VersaTiles service
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/versatiles/templates/versatiles.service.j2"
+    dest: /etc/systemd/system/versatiles.service
+    mode: '0644'
+  notify: Restart Debian VersaTiles
+
+- name: Start private VersaTiles
+  ansible.builtin.systemd_service:
+    name: versatiles
+    daemon_reload: true
+    state: started
+    enabled: true

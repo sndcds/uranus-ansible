@@ -1,0 +1,50 @@
+---
+# Enable only after the owner explicitly authorizes a production deployment.
+hetzner_deployment_approved: false
+hetzner_public_ipv4: 94.130.236.38
+hetzner_ssh_public_key_file: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
+hetzner_management_networks: []
+hetzner_management_ipv6_networks: []
+hetzner_storage_uuid: 7f882d89-a2cf-46d2-9db8-5333be51a300
+hetzner_storage_path: /data/libvirt/images
+hetzner_host_reserve_mb: 4096
+hetzner_network_name: uranus-debian13
+hetzner_bridge: virbr-uranus
+hetzner_gateway: 10.77.0.1
+hetzner_subnet: 10.77.0.0/24
+hetzner_image_url: >-
+  https://cloud.debian.org/images/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
+hetzner_image_sha512: >-
+  f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d
+hetzner_image_path: "{{ hetzner_storage_path }}/.base/debian13-{{ hetzner_image_sha512[:16] }}.qcow2"
+hetzner_start_existing_vms: false
+hetzner_target_vm: ""
+hetzner_vms:
+  - {name: db01, role: db, memory: 12288, cpu: 4, disk: 150, ip: 10.77.0.11, mac: '52:54:00:77:00:11'}
+  - {name: dev01, role: dev, memory: 4096, cpu: 2, disk: 60, ip: 10.77.0.12, mac: '52:54:00:77:00:12'}
+  - {name: prod01, role: prod, memory: 8192, cpu: 4, disk: 100, ip: 10.77.0.13, mac: '52:54:00:77:00:13'}
+  - {name: mon01, role: monitoring, memory: 4096, cpu: 2, disk: 50, ip: 10.77.0.14, mac: '52:54:00:77:00:14'}
+  - {name: nom01, role: nominatim, memory: 12288, cpu: 6, disk: 200, ip: 10.77.0.15, mac: '52:54:00:77:00:15'}
+  - {name: vers01, role: versatiles, memory: 2048, cpu: 2, disk: 40, ip: 10.77.0.16, mac: '52:54:00:77:00:16'}
+
+# Supply real, owner-controlled domains in deployment.yml (see docs).
+hetzner_domains:
+  dev_frontend: dev.example.invalid
+  dev_backend: api.dev.example.invalid
+  prod_frontend: example.invalid
+  prod_backend: api.example.invalid
+  icinga: monitoring.example.invalid
+  nominatim: nominatim.example.invalid
+  versatiles: tiles.example.invalid
+  mail_mx: mail.example.invalid
+hetzner_acme_email: ""
+hetzner_private_sites: [dev_frontend, dev_backend, icinga]
+hetzner_private_web_networks: []
+hetzner_nominatim_initial_import: false
+hetzner_app_initial_import: false
+hetzner_versatiles_archive_url: https://github.com/versatiles-org/versatiles-rs/releases/download/v5.0.0/versatiles-linux-gnu-x86_64.tar.gz
+hetzner_versatiles_archive_sha256: 0023972d18df71b509ece6b46c4c6f4b0537af9c904a1cddba2cfa9de9c336fe
+hetzner_versatiles_frontend_url: https://github.com/versatiles-org/versatiles-frontend/releases/download/v3.16.0/frontend.br.tar.gz
+hetzner_versatiles_frontend_sha256: ac5f5ae18107cd7c7c804c21107813e182ca65024b70b71dd23df7d1887b2ec3
+hetzner_nodejs_major: '24'
+hetzner_nominatim_version: "5.1.0"

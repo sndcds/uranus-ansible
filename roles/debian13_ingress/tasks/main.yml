@@ -1,0 +1,173 @@
+---
+- name: Require real public domains and private administration access
+  ansible.builtin.assert:
+    that:
+      - hetzner_acme_email | length > 0
+      - hetzner_domains.values() | select('search', '\.invalid$|\.home\.arpa$') | list | length == 0
+      - hetzner_private_web_networks | length > 0
+      - "'0.0.0.0/0' not in hetzner_private_web_networks"
+      - "'::/0' not in hetzner_private_web_networks"
+      - hetzner_private_sites | difference(['dev_frontend', 'dev_backend', 'icinga']) | length == 0
+
+- name: Validate domain names before using them in nginx or ACME
+  ansible.builtin.assert:
+    that:
+      - item is match('^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$')
+  loop: "{{ hetzner_domains.values() | list }}"
+
+- name: Validate private HTTP access CIDRs
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import ipaddress,sys;
+        network=ipaddress.ip_network(sys.argv[1],strict=True);
+        sys.exit(0 if network.prefixlen > 0 else 1)
+      - "{{ item }}"
+  loop: "{{ hetzner_private_web_networks }}"
+  changed_when: false
+
+- name: Build ingress mappings for all public HTTP services
+  ansible.builtin.set_fact:
+    debian13_ingress_sites:
+      - {key: dev_frontend, domain: "{{ hetzner_domains.dev_frontend }}", upstream: 10.77.0.12}
+      - {key: dev_backend, domain: "{{ hetzner_domains.dev_backend }}", upstream: 10.77.0.12}
+      - {key: prod_frontend, domain: "{{ hetzner_domains.prod_frontend }}", upstream: 10.77.0.13}
+      - {key: prod_backend, domain: "{{ hetzner_domains.prod_backend }}", upstream: 10.77.0.13}
+      - {key: icinga, domain: "{{ hetzner_domains.icinga }}", upstream: 10.77.0.14}
+      - {key: nominatim, domain: "{{ hetzner_domains.nominatim }}", upstream: 10.77.0.15}
+      - {key: versatiles, domain: "{{ hetzner_domains.versatiles }}", upstream: 10.77.0.16}
+
+- name: Verify public DNS before requesting certificates
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import socket,sys;
+        addresses={r[4][0] for r in socket.getaddrinfo(sys.argv[1],443,type=socket.SOCK_STREAM)};
+        sys.exit(0 if addresses == {sys.argv[2]} else 1)
+      - "{{ item.domain }}"
+      - "{{ hetzner_public_ipv4 }}"
+  loop: "{{ debian13_ingress_sites }}"
+  changed_when: false
+
+- name: Install public ingress packages without starting a default site
+  ansible.builtin.apt:
+    name: [nginx, certbot]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Create ACME challenge webroot
+  ansible.builtin.file:
+    path: /var/www/letsencrypt
+    state: directory
+    mode: '0755'
+
+- name: Remove distribution default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Inspect existing ingress certificate
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/uranus-hetzner/fullchain.pem
+  register: debian13_ingress_certificate
+
+- name: Bootstrap HTTP challenge routing before the first certificate
+  ansible.builtin.template:
+    src: ingress.conf.j2
+    dest: /etc/nginx/sites-available/uranus-hetzner.conf
+    mode: '0644'
+  vars:
+    debian13_ingress_tls_ready: false
+  when: not debian13_ingress_certificate.stat.exists
+
+- name: Enable dedicated ingress site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-hetzner.conf
+    dest: /etc/nginx/sites-enabled/uranus-hetzner.conf
+    state: link
+  when: not debian13_ingress_certificate.stat.exists
+
+- name: Validate bootstrap nginx configuration
+  ansible.builtin.command:
+    argv: [nginx, -t]
+  changed_when: false
+  when: not debian13_ingress_certificate.stat.exists
+
+- name: Start HTTP ACME bootstrap server
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+  when: not debian13_ingress_certificate.stat.exists
+
+- name: Reload challenge routes if nginx was already running
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded
+  when: not debian13_ingress_certificate.stat.exists
+
+- name: Obtain a trusted SAN certificate for the ingress domains
+  ansible.builtin.command:
+    argv: >-
+      {{ ['certbot', 'certonly', '--webroot', '--webroot-path', '/var/www/letsencrypt',
+          '--non-interactive', '--agree-tos', '--email', hetzner_acme_email,
+          '--cert-name', 'uranus-hetzner'] +
+          (debian13_ingress_sites | map(attribute='domain') | map('regex_replace', '^', '--domain=') | list) }}
+    creates: /etc/letsencrypt/live/uranus-hetzner/fullchain.pem
+
+- name: Verify that the trusted certificate covers every configured hostname
+  ansible.builtin.command:
+    argv: [openssl, x509, -noout, -checkhost, "{{ item.domain }}", -in, /etc/letsencrypt/live/uranus-hetzner/fullchain.pem]
+  loop: "{{ debian13_ingress_sites }}"
+  register: debian13_ingress_certificate_hostname
+  changed_when: false
+  failed_when: "'does match certificate' not in debian13_ingress_certificate_hostname.stdout"
+
+- name: Install validated TLS proxy configuration
+  ansible.builtin.template:
+    src: ingress.conf.j2
+    dest: /etc/nginx/sites-available/uranus-hetzner.conf
+    mode: '0644'
+  vars:
+    debian13_ingress_tls_ready: true
+  notify: Reload Debian public nginx
+
+- name: Ensure dedicated TLS site is enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-hetzner.conf
+    dest: /etc/nginx/sites-enabled/uranus-hetzner.conf
+    state: link
+  notify: Reload Debian public nginx
+
+- name: Validate final ingress configuration before reload
+  ansible.builtin.command:
+    argv: [nginx, -t]
+  changed_when: false
+
+- name: Enable public nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Install certificate renewal reload hook
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/uranus-nginx
+    mode: '0750'
+    content: |
+      #!/bin/sh
+      set -eu
+      /usr/sbin/nginx -t
+      /usr/bin/systemctl reload nginx
+
+- name: Enable automatic ACME certificate renewal
+  ansible.builtin.systemd_service:
+    name: certbot.timer
+    enabled: true
+    state: started

@@ -1,0 +1,266 @@
+---
+- name: Install native Debian monitoring and PHP 8.4
+  ansible.builtin.apt:
+    name:
+      - icinga2
+      - icinga2-ido-pgsql
+      - icingaweb2
+      - icingaweb2-module-monitoring
+      - icingacli
+      - influxdb
+      - monitoring-plugins
+      - postgresql-client
+      - php8.4-fpm
+      - php8.4-pgsql
+      - php8.4-gd
+      - php8.4-intl
+      - php8.4-mbstring
+      - php8.4-xml
+      - php8.4-curl
+    state: present
+    policy_rc_d: 101
+
+- name: Gather installed service state
+  ansible.builtin.service_facts: {}
+
+- name: Disable Apache when installed as an Icinga Web dependency
+  ansible.builtin.systemd_service:
+    name: apache2
+    state: stopped
+    enabled: false
+    masked: true
+  when: "'apache2.service' in ansible_facts.services"
+
+- name: Ensure Grafana APT keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Install Grafana signing key
+  ansible.builtin.get_url:
+    url: "{{ monitoring_grafana_apt_key_url }}"
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: '0644'
+
+- name: Configure Grafana signed repository
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main
+    filename: uranus-grafana
+    state: present
+
+- name: Install Grafana without a public default listener
+  ansible.builtin.apt:
+    name: grafana
+    state: present
+    policy_rc_d: 101
+
+- name: Create monitoring configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: www-data
+    mode: '0750'
+  loop:
+    - /etc/icingaweb2
+    - /etc/icingaweb2/enabledModules
+    - /etc/icingaweb2/modules
+    - /etc/icingaweb2/modules/monitoring
+
+- name: Find the installed Icinga Web database schema
+  ansible.builtin.find:
+    paths: [/usr/share/icingaweb2]
+    patterns: [pgsql.schema.sql, pgsql.sql]
+    recurse: true
+  register: debian13_monitoring_icingaweb_schema_files
+
+- name: Require exactly one known Icinga Web schema file
+  ansible.builtin.assert:
+    that: debian13_monitoring_icingaweb_schema_files.matched == 1
+
+- name: Initialize monitoring schemas only when the databases are empty
+  ansible.builtin.include_tasks: schema.yml
+  loop:
+    - name: "{{ monitoring_web_db_name }}"
+      user: "{{ monitoring_web_db_user }}"
+      password: "{{ monitoring_web_db_password }}"
+      sentinel: public.icingaweb_user
+      file: "{{ debian13_monitoring_icingaweb_schema_files.files[0].path }}"
+    - name: "{{ monitoring_ido_db_name }}"
+      user: "{{ monitoring_ido_db_user }}"
+      password: "{{ monitoring_ido_db_password }}"
+      sentinel: public.icinga_dbversion
+      file: /usr/share/icinga2-ido-pgsql/schema/pgsql.sql
+  loop_control:
+    loop_var: monitoring_schema
+  no_log: true
+
+- name: Generate Icinga Web password hash without placing the password in argv
+  ansible.builtin.command:
+    argv: [php, -r, 'echo password_hash(getenv("URANUS_ADMIN_PASSWORD"), PASSWORD_DEFAULT);']
+  environment:
+    URANUS_ADMIN_PASSWORD: "{{ monitoring_admin_password }}"
+  register: debian13_monitoring_icinga_admin_hash
+  changed_when: false
+  no_log: true
+
+- name: Create or update the authorized Icinga Web administrator
+  community.postgresql.postgresql_query:
+    db: "{{ monitoring_web_db_name }}"
+    query: >-
+      INSERT INTO icingaweb_user (name, active, password_hash)
+      VALUES (%(name)s, 1, %(hash)s)
+      ON CONFLICT (name) DO UPDATE SET active=1, password_hash=EXCLUDED.password_hash
+    named_args:
+      name: "{{ monitoring_admin_user }}"
+      hash: "{{ debian13_monitoring_icinga_admin_hash.stdout }}"
+  delegate_to: db01
+  become: true
+  become_user: postgres
+  no_log: true
+
+- name: Deploy private monitoring connection settings
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/monitoring/templates/{{ item.template }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: "{{ item.group | default('www-data') }}"
+    mode: '0640'
+  loop:
+    - {template: resources.ini.j2, dest: /etc/icingaweb2/resources.ini}
+    - {template: config.ini.j2, dest: /etc/icingaweb2/config.ini}
+    - {template: authentication.ini.j2, dest: /etc/icingaweb2/authentication.ini}
+    - {template: roles.ini.j2, dest: /etc/icingaweb2/roles.ini}
+    - {template: monitoring-backends.ini.j2, dest: /etc/icingaweb2/modules/monitoring/backends.ini}
+    - {template: monitoring-commandtransports.ini.j2, dest: /etc/icingaweb2/modules/monitoring/commandtransports.ini}
+    - {template: api-users.conf.j2, dest: /etc/icinga2/conf.d/api-users.conf, group: nagios}
+    - {template: ido-pgsql.conf.j2, dest: /etc/icinga2/features-available/ido-pgsql.conf, group: nagios}
+    - {template: influxdb.conf.j2, dest: /etc/icinga2/features-available/influxdb.conf, group: nagios}
+  no_log: true
+  notify: Restart Debian Icinga
+
+- name: Enable the Icinga Web monitoring module
+  ansible.builtin.file:
+    src: /usr/share/icingaweb2/modules/monitoring
+    dest: /etc/icingaweb2/enabledModules/monitoring
+    state: link
+
+- name: Initialize private Icinga API certificates once
+  ansible.builtin.command:
+    argv: [icinga2, api, setup]
+    creates: "/var/lib/icinga2/certs/{{ inventory_hostname }}.crt"
+
+- name: Enable IDO and InfluxDB writers
+  ansible.builtin.file:
+    src: "/etc/icinga2/features-available/{{ item }}.conf"
+    dest: "/etc/icinga2/features-enabled/{{ item }}.conf"
+    state: link
+  loop: [ido-pgsql, influxdb]
+  notify: Restart Debian Icinga
+
+- name: Deploy internal VM availability checks
+  ansible.builtin.template:
+    src: vm-checks.conf.j2
+    dest: /etc/icinga2/conf.d/uranus-debian13.conf
+    mode: '0644'
+  notify: Restart Debian Icinga
+
+- name: Validate Icinga configuration before starting or reloading
+  ansible.builtin.command:
+    argv: [icinga2, daemon, -C]
+  changed_when: false
+
+- name: Configure InfluxDB with access restricted by the guest firewall
+  ansible.builtin.lineinfile:
+    path: /etc/influxdb/influxdb.conf
+    regexp: '^\s*bind-address\s*='
+    line: '  bind-address = "0.0.0.0:8086"'
+    insertafter: '^\[http\]'
+  notify: Restart Debian InfluxDB
+
+- name: Start private InfluxDB
+  ansible.builtin.systemd_service:
+    name: influxdb
+    enabled: true
+    state: started
+
+- name: Apply InfluxDB configuration before accessing its API
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure the metrics database exists
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:8086/query"
+    method: POST
+    body_format: form-urlencoded
+    body: {q: "CREATE DATABASE {{ monitoring_influx_database }}"}
+    return_content: true
+  register: debian13_monitoring_influx_database
+  failed_when: debian13_monitoring_influx_database.status != 200 or 'error' in debian13_monitoring_influx_database.content
+  changed_when: false
+
+- name: Configure metrics retention
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:8086/query"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      q: >-
+        CREATE RETENTION POLICY {{ monitoring_influx_retention_name }} ON {{ monitoring_influx_database }}
+        DURATION {{ monitoring_influx_retention_duration }} REPLICATION 1 DEFAULT
+    return_content: true
+  register: debian13_monitoring_influx_retention
+  failed_when: >-
+    debian13_monitoring_influx_retention.status != 200 or
+    ('error' in debian13_monitoring_influx_retention.content and 'already exists' not in debian13_monitoring_influx_retention.content)
+  changed_when: false
+
+- name: Create Grafana dashboard directory
+  ansible.builtin.file:
+    path: "{{ monitoring_grafana_dashboard_path }}"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: '0750'
+
+- name: Configure Grafana behind the public TLS proxy
+  ansible.builtin.copy:
+    dest: /etc/grafana/grafana.ini
+    owner: root
+    group: grafana
+    mode: '0640'
+    content: |
+      [server]
+      http_addr = 127.0.0.1
+      http_port = 3000
+      domain = {{ monitoring_grafana_domain }}
+      root_url = https://{{ monitoring_grafana_domain }}/grafana/
+      serve_from_sub_path = true
+      [security]
+      admin_user = {{ monitoring_grafana_admin_user }}
+      admin_password = {{ monitoring_grafana_admin_password }}
+      cookie_secure = true
+      [auth.anonymous]
+      enabled = false
+  no_log: true
+  notify: Restart Debian Grafana
+
+- name: Deploy Grafana metrics datasource and Pluto dashboard
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/monitoring/templates/{{ item.template }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: grafana
+    mode: '0640'
+  loop:
+    - {template: grafana-datasource-influxdb.yml.j2, dest: /etc/grafana/provisioning/datasources/uranus.yml}
+    - {template: grafana-dashboard-provider.yml.j2, dest: /etc/grafana/provisioning/dashboards/uranus.yml}
+    - {template: grafana-dashboard-pluto-images.json.j2, dest: "{{ monitoring_grafana_dashboard_path }}/pluto-images.json"}
+  notify: Restart Debian Grafana
+
+- name: Start Debian monitoring services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [php8.4-fpm, icinga2, grafana-server]

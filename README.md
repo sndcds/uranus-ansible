@@ -1,5 +1,16 @@
 # Uranus Ansible
 
+Für Hetzner Dedicated mit **Debian 13 auf Host und allen sechs VMs** gibt es
+einen separaten Pfad: [Betriebs- und Sicherheitsdokumentation](docs/hetzner-debian13.md).
+Er verwendet `ansible-debian13.cfg`, `environments/hetzner/` und
+`playbooks/debian13/`. Produktives Deployment ist standardmäßig gesperrt und
+setzt die ausdrückliche Freigabe des Betreibers voraus.
+
+Die nachfolgende Dokumentation beschreibt weiterhin den bestehenden
+Ubuntu-/uvtool-Pfad. Seine Playbooks, Rollen, Templates und Inventories bleiben
+unverändert. [Lokale Prüfungen und CI](docs/hetzner-debian13.md#qualitaetssicherung)
+testen beide Pfade auf Syntax und die Ubuntu-Dateien zusätzlich auf unveränderte Inhalte.
+
 Ansible-Setup zum lokalen Provisionieren und Konfigurieren einer kleinen Uranus-Umgebung auf einem KVM/libvirt-Host.
 
 Das Repository baut mehrere Ubuntu-VMs, verteilt Rollen je Host und konfiguriert darauf:
