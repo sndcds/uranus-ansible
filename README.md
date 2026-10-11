@@ -38,6 +38,12 @@ Phasen desselben Workflows. Provisionierung ersetzt vorhandene Instanzen nicht.
 Abweichungen führen zum Abbruch. Ressourcengrößen und Instanzart werden zentral
 in `environments/hetzner/group_vars/all.yml` definiert.
 
+Administrative SSH-Verbindungen benötigen keine feste Quell-IP. Host und Gäste
+erfordern Schlüssel; Passwort-, Keyboard-Interactive- und Rootlogin werden
+deaktiviert. Der Host bestätigt SSH-/Firewalländerungen erst nach einer neuen
+Verbindung per Schlüssel, mit zeitgesteuerter und beim Boot wirksamer Recovery.
+Private Development- und Monitoring-Websites besitzen eine separate Netzfreigabe.
+
 ## Dokumentation
 
 - [Architektur und Rollen](docs/architecture.md)

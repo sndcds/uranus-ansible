@@ -3,8 +3,8 @@
 # Keep approval false until the owner explicitly authorizes production deployment.
 hetzner_deployment_approved: false
 uranus_security_review_complete: false
-hetzner_management_networks: [203.0.113.10/32]
-hetzner_management_ipv6_networks: []
+# Administrative SSH accepts changing source IPs and requires public-key authentication.
+# This separate allowlist controls access to development and monitoring websites.
 hetzner_private_web_networks: [203.0.113.10/32]
 hetzner_acme_email: admin@example.com
 hetzner_domains:

@@ -47,8 +47,10 @@ sind transaktional und nur für gerade erstellte Datenbanken möglich.
 | Instanzname schon belegt / fremder Owner / Ressourcenänderung | Abbruch, kein Delete, kein Adopt und kein automatisches Resize |
 | `init` oder Start unterbrochen | bestehende Daten erhalten; manuelle Prüfung und bewusster Start; verwaiste Ressourcen stoppen weitere Erstellung |
 | zwei Controller gleichzeitig | Incus verweigert Namenskollisionen; wiederholter Preflight stoppt fremde Zustände; produktive Runs trotzdem serialisieren |
-| neue Firewall verursacht SSH-Verlust | unabhängig laufender Timer stellt frühere eigene Tabelle wieder her; fremde bereits blockierende Regeln bleiben bestehen |
-| Controller stirbt nach Firewall-Anwendung | keine Bestätigung; zeitgesteuerter Rollback; dauerhafte Konfiguration bleibt vorheriger Stand |
+| SSH-Härtung oder neue Firewall verursacht SSH-Verlust | unabhängig laufender Timer stellt frühere eigene SSH-Datei und Firewall wieder her; eine neue Verbindung per Schlüssel ist für Bestätigung erforderlich |
+| Controller stirbt oder Host startet während der Änderung neu | keine Bestätigung; Timer oder Boot-Recovery stellt SSH und persistente Firewall wieder her |
+| widersprechende SSH-Includes / Match / Serviceoptionen | Abbruch bzw. Rollback; keine öffentliche Freigabe vor Nachweis der wirksamen Schlüsselpflicht |
+| Firewallrollback scheitert | Schlüsselpflicht bleibt bestehen; Pending-Zustand erhalten, Recovery über Konsole/Rescue |
 | Backend startet nicht / Healthcheck scheitert | alte Codeversion und, wenn verfügbar, Konfigurationskopie zurück; keine automatische DB-Migration |
 | vorhandene DB oder fehlender Importmarker | DB-Existenz entscheidet; kein Reimport; Pending-Marker verlangt manuelle Recovery |
 | Nominatim-Import unterbrochen | vorhandene unvollständige DB stoppt Wiederholung; temporäre Superuserrechte werden im Ansible-`always`-Block widerrufen |
@@ -67,6 +69,14 @@ und frühere Logs auf Secrets prüfen. Diese Maßnahme kostet stdout-Logs und
 ersetzt die notwendige umfassende Redaktion in der Anwendung nicht.
 
 ## Verbleibende Risiken
+
+Port 22 ist für wechselnde IPv4-/IPv6-Quelladressen erreichbar. Die Anmeldung
+erfordert SSH-Schlüssel; Passwort-, Keyboard-Interactive- und Rootlogin sind
+gesperrt. Damit entfällt die Quellnetzbarriere gegen Internet-Scans. OpenSSH-
+Sicherheitsupdates, Schlüsselrotation und Prüfung der Authentifizierungslogs
+bleiben Betriebsaufgaben. Der Zugriff auf private Webdienste wird separat per
+Netzfreigabe begrenzt. Der reale Host und die Boot-Recovery wurden nicht auf
+Hetzner getestet; eine funktionierende Konsole bleibt Voraussetzung.
 
 Ein vollständiger Anwendungsbetrieb mit realen Daten, produktiver PKI und
 Restore wurde nicht auf Hetzner getestet. Die Nominatim-Pythonabhängigkeiten sind

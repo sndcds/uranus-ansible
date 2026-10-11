@@ -10,10 +10,8 @@ table inet uranus_host {
         iifname "{{ incus_network }}" udp dport { 53, 67 } accept
         iifname "{{ incus_network }}" tcp dport 53 accept
         iifname "{{ incus_network }}" ip saddr 10.77.0.14 tcp dport 5665 accept
-        ip saddr { {{ hetzner_management_networks | join(', ') }} } tcp dport 22 accept
-{% if hetzner_management_ipv6_networks | length %}
-        ip6 saddr { {{ hetzner_management_ipv6_networks | join(', ') }} } tcp dport 22 accept
-{% endif %}
+        # SSH authentication requires a public key; changing IPv4/IPv6 sources are allowed.
+        tcp dport 22 accept
         tcp dport { 80, 443 } accept
     }
     chain forward {

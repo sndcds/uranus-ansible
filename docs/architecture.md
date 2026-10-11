@@ -8,7 +8,7 @@ Transport; Incus-Konsole und `incus exec` bleiben Recovery-Werkzeuge.
 ```mermaid
 flowchart TD
   Internet -->|HTTPS 443| Host[Hetzner: Nginx / ACME]
-  Admin -->|SSH: erlaubte CIDRs| Host
+  Admin -->|SSH: nur Schlüssel, wechselnde IPs| Host
   Host -->|TLS / private Bridge| App[dev01 / prod01]
   Host -->|TLS| Mon[mon01: Icinga / InfluxDB / Grafana]
   Host -->|TLS| Nom[nom01: Nominatim]

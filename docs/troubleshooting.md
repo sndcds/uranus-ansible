@@ -10,7 +10,10 @@ Alle Kommandos sind Beispiele für eine später autorisierte Betriebsphase.
 | Ressourcen-/Device-Drift | `incus config show --expanded` lesen; Änderung separat planen. Kein Delete/Recreate. |
 | Verwaiste Disk / unterbrochenes init | Volume, Instanzstatus, `incus info --show-log` und Incus-Events prüfen. Daten erhalten; manual Recovery. |
 | Gestoppte vollständige Instanz | Ursache prüfen; Start ausdrücklich über Incus oder `incus_start_existing=true` autorisieren. |
-| Firewall bestätigt nicht | 120 Sekunden Rollback abwarten, neue SSH-Verbindung herstellen; `/run/uranus-firewall` und Journal prüfen. |
+| SSH/Firewall bestätigt nicht | 120 Sekunden Rollback abwarten, neue Verbindung per Schlüssel herstellen; `/var/lib/uranus/host-access` und Journal prüfen. |
+| SSH Match / Serviceoptionen abgelehnt | Hostbestand gesondert prüfen; kein Entfernen fremder Regeln und keine blinde Freigabe von Port 22. |
+| Keine neue SSH-Verbindung per Schlüssel | SSH-Agent/privaten Schlüssel, bestehenden Benutzer und authorized_keys prüfen; Passwort oder Rootlogin nicht als Ausweichweg aktivieren. |
+| Boot-Recovery schlägt fehl | Konsole/Rescue verwenden; Journal und erhaltenen Pending-Zustand prüfen, ursprüngliche SSH-Datei und Firewall aus gesicherten Transaktionsdaten wiederherstellen. |
 | Keine Gast-SSH-Verbindung | Cloud-init, Incus-Konsole, DHCP-Lease und Hostschlüssel kontrollieren; keine Hostkey-Prüfung abschalten. |
 | SQL pending marker | DB und Logs prüfen, Backup sichern; unvollständige Erstinitialisierung manuell beheben. Marker nicht blind löschen. |
 | Nominatim unvollständig | Daten bewahren und Wiederanlauf planen; Superuserrechte sofort prüfen und widerrufen. |
@@ -41,8 +44,8 @@ realen Extrakten zu validieren.
 Für Diagnose lokaler Units:
 
 ```bash
-systemctl status incus incus.socket uranus-host-firewall
-journalctl -u incus -u uranus-host-firewall
+systemctl status incus incus.socket uranus-host-firewall uranus-access-recovery ssh
+journalctl -u incus -u uranus-host-firewall -u uranus-access-recovery -u ssh
 sudo env INCUS_DIR=/data/incus incus --force-local --project uranus list
 ```
 
