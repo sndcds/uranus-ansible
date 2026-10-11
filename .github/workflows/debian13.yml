@@ -21,11 +21,15 @@ jobs:
         run: |
           python -m pip install -r requirements-test.txt
           sudo apt-get update
-          sudo apt-get install -y cloud-init cloud-image-utils qemu-utils nginx postgresql postgresql-16-postgis-3 python3-psycopg2
+          sudo apt-get install -y cloud-init cloud-image-utils qemu-utils nginx \
+            postgresql postgresql-16-postgis-3 python3-psycopg2 \
+            nftables openssh-server iproute2
       - name: Install pinned Ansible collections
         run: ansible-galaxy collection install -r requirements.yml
       - name: Run local tests, all syntax checks and Debian lint
         run: make check
+      - name: Prove SSH lockout rollback in isolated network namespaces
+        run: sudo env URANUS_FIREWALL_INTEGRATION=1 "$(command -v python)" -m pytest -q tests/test_firewall_namespace.py
   debian13-native-validation:
     runs-on: ubuntu-24.04
     container: debian:13
@@ -54,3 +58,40 @@ jobs:
           runuser --user uranus-test -- env \
             PATH="/opt/uranus-qa/bin:$PATH" \
             ANSIBLE_COLLECTIONS_PATH=/opt/ansible/collections make check
+  debian13-application-compatibility:
+    runs-on: ubuntu-24.04
+    container: debian:13
+    timeout-minutes: 20
+    steps:
+      - name: Install native application packages without starting daemons
+        run: |
+          printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+          chmod 0755 /usr/sbin/policy-rc.d
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            git curl ca-certificates python3 python3-venv build-essential pkg-config \
+            osm2pgsql libicu-dev postgresql-client-17 php8.4-fpm php8.4-pgsql \
+            php8.4-gd php8.4-intl php8.4-mbstring php8.4-xml php8.4-curl \
+            icinga2 icinga2-ido-pgsql icingaweb2 icingaweb2-module-monitoring \
+            icingacli influxdb monitoring-plugins postfix libsasl2-modules \
+            rsyslog logrotate libosinfo-bin
+          mkdir -p /etc/apt/keyrings
+          curl --fail --location https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /etc/apt/keyrings/uranus-nodesource.asc
+          curl --fail --location https://apt.grafana.com/gpg-full.key -o /etc/apt/keyrings/grafana.asc
+          printf '%s\n' \
+            'deb [signed-by=/etc/apt/keyrings/uranus-nodesource.asc] https://deb.nodesource.com/node_24.x nodistro main' \
+            > /etc/apt/sources.list.d/uranus-nodesource.list
+          printf '%s\n' 'deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main' > /etc/apt/sources.list.d/uranus-grafana.list
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs grafana
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install isolated Python application dependencies
+        run: |
+          python3 -m venv /opt/uranus-app-qa
+          /opt/uranus-app-qa/bin/python -m pip install -r requirements-test.txt \
+            nominatim-db==5.1.0 nominatim-api==5.1.0 'psycopg[binary]' gunicorn uvicorn falcon
+      - name: Verify every application role on native Debian 13
+        run: |
+          PATH="/opt/uranus-app-qa/bin:$PATH" URANUS_NATIVE_APPLICATIONS=1 \
+            /opt/uranus-app-qa/bin/python -m pytest -q tests/test_application_compatibility.py

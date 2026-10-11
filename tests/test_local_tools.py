@@ -23,6 +23,11 @@ def test_real_qemu_clone_and_nocloud_seed_preserve_guest_data_on_repeat(tmp_path
     seeds_dir = tmp_path / 'seeds'
     monkeypatch.setattr(safety, 'STORAGE', storage)
     monkeypatch.setattr(safety, 'SEEDS', seeds_dir)
+    # The real-disk fixture is 1 GiB; the production policy additionally reserves
+    # 10 GiB download scratch space. Capacity accounting is tested separately.
+    usage = safety.shutil.disk_usage(storage)
+    assert usage.free > 1024**3
+    monkeypatch.setattr(safety.shutil, 'disk_usage', lambda path: usage._replace(free=1024**4))
     vm = {**settings['hetzner_vms'][0], 'disk': 1}
     network = render('roles/debian13_hypervisor/templates/network.xml.j2')
     image = base_dir / 'base.qcow2'

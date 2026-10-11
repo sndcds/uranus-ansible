@@ -55,9 +55,9 @@
     - name: Load dedicated application settings
       ansible.builtin.import_tasks: guest-vars.yml
   tasks:
-    - name: Configure application backend with existing compatible role
+    - name: Configure Debian backend while retaining database consistency checks
       ansible.builtin.include_role:
-        name: app_backend
+        name: debian13_backend
         apply:
           no_log: true
       when: vm_role in ['dev', 'prod']

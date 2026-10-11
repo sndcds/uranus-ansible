@@ -1,0 +1,6 @@
+---
+- name: Restart Debian backend
+  ansible.builtin.systemd_service:
+    name: uranus-backend
+    daemon_reload: true
+    state: restarted

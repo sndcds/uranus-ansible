@@ -7,15 +7,61 @@
     group: root
     mode: '0755'
 
-- name: Render host firewall without flushing other nftables tables
+- name: Read the actual SSH peer without sudo environment filtering
+  ansible.builtin.command:
+    argv: [python3, -c, 'import os; print(os.environ.get("SSH_CONNECTION", ""))']
+  become: false
+  register: debian13_hypervisor_ssh_connection
+  changed_when: false
+
+- name: Create firewall helper directory
+  ansible.builtin.file:
+    path: /usr/local/lib/uranus
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install independent host firewall transaction implementation
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../module_utils/uranus_firewall.py"
+    dest: /usr/local/lib/uranus/uranus_firewall.py
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install host firewall watchdog entrypoint
+  ansible.builtin.copy:
+    src: firewall-transaction.py
+    dest: /usr/local/sbin/uranus-firewall-transaction
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Render candidate without replacing the confirmed firewall
   ansible.builtin.template:
     src: host-firewall.nft.j2
-    dest: /etc/uranus/host-firewall.nft
+    dest: /etc/uranus/host-firewall.candidate.nft
     owner: root
     group: root
     mode: '0600'
     validate: /usr/sbin/nft --check --file %s
-  notify: Reload Debian host firewall
+
+- name: Install boot recovery for an interrupted firewall transaction
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-firewall-recover.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Recover an unconfirmed Uranus firewall after reboot
+      DefaultDependencies=no
+      After=local-fs.target
+      Before=uranus-host-firewall.service network-pre.target
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/uranus-firewall-transaction recover
+      [Install]
+      WantedBy=multi-user.target
 
 - name: Install dedicated firewall service
   ansible.builtin.copy:
@@ -24,14 +70,15 @@
     content: |
       [Unit]
       Description=Uranus dedicated host input firewall
-      Before=libvirtd.service virtqemud.service
-      After=network-pre.target
+      DefaultDependencies=no
+      Before=network-pre.target libvirtd.service virtqemud.service
+      After=local-fs.target uranus-firewall-recover.service
+      Requires=uranus-firewall-recover.service
       Wants=network-pre.target
       [Service]
       Type=oneshot
       RemainAfterExit=yes
       ExecStart=/usr/sbin/nft --file /etc/uranus/host-firewall.nft
-      ExecReload=/usr/sbin/nft --file /etc/uranus/host-firewall.nft
       [Install]
       WantedBy=multi-user.target
   notify: Reload Debian hypervisor systemd
@@ -40,7 +87,62 @@
   ansible.builtin.systemd_service:
     daemon_reload: true
 
-- name: Enable and start dedicated firewall service
+- name: Enable persistent transaction recovery before any firewall change
+  ansible.builtin.systemd_service:
+    name: uranus-firewall-recover
+    enabled: true
+
+- name: Apply the firewall only with automatic rollback and fresh SSH confirmation
+  block:
+    - name: Arm host watchdog before loading the candidate firewall
+      uranus_firewall_transaction:
+        state: prepared
+        candidate: /etc/uranus/host-firewall.candidate.nft
+        connection: "{{ debian13_hypervisor_ssh_connection.stdout }}"
+        networks: "{{ hetzner_management_networks + hetzner_management_ipv6_networks }}"
+        timeout: "{{ hetzner_firewall_rollback_seconds }}"
+      register: debian13_hypervisor_firewall_transaction
+    - name: Prove a new authenticated TCP connection from the controller
+      uranus_fresh_ssh:
+        host: "{{ hostvars[inventory_hostname].ansible_host }}"
+        user: "{{ hostvars[inventory_hostname].ansible_user }}"
+        port: "{{ hostvars[inventory_hostname].ansible_port | default(22) }}"
+        token: "{{ debian13_hypervisor_firewall_transaction.token }}"
+        private_key: >-
+          {{ hostvars[inventory_hostname].ansible_private_key_file
+             | default(hostvars[inventory_hostname].ansible_ssh_private_key_file | default(omit)) }}
+        common_args: >-
+          {{ hostvars[inventory_hostname].ansible_ssh_common_args | default('') }}
+          {{ hostvars[inventory_hostname].ansible_ssh_extra_args | default('') }}
+      delegate_to: localhost
+      become: false
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: debian13_hypervisor_firewall_proof
+      when:
+        - debian13_hypervisor_firewall_transaction.changed
+        - not ansible_check_mode
+    - name: Commit only a firewall proven by a fresh SSH connection
+      uranus_firewall_transaction:
+        state: confirmed
+        token: "{{ debian13_hypervisor_firewall_transaction.token }}"
+        proof: "{{ debian13_hypervisor_firewall_proof.proof }}"
+      when:
+        - debian13_hypervisor_firewall_transaction.changed
+        - not ansible_check_mode
+  rescue:
+    - name: Restore the previous firewall immediately when the controller can still connect
+      uranus_firewall_transaction:
+        state: rolled_back
+        token: "{{ debian13_hypervisor_firewall_transaction.token | default(omit) }}"
+      when: debian13_hypervisor_firewall_transaction.token is defined
+    - name: Stop provisioning after an unconfirmed firewall change
+      ansible.builtin.fail:
+        msg: >-
+          Firewall confirmation failed. Preserve the previous rules; the independent
+          host watchdog restores them even when the controller loses its connection.
+
+- name: Enable and start only the confirmed dedicated firewall
   ansible.builtin.systemd_service:
     name: uranus-host-firewall
     enabled: true

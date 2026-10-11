@@ -2,7 +2,3 @@
 - name: Reload Debian hypervisor systemd
   ansible.builtin.systemd_service:
     daemon_reload: true
-- name: Reload Debian host firewall
-  ansible.builtin.systemd_service:
-    name: uranus-host-firewall
-    state: reloaded

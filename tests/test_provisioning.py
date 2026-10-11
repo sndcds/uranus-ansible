@@ -305,3 +305,63 @@ def test_nested_mount_under_storage_is_rejected(monkeypatch):
         return json.dumps({'filesystems': [{'target': target, 'uuid': safety.EXPECTED_UUID, 'options': 'rw'}]})
     with pytest.raises(safety.SafetyError, match='Unexpected filesystem'):
         safety.storage_guard(run)
+
+
+def test_existing_sparse_disks_are_reserved_even_when_no_vm_is_missing(host, monkeypatch):
+    apply(host)
+    host.calls.clear()
+    monkeypatch.setattr(safety.shutil, 'disk_usage', lambda path: SimpleNamespace(free=20 * 1024**3))
+    with pytest.raises(safety.SafetyError, match='existing disk growth'):
+        apply(host)
+    assert not host.mutations()
+
+
+def test_partial_provisioning_accounts_for_all_existing_disks(host):
+    apply(host)
+    result = safety.Provisioner(host.run, lambda run: None).plan(host.vms[:1], host.network)
+    assert len(result['capacity']['volumes']) == 6
+    assert result['capacity']['existing_growth_bytes'] > 599 * 1024**3
+    assert result['capacity']['new_disk_bytes'] == 0
+
+
+def test_capacity_includes_initial_base_cache_and_full_new_disks(host):
+    result = safety.Provisioner(host.run, lambda run: None).plan(host.vms, host.network)
+    assert result['capacity']['required_bytes'] == 615 * 1024**3
+    assert result['capacity']['cache_bytes'] == 10 * 1024**3
+
+
+def test_existing_cache_keeps_space_for_a_replacement_download(host):
+    result = apply(host)
+    assert result['capacity']['cache_bytes'] == 10 * 1024**3
+    assert result['capacity']['required_bytes'] == 615 * 1024**3
+
+
+def test_foreign_vm_disk_on_data_is_included_without_adopting_it(host, monkeypatch):
+    root = safety.STORAGE.parent.parent
+    monkeypatch.setattr(safety, 'DATA', root)
+    foreign = root / 'foreign.qcow2'
+    foreign.write_bytes(b'Foreign data')
+    host.domains['foreign'] = f'<domain><devices><disk device="disk"><source file="{foreign}"/></disk></devices></domain>'
+    original = host.run
+    def run(argv):
+        if argv[0] == 'findmnt':
+            return json.dumps({'filesystems': [{'uuid': safety.EXPECTED_UUID}]})
+        if argv[0] == 'qemu-img' and argv[-1] == str(foreign):
+            return json.dumps({'format': 'qcow2', 'virtual-size': 80 * 1024**3})
+        return original(argv)
+    result = safety.Provisioner(run, lambda run: None).plan(host.vms, host.network)
+    assert result['capacity']['existing_growth_bytes'] > 79 * 1024**3
+    assert foreign.read_bytes() == b'Foreign data' and not host.mutations()
+
+
+def test_capacity_rejects_unbounded_foreign_backing_chains(host):
+    extra = safety.STORAGE / 'foreign.qcow2'
+    extra.write_bytes(b'Do not alter')
+    original = host.run
+    def run(argv):
+        if argv[0] == 'qemu-img' and argv[-1] == str(extra):
+            return json.dumps({'format': 'qcow2', 'virtual-size': 1024**3, 'backing-filename': 'other.qcow2'})
+        return original(argv)
+    with pytest.raises(safety.SafetyError, match='backing chain'):
+        safety.Provisioner(run, lambda run: None).plan(host.vms, host.network)
+    assert extra.read_bytes() == b'Do not alter' and not host.mutations()

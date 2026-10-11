@@ -40,18 +40,12 @@
       - {key: versatiles, domain: "{{ hetzner_domains.versatiles }}", upstream: 10.77.0.16}
 
 - name: Verify public DNS before requesting certificates
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -c
-      - >-
-        import socket,sys;
-        addresses={r[4][0] for r in socket.getaddrinfo(sys.argv[1],443,type=socket.SOCK_STREAM)};
-        sys.exit(0 if addresses == {sys.argv[2]} else 1)
-      - "{{ item.domain }}"
-      - "{{ hetzner_public_ipv4 }}"
+  uranus_dns_guard:
+    domain: "{{ item.domain }}"
+    ipv4: "{{ hetzner_public_ipv4 }}"
+    ipv6: "{{ hetzner_public_ipv6 }}"
+    assigned_ipv6: "{{ ansible_facts.all_ipv6_addresses }}"
   loop: "{{ debian13_ingress_sites }}"
-  changed_when: false
 
 - name: Install public ingress packages without starting a default site
   ansible.builtin.apt:

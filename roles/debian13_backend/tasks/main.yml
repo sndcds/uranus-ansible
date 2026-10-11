@@ -1,0 +1,144 @@
+---
+- name: Require fixed backend schema and a verified Go toolchain
+  ansible.builtin.assert:
+    that:
+      - backend_db_schema == 'uranus'
+      - backend_go_archive_sha256 is match('^[0-9a-f]{64}$')
+
+- name: Install Debian backend build dependencies
+  ansible.builtin.apt:
+    name: [git, build-essential, tar, ca-certificates]
+    state: present
+
+- name: Create versioned Go toolchain directory
+  ansible.builtin.file:
+    path: "/usr/local/lib/uranus/go-{{ backend_go_version }}"
+    state: directory
+    mode: '0755'
+
+- name: Download verified Go toolchain without removing existing installations
+  ansible.builtin.get_url:
+    url: "https://go.dev/dl/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    dest: "/var/cache/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    checksum: "sha256:{{ backend_go_archive_sha256 }}"
+    mode: '0644'
+
+- name: Extract only the selected versioned Go toolchain
+  ansible.builtin.unarchive:
+    src: "/var/cache/go{{ backend_go_version }}.linux-amd64.tar.gz"
+    dest: "/usr/local/lib/uranus/go-{{ backend_go_version }}"
+    creates: "/usr/local/lib/uranus/go-{{ backend_go_version }}/go/bin/go"
+    remote_src: true
+
+- name: Create backend service user
+  ansible.builtin.user:
+    name: uranus
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create backend service directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: '0755'
+  loop:
+    - /opt/uranus/backend/source
+    - /opt/uranus/backend/bin
+    - /opt/uranus/backend/profile_images
+    - /opt/uranus/backend/pluto/images
+    - /opt/uranus/backend/pluto/cache
+    - /etc/uranus
+    - /var/log/uranus
+
+- name: Check out backend source with consistency checks intact
+  ansible.builtin.git:
+    repo: "{{ backend_repo_url }}"
+    dest: /opt/uranus/backend/source
+    version: "{{ backend_repo_version }}"
+    force: false
+  become: true
+  become_user: uranus
+  register: debian13_backend_source
+
+- name: Inspect successful backend build marker
+  ansible.builtin.stat:
+    path: /opt/uranus/backend/bin/.build-revision
+  register: debian13_backend_marker
+
+- name: Read successful backend build marker
+  ansible.builtin.slurp:
+    src: /opt/uranus/backend/bin/.build-revision
+  register: debian13_backend_last_build
+  when: debian13_backend_marker.stat.exists
+
+- name: Inspect the previously built backend executable
+  ansible.builtin.stat:
+    path: /opt/uranus/backend/bin/uranus-api
+  register: debian13_backend_binary
+
+- name: Build backend without modifying module metadata or database validation
+  ansible.builtin.command:
+    argv:
+      - "/usr/local/lib/uranus/go-{{ backend_go_version }}/go/bin/go"
+      - build
+      - -mod=readonly
+      - -o
+      - /opt/uranus/backend/bin/uranus-api
+      - ./uranus-api.go
+    chdir: /opt/uranus/backend/source
+  become: true
+  become_user: uranus
+  environment:
+    GOTOOLCHAIN: local
+  when: >-
+    not debian13_backend_binary.stat.exists or
+    (debian13_backend_last_build.content | default('') | b64decode | trim)
+    != (debian13_backend_source.after ~ ':' ~ backend_go_version ~ ':' ~ backend_go_archive_sha256)
+  changed_when: true
+  notify: Restart Debian backend
+
+- name: Record only successful backend build inputs
+  ansible.builtin.copy:
+    dest: /opt/uranus/backend/bin/.build-revision
+    content: "{{ debian13_backend_source.after }}:{{ backend_go_version }}:{{ backend_go_archive_sha256 }}\n"
+    owner: uranus
+    group: uranus
+    mode: '0644'
+
+- name: Deploy backend configuration for private DB and public HTTPS
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: /etc/uranus/config.json
+    owner: uranus
+    group: uranus
+    mode: '0600'
+  no_log: true
+  notify: Restart Debian backend
+
+- name: Install backend unit without source patches
+  ansible.builtin.template:
+    src: backend.service.j2
+    dest: /etc/systemd/system/uranus-backend.service
+    mode: '0644'
+  notify: Restart Debian backend
+
+- name: Install private image metrics script and units
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/app_backend/templates/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {src: pluto-image-metrics-push.sh.j2, dest: /usr/local/bin/pluto-image-metrics-push, mode: '0755'}
+    - {src: pluto-image-metrics.service.j2, dest: /etc/systemd/system/pluto-image-metrics.service, mode: '0644'}
+    - {src: pluto-image-metrics.timer.j2, dest: /etc/systemd/system/pluto-image-metrics.timer, mode: '0644'}
+
+- name: Start backend and image metric timer
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    daemon_reload: true
+    enabled: true
+    state: started
+  loop: [uranus-backend.service, pluto-image-metrics.timer]

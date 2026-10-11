@@ -148,6 +148,7 @@
     state: planned
     vms: "{{ debian13_hypervisor_selected_vms }}"
     network_xml: "{{ lookup('template', 'network.xml.j2') }}"
+    image: "{{ hetzner_image_path }}"
   register: debian13_hypervisor_plan
 
 - name: Verify storage again before image download
@@ -176,6 +177,7 @@
     group: root
     mode: '0644'
     timeout: 300
+    tmp_dest: "{{ hetzner_storage_path }}/.base"
   when: debian13_hypervisor_plan.new_vms | length > 0
 
 - name: Render initial cloud-init data only for absent guests

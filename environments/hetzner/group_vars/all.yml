@@ -2,9 +2,11 @@
 # Enable only after the owner explicitly authorizes a production deployment.
 hetzner_deployment_approved: false
 hetzner_public_ipv4: 94.130.236.38
+hetzner_public_ipv6: []
 hetzner_ssh_public_key_file: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
 hetzner_management_networks: []
 hetzner_management_ipv6_networks: []
+hetzner_firewall_rollback_seconds: 90
 hetzner_storage_uuid: 7f882d89-a2cf-46d2-9db8-5333be51a300
 hetzner_storage_path: /data/libvirt/images
 hetzner_host_reserve_mb: 4096

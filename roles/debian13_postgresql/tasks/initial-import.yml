@@ -1,13 +1,4 @@
 ---
-- name: Record pending initialization before copying the dump
-  ansible.builtin.copy:
-    dest: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_pending"
-    content: "Initial import requires manual recovery if this file remains.\n"
-    owner: "{{ debian13_postgresql_owner }}"
-    group: "{{ debian13_postgresql_group }}"
-    mode: '0600'
-    force: false
-
 - name: Copy the requested initial SQL dump
   ansible.builtin.copy:
     src: "{{ debian13_postgresql_dump_root }}/{{ application_db.dump_file }}"
@@ -43,17 +34,3 @@
   environment:
     PGPASSWORD: "{{ application_db.password }}"
   no_log: true
-
-- name: Mark the completed initial import
-  ansible.builtin.copy:
-    dest: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_complete"
-    content: "Initialized once; existing databases are never reimported.\n"
-    owner: "{{ debian13_postgresql_owner }}"
-    group: "{{ debian13_postgresql_group }}"
-    mode: '0600'
-    force: false
-
-- name: Clear only the successful initialization marker
-  ansible.builtin.file:
-    path: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_pending"
-    state: absent

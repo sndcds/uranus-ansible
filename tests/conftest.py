@@ -21,6 +21,7 @@ def render(settings):
     environment = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
     environment.filters['to_json'] = json.dumps
     environment.filters['bool'] = bool
+    environment.filters['ternary'] = lambda value, yes, no: yes if value else no
     environment.filters['regex_replace'] = __import__('re').sub
     def render_template(path, **variables):
         context = {**settings, **variables}

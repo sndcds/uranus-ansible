@@ -13,6 +13,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 EXPECTED_UUID = "7f882d89-a2cf-46d2-9db8-5333be51a300"
+DATA = Path('/data')
 STORAGE = Path("/data/libvirt/images")
 SEEDS = Path("/data/libvirt/cloud-init")
 OWNER = "uranus-debian13/v1"
@@ -134,7 +135,59 @@ class Provisioner:
         if size.get("backing-filename") or size["virtual-size"] != vm["disk"] * 1024 ** 3:
             raise SafetyError(f"Disk size/backing-file drift for {vm['name']}")
 
-    def plan(self, vms, network_xml):
+    def capacity(self, vms, missing, domains, image=None):
+        """Reserve maximum disk growth, including foreign domains on /data."""
+        volumes = {p for p in STORAGE.rglob('*.qcow2') if '.base' not in p.relative_to(STORAGE).parts}
+        for name in domains:
+            root = ET.fromstring(self.virsh('dumpxml', name, '--inactive'))
+            for source in root.findall("devices/disk[@device='disk']/source"):
+                path = Path(source.get('file', '/'))
+                if path.is_relative_to(DATA) and not path.is_relative_to(STORAGE):
+                    reject_symlinks(path)
+                    if not path.is_file():
+                        raise SafetyError(f'Cannot account for missing foreign VM disk {path}')
+                    mount = json.loads(self.run(['findmnt', '--json', '--target', str(path),
+                                                 '--output', 'UUID']))['filesystems'][0]
+                    if mount.get('uuid') == EXPECTED_UUID:
+                        volumes.add(path)
+        growth, seen, accounted = 0, set(), []
+        for path in sorted(volumes):
+            reject_symlinks(path)
+            if path.name.startswith('.'):
+                raise SafetyError(f'Interrupted disk staging requires manual recovery: {path}')
+            stat = path.stat()
+            identity = (stat.st_dev, stat.st_ino)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            info = json.loads(self.run(['qemu-img', 'info', '--force-share', '--output=json', str(path)]))
+            if info.get('backing-filename') or info.get('format') not in ('qcow2', 'raw'):
+                raise SafetyError(f'Unbounded backing chain or unknown disk format: {path}')
+            reserved = max(0, info['virtual-size'] - stat.st_blocks * 512)
+            growth += reserved
+            accounted.append({'path': str(path), 'growth_bytes': reserved})
+        cache = 0
+        if missing:
+            # Free space already excludes existing caches. Keep scratch space for
+            # a replacement download alongside them, even if a cache file exists.
+            cache = 10 * 1024**3
+            if image and Path(image).is_file():
+                reject_symlinks(image)
+                if Path(image).stat().st_size > 10 * 1024**3:
+                    raise SafetyError('Pinned base image exceeds the 10 GiB cache budget')
+        new_disks = sum(vm['disk'] for vm in vms if vm['name'] in missing) * 1024**3
+        required = new_disks + growth + cache + 5 * 1024**3
+        existing = STORAGE
+        while not existing.exists():
+            existing = existing.parent
+        free = shutil.disk_usage(existing).free
+        if free < required:
+            raise SafetyError(f'Insufficient free space: require {required} bytes for new disks, '
+                              'existing disk growth, cache and 5 GiB reserve')
+        return {'required_bytes': required, 'free_bytes': free, 'new_disk_bytes': new_disks,
+                'existing_growth_bytes': growth, 'cache_bytes': cache, 'volumes': accounted}
+
+    def plan(self, vms, network_xml, image=None):
         self.guard(self.run)
         desired = network_signature(network_xml)
         network_name, bridge, gateway = desired[:3]
@@ -212,18 +265,12 @@ class Provisioner:
                 if os.path.lexists(disk) or os.path.lexists(seed):
                     raise SafetyError(f"Orphaned disk/cloud-init data for {vm['name']}; manual recovery required")
                 missing.append(vm["name"])
-        if missing:
-            existing = STORAGE
-            while not existing.exists():
-                existing = existing.parent
-            required = sum(vm["disk"] for vm in vms if vm["name"] in missing) * 1024 ** 3 + 5 * 1024 ** 3
-            if shutil.disk_usage(existing).free < required:
-                raise SafetyError("Insufficient free space for the full virtual disks plus 5 GiB reserve")
+        capacity = self.capacity(vms, missing, domains, image)
         return {"new_vms": missing, "network_exists": network_name in networks,
-                "pool_exists": network_name in pools, "network_name": network_name}
+                "pool_exists": network_name in pools, "network_name": network_name, 'capacity': capacity}
 
     def apply(self, vms, network_xml, image, checksum, seeds, check_mode=False, start_existing=False):
-        plan = self.plan(vms, network_xml)
+        plan = self.plan(vms, network_xml, image)
         if check_mode:
             return {**plan, "changed": bool(plan["new_vms"] or not plan["network_exists"] or not plan["pool_exists"])}
         changed = False

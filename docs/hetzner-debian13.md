@@ -10,6 +10,18 @@ ausdrücklicher Freigabe des Betreibers erfolgen.** Auch `--check` ist keine
 rein lesende Serverbestandsaufnahme: Ansible kann dabei temporäre Dateien
 anlegen. Entwicklungsprüfungen verwenden ausschließlich lokale Fixtures/CI.
 
+## Entscheidung für Debian 13 auf allen Gästen
+
+Der Betreiber hat ausdrücklich **„Debian 13 auf Host und allen VMs“** gewählt.
+Ubuntu 24.04 wäre für die bisherigen Ubuntu-/uvtool-Rollen der näherliegende
+Gast gewesen; die Wahl von Debian ist eine Betreiberentscheidung und keine
+Behauptung, Ubuntu sei ungeeignet. Ein einheitlicher Debian-13-Paketstand auf
+Host und Gästen erleichtert die Prüfung von PostgreSQL 17, PHP 8.4, Cloud-init
+und Dienstpfaden. Dafür werden abweichende Anwendungsrollen separat
+implementiert und in einem nativen Debian-13-Container geprüft. Eine Mischung
+mit Ubuntu-Gästen oder Migration vorhandener Ubuntu-VMs erfolgt nicht.
+Die unveränderten Ubuntu-Dateien bleiben über 84 Referenz-Hashes abgesichert.
+
 ## Bestandsaufnahme und belegter Stand
 
 Ausgangsstand: `main` / `5da0e94acf8ee10b1a8cb112cd591ddb6b7f0ff6`.
@@ -65,9 +77,15 @@ Alle Gäste befinden sich im privaten IPv4-Netz `10.77.0.0/24` hinter NAT;
 `virbr-uranus` / `10.77.0.1` ist das Gateway. Es werden keine öffentlichen
 Gast-IP-Adressen, physischen Bridges oder eingehenden Portweiterleitungen
 angelegt. IPv6-DHCP und Router Advertisements sind in den Gästen deaktiviert.
-Der Host-Proxy kann HTTP/HTTPS auch über IPv6 annehmen, aber die initiale
-DNS-Prüfung verlangt ausschließlich A-Records auf die bestätigte IPv4-Adresse.
-AAAA-Records sind vor einem gesondert geprüften IPv6-Konzept nicht zulässig.
+Der Host-Proxy kann HTTP/HTTPS auch über IPv6 annehmen. Die DNS-Prüfung fragt
+A und AAAA unabhängig ab und normalisiert IPv6-Adressen. A muss exakt auf
+`94.130.236.38` zeigen; AAAA muss exakt `hetzner_public_ipv6` entsprechen.
+Diese Liste bleibt ohne bestätigte IPv6-Zuweisung leer. Für Dual-Stack muss
+jede konfigurierte öffentliche IPv6-Adresse tatsächlich auf dem Host liegen;
+fremde, fehlende oder unerwartete Records und temporäre Resolverfehler führen
+vor Änderungen an Proxy oder Zertifikaten zum Abbruch. IPv6-Management-CIDRs
+werden separat festgelegt. Die Gäste bleiben auch bei öffentlichem Dual-Stack
+im privaten IPv4-NAT.
 
 | VM | Private IP | RAM (MiB) | vCPU | Disk (GiB) | Aufgabe |
 | --- | --- | ---: | ---: | ---: | --- |
@@ -80,8 +98,17 @@ AAAA-Records sind vor einem gesondert geprüften IPv6-Konzept nicht zulässig.
 
 Die VMs benötigen zusammen 42 GiB RAM und 600 GiB virtuelle Plattenkapazität.
 Der Host benötigt zusätzlich mindestens 4 GiB RAM-Reserve. Neue Platten werden
-konservativ gegen freie Kapazität einschließlich 5 GiB Storage-Reserve geprüft;
-Sparse-Dateien werden nicht als Erlaubnis zur Überbelegung betrachtet.
+konservativ gegen freie Kapazität geprüft: volle virtuelle Größe aller neuen
+Platten, verbleibendes Wachstum aller vorhandenen qcow2-Platten im Storage,
+weitere libvirt-Dateivolumes auf dem UUID-geprüften `/data`, 10 GiB für einen
+parallel bestehenden Image-Download und 5 GiB Betriebsreserve.
+Damit benötigt die Erstprovisionierung mindestens **615 GiB freien Platz**.
+Bereits physisch belegte Blöcke sind im freien Platz enthalten und werden nicht
+doppelt reserviert; Hardlinks zählen nur einmal. Auch eine Teilauswahl oder
+ein Lauf ohne neue VMs prüft das Wachstum sämtlicher vorhandener Volumes.
+Unbekannte Backing-Chains, Symlinks und unterbrochene Image-Staging-Dateien
+stoppen den Lauf. Sparse-Dateien erlauben keine Überbelegung. Der Download
+verwendet ein temporäres Verzeichnis auf `/data`, nicht das Root-Dateisystem.
 Die Quellwerte stehen in `environments/hetzner/group_vars/all.yml`.
 Adressen, Firewall- und DB-ACLs bilden ein zusammenhängendes festes Layout;
 Netzwerkänderungen müssen gemeinsam in Inventory, VM-Liste und ACLs geprüft
@@ -137,6 +164,33 @@ oder andere Firewalltabellen zu löschen. Bestehende Regeln anderer Systeme
 können weiterhin Zugriffe sperren und müssen vor Deployment lesend geprüft
 werden. Die Standard-`nftables.service` des Hosts wird nicht umkonfiguriert.
 
+Eine Firewalländerung ist eine Transaktion mit unabhängiger Rücknahme:
+
+1. Der Host prüft den tatsächlichen `SSH_CONNECTION`-Peer gegen die
+   Management-CIDRs und sichert seine bisherige eigene Tabelle und bestätigte
+   Konfiguration dauerhaft mit einem exklusiven Lock.
+2. Vor dem Laden des Kandidaten wird ein Host-systemd-Timer aktiviert und seine
+   Aktivität überprüft. Nach `hetzner_firewall_rollback_seconds` (Standard 90;
+   zulässig 30–600 Sekunden) stellt er den vorherigen Zustand wieder her.
+3. Der Controller muss eine neue authentifizierte SSH-TCP-Verbindung mit
+   strikter Hostschlüsselprüfung nachweisen. `ControlPath=none` und deaktiviertes
+   Multiplexing verhindern eine falsche Bestätigung über eine noch offene
+   Verbindung. Die Antwort enthält die Challenge und das vom Server
+   beobachtete neue Verbindungs-Tupel.
+4. Erst danach und bei unverändertem Kandidaten wird dauerhaft bestätigt.
+   Controller-Abbruch, fehlende Bestätigung oder Fristüberschreitung lassen den
+   Watchdog aktiv. Eine monotone Frist verhindert eine Verlängerung durch eine
+   zurückgestellte Uhr. Nach einem Host-Neustart stellt eine Recovery-Unit
+   offene Transaktionen vor dem Firewall-/Netzwerkstart wieder her.
+
+Die Rücknahme verändert ausschließlich `inet uranus_debian13`; libvirt- und
+fremde Tabellen bleiben erhalten. Falls eine offene Transaktion untersucht
+werden muss, zunächst Pending-Status, Journal und laufende Timer lesen. Eine
+bewusst autorisierte Rücknahme verwendet anschließend den installierten
+`uranus-firewall-transaction recover`-Helper; Pending-Dateien nicht löschen,
+um einen neuen Kandidaten zu erzwingen. Kernel-, Dateisystem- oder systemd-
+Ausfälle benötigen weiterhin einen externen Konsolen-/Rettungszugang.
+
 Die separaten Gast-Firewalls erlauben SSH und Webzugriff nur vom NAT-Gateway.
 PostgreSQL erhält individuelle Regeln für Dev, Prod, Monitoring und Nominatim;
 die `pg_hba.conf` beschränkt zusätzlich Benutzer und Datenbanken mit SCRAM.
@@ -177,8 +231,17 @@ Existierende Datenbanken werden unabhängig von Schema und Markerdateien
 erhalten. Geänderte Dump-Dateien lösen keinen Wiederimport aus. Der initiale
 Import läuft mit dem unprivilegierten Datenbankbenutzer in einer Transaktion
 mit `ON_ERROR_STOP`. Unsichere psql-Metakommandos und globale Datenbankoperationen
-werden zuvor abgelehnt. Scheitert die Initialisierung, bleibt ein Pending-Marker
-stehen; weitere Läufe stoppen für eine manuelle Wiederherstellung.
+werden zuvor abgelehnt. Noch **vor** `CREATE DATABASE` wird ein exklusiver,
+mit `fsync` gesicherter Pending-Claim mit Zufalls-Token angelegt, auch bei einer
+Initialisierung ohne Dump. Er bleibt bis nach Import, Schema und Grants bestehen.
+Erst ein vollständig erfolgreicher Lauf schreibt den Completion-Nachweis und
+entfernt den Claim. Abbruch vor/nach DB-Erstellung, SQL-Fehler oder Abbruch nach
+einem Commit führen beim Folgelauf zum Stopp für manuelle Wiederherstellung.
+Ein Completion-Nachweis bei fehlender Datenbank verhindert einen automatischen
+Ersatz einer später verlorenen Datenbank. Nach einem Controller-SIGKILL kann
+ein bereits gestarteter Import-Worker weiterarbeiten; der Claim verhindert
+auch dann einen konkurrierenden Wiederimport. Vor einer manuellen Recovery
+immer DB-Zustand und aktive Worker prüfen, niemals nur den Marker löschen.
 
 Bei Nominatim entscheidet der reale Datenbankzustand. Existierende vollständige
 Datenbanken werden weiterverwendet, unvollständige erhalten und abgelehnt.
@@ -307,6 +370,10 @@ make check
 - Echte Ansible-Datenbanktasks auf einer temporären lokalen PostgreSQL-Instanz:
   Erstimport, Live-Daten nach Dumpänderung/Markerverlust, unbekanntes Schema,
   gesperrter Erstimport, transaktionaler Fehler und verweigerter psql-Escape.
+- Unterbrechungen vor und nach DB-Erstellung, nach einem SQL-Commit sowie
+  Controller-SIGKILL während des Imports; Folgeläufe erhalten OID und Daten.
+- Firewall-Transaktionen, Fristen, fremde Tabellen, Check-Mode, Drift und
+  unabhängige A-/AAAA-Prüfungen mit IPv4-/IPv6-Regressionen.
 - Cloud-init-Schema- und Debian-Netzwerk-Konvertierungsprüfungen für alle sechs Gäste und Nginx-Parserprüfungen
   für alle Gastrollen sowie HTTP-/TLS-Ingress. Nginx-Testlistener verwenden
   kurzzeitig unprivilegierte Loopback-Ports; kein Nginx-Dienst wird gestartet.
@@ -325,6 +392,21 @@ Check-Mode-Läufe auf dem Dedicated-Server. Diese Prüfungen ersetzen noch keine
 separat freizugebenden vollständigen KVM-/App-End-to-End-Test auf einem
 isolierten Debian-13-Testhost.
 
+Zusätzlich erzwingt CI einen echten SSH-/nftables-/systemd-Test in getrennten
+Netzwerk-Namespaces: Ein falscher Kandidat blockiert neue SSH-Verbindungen,
+während eine alte Multiplexing-Verbindung weiter funktioniert. Nach SIGKILL
+des Controllers stellt der reale Timer die vorherigen Regeln wieder her;
+fremde Tabellen bleiben gleich. Ein erfolgreicher Kandidat wird anschließend
+bestätigt und ein zweiter Lauf bleibt unverändert. Vor jeder Netzwerkänderung
+prüft die Fixture ihre Trennung vom Netzwerk-Namespace des CI-Hosts.
+
+Ein zusätzlicher nativer Debian-13-Job installiert sämtliche App-Abhängigkeiten
+ohne Daemon-Autostart und prüft Backend-Build, Frontend-Build mit eingefrorenem
+Lockfile, Nominatim-ASGI-Factory, Icinga-Konfigurationsparser/DB-Schemapfade,
+PHP 8.4, InfluxDB, Grafana, VersaTiles, Postfix, Backup und Logrotate.
+Die genaue Rollenmatrix, Findings und verbleibenden Grenzen stehen im
+[Adversarial-Review-Bericht](adversarial-review-pr1.md).
+
 Lokaler Prüfstand vom 10.10.2026: **74 Tests bestanden**, alle **14 Playbooks**
 auf Syntax geprüft, `ansible-lint production` ohne Regelverstöße. **84 Dateien**
 des bisherigen Ubuntu-Pfads stimmen mit dem Referenzmanifest überein.
@@ -341,11 +423,11 @@ Der tatsächliche CI-Status und die Links zu den Läufen werden im Draft-PR doku
 - **Freigabe und Zielkonfiguration:** Betreiber entscheidet über Deployment,
   Domains, DNS, ACME-Kontakt, Management-Netze, private Dev-/Monitoring-Zugriffe,
   erste Importe und Datenmigration. Standardwerte aktivieren kein Deployment.
-- **Anwendungs-Releases:** Die kompatible Backend-/Postfix-/App-Backup-
-  Implementierung wird wiederverwendet. Sie enthält unter anderem den bisherigen
-  Patch zum Überspringen der Backend-DB-Konsistenzprüfung. App-Versionen und
-  dieser Patch müssen fachlich überprüft werden; Branch-Namen sind keine
-  unveränderlichen Release-Pins. Der neue Frontend-Pfad unterstützt npm und
+- **Anwendungs-Releases:** Der Debian-Backend-Pfad behält die
+  DB-Konsistenzprüfung bei und verändert beim Build keine Quelldateien oder
+  Modulmetadaten. Postfix und App-Backup werden unverändert wiederverwendet.
+  Branch-Namen sind keine unveränderlichen Release-Pins; die in CI geprüften
+  Commits müssen für ein Deployment bewusst ausgewählt werden. Frontend unterstützt npm und
   versionsgebundenes pnpm mit vorhandenem Lockfile und Node.js 24.
 - **Lieferketten:** Debian- und VersaTiles-Artefakte sind unveränderlich mit
   Prüfsummen festgelegt. NodeSource/Grafana verwenden signierte externe APT-
@@ -365,6 +447,12 @@ Der tatsächliche CI-Status und die Links zu den Läufen werden im Draft-PR doku
   große Nominatim-Backups, Festplattenreserve und zusätzliche fremde VM-
   Ressourcen müssen vor Deployment überprüft werden. Ein Standardlayout passt
   nicht automatisch auf jeden Dedicated-Tarif.
+- **Unterbrochener Nominatim-Erstimport:** Der bestehende `always`-Block entzieht
+  temporäre Superuserrechte bei kontrolliertem Ansible-Fehler. Bei hartem
+  Controller-/Host-Ausfall kann dieser Block ausbleiben. Vor einer Fortsetzung
+  müssen privilegierte Rollen, Import-Worker und unvollständige Datenbanken
+  manuell geprüft werden; ein eigener Import-Watchdog bleibt eine offene
+  Härtungsaufgabe. App-PostgreSQL-Imports laufen weiterhin unprivilegiert.
 - **Kein automatischer Ersatz:** Bestehende Ubuntu-VMs mit denselben Namen
   werden nicht in Debian umgewandelt. Migration erfordert gesonderten Plan und
   Backup; der Schutz vor fremden Domains stoppt eine unbeabsichtigte Übernahme.

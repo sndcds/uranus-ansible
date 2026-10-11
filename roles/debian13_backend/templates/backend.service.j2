@@ -1,0 +1,19 @@
+[Unit]
+Description=Uranus Debian Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=uranus
+Group=uranus
+WorkingDirectory=/opt/uranus/backend/source
+Environment=PATH=/usr/local/lib/uranus/go-{{ backend_go_version }}/go/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/uranus/backend/bin/uranus-api -config /etc/uranus/config.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

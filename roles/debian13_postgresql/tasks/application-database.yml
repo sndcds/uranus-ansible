@@ -22,6 +22,27 @@
   become_user: postgres
   register: debian13_postgresql_existing_db
 
+- name: Inspect evidence of a previously completed initialization
+  ansible.builtin.stat:
+    path: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_complete"
+  register: debian13_postgresql_initialization_complete
+
+- name: Stop if a previously initialized database has disappeared
+  ansible.builtin.assert:
+    that: not debian13_postgresql_initialization_complete.stat.exists or debian13_postgresql_existing_db.rowcount > 0
+    fail_msg: Previously initialized database is missing; restore it manually instead of creating a replacement.
+
+- name: Claim initialization durably before creating any new database
+  uranus_initialization_guard:
+    state_dir: "{{ debian13_postgresql_state_dir }}"
+    database: "{{ application_db.name }}"
+    state: claimed
+    import_requested: "{{ hetzner_app_initial_import | bool }}"
+  become: true
+  become_user: "{{ debian13_postgresql_owner }}"
+  when: debian13_postgresql_existing_db.rowcount == 0
+  register: debian13_postgresql_initialization_claim
+
 - name: Create only an absent application database
   community.postgresql.postgresql_db:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
@@ -32,6 +53,12 @@
   become_user: postgres
   when: debian13_postgresql_existing_db.rowcount == 0
   register: debian13_postgresql_created_db
+
+- name: Stop if another process created the database after the exclusive claim
+  ansible.builtin.assert:
+    that: debian13_postgresql_created_db is changed
+    fail_msg: Database appeared concurrently; preserve it and recover the pending initialization manually.
+  when: debian13_postgresql_existing_db.rowcount == 0
 
 - name: Enable PostGIS without replacing application data
   community.postgresql.postgresql_ext:
@@ -83,3 +110,13 @@
     privs: USAGE,SELECT,UPDATE
   become: true
   become_user: postgres
+
+- name: Complete initialization only after import schema and grants succeeded
+  uranus_initialization_guard:
+    state_dir: "{{ debian13_postgresql_state_dir }}"
+    database: "{{ application_db.name }}"
+    state: completed
+    token: "{{ debian13_postgresql_initialization_claim.token }}"
+  become: true
+  become_user: "{{ debian13_postgresql_owner }}"
+  when: debian13_postgresql_existing_db.rowcount == 0

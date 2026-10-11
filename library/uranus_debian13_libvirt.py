@@ -67,7 +67,7 @@ def main():
     try:
         provisioner = Provisioner()
         if p["state"] == "planned":
-            result = dict(changed=False, **provisioner.plan(p["vms"], p["network_xml"]))
+            result = dict(changed=False, **provisioner.plan(p["vms"], p["network_xml"], p['image']))
         elif module.check_mode:
             result = provisioner.apply(p["vms"], p["network_xml"], p["image"], p["image_sha512"], p["seeds"], check_mode=True)
         else:
