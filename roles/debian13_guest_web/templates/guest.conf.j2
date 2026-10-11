@@ -1,22 +1,25 @@
-# Only the NAT gateway may reach port 80 (enforced by the guest firewall).
-set_real_ip_from {{ hetzner_gateway }};
+# Only the NAT gateway may reach port 443 (enforced by the guest firewall).
+set_real_ip_from {{ incus_gateway }};
 real_ip_header X-Real-IP;
 real_ip_recursive off;
+ssl_certificate /etc/ssl/certs/uranus-instance.pem;
+ssl_certificate_key /etc/ssl/private/uranus-instance.key;
+ssl_protocols TLSv1.2 TLSv1.3;
 server {
-    listen {{ ansible_host }}:80 default_server;
+    listen {{ ansible_host }}:443 ssl default_server;
     server_name _;
     return 444;
 }
-{% if vm_role in ['dev', 'prod'] %}
+{% if instance_role in ['dev', 'prod'] %}
 server {
-    listen {{ ansible_host }}:80;
+    listen {{ ansible_host }}:443 ssl;
     server_name {{ frontend_domain }};
-    root /opt/uranus/frontend/dist;
+    root /opt/uranus/frontend/current;
     index index.html;
     location / { try_files $uri $uri/ /index.html; }
 }
 server {
-    listen {{ ansible_host }}:80;
+    listen {{ ansible_host }}:443 ssl;
     server_name {{ backend_domain }};
     location / {
         proxy_pass http://127.0.0.1:{{ backend_port }};
@@ -26,9 +29,9 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 }
-{% elif vm_role == 'monitoring' %}
+{% elif instance_role == 'monitoring' %}
 server {
-    listen {{ ansible_host }}:80;
+    listen {{ ansible_host }}:443 ssl;
     server_name {{ icinga_web_domain }};
     root /usr/share/icingaweb2/public;
     index index.php;
@@ -54,9 +57,9 @@ server {
     }
     location ~ \.php$ { return 404; }
 }
-{% elif vm_role == 'nominatim' %}
+{% elif instance_role == 'nominatim' %}
 server {
-    listen {{ ansible_host }}:80;
+    listen {{ ansible_host }}:443 ssl;
     server_name {{ nominatim_domain }};
     location / {
         proxy_set_header Host $host;
@@ -65,9 +68,9 @@ server {
         proxy_pass http://unix:/run/nominatim.sock:;
     }
 }
-{% elif vm_role == 'versatiles' %}
+{% elif instance_role == 'versatiles' %}
 server {
-    listen {{ ansible_host }}:80;
+    listen {{ ansible_host }}:443 ssl;
     server_name {{ versatiles_domain }};
     location / {
         proxy_set_header Host $host;

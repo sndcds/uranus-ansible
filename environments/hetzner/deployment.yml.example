@@ -2,6 +2,7 @@
 # These are documentation-only examples. Replace addresses/domains before use.
 # Keep approval false until the owner explicitly authorizes production deployment.
 hetzner_deployment_approved: false
+uranus_security_review_complete: false
 hetzner_management_networks: [203.0.113.10/32]
 hetzner_management_ipv6_networks: []
 hetzner_private_web_networks: [203.0.113.10/32]
@@ -19,3 +20,7 @@ hetzner_domains:
 hetzner_app_initial_import: false
 hetzner_nominatim_initial_import: false
 # Pin frontend_repo_version and backend_repo_version to reviewed commits for releases.
+
+# Inventory host variables: provide different reviewed commits for each app host.
+# Use a separate extra-vars file: {backend_repo_version: <40hex>, frontend_repo_version: <40hex>}
+# For different dev/prod revisions, set the corresponding inventory host_vars files.

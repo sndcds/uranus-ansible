@@ -1,4 +1,18 @@
 ---
+- name: Build postfix credentials
+  ansible.builtin.command:
+    argv: [postmap, /etc/postfix/sasl_passwd]
+  changed_when: true
+  notify: Restart postfix
+
+- name: Protect hashed postfix credentials
+  ansible.builtin.file:
+    path: /etc/postfix/sasl_passwd.db
+    owner: root
+    group: root
+    mode: '0600'
+  listen: Build postfix credentials
+
 - name: Restart postfix
   ansible.builtin.systemd:
     name: postfix

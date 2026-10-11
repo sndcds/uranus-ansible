@@ -48,7 +48,11 @@ server {
     location / {
         limit_req zone={{ 'uranus_geocoder' if site.key == 'nominatim' else 'uranus_general' }} burst=10 nodelay;
         limit_req_status 429;
-        proxy_pass http://{{ site.upstream }}:80;
+        proxy_pass https://{{ site.upstream }}:443;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/uranus-ca.pem;
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ site.instance }};
         proxy_http_version 1.1;
         proxy_set_header Host {{ site.domain }};
         proxy_set_header X-Real-IP $remote_addr;

@@ -35,3 +35,24 @@
     name: nginx
     enabled: true
     state: started
+
+- name: Validate frontend activation over internal TLS with code rollback
+  when: instance_role in ['dev', 'prod']
+  block:
+    - name: Require the newly served static frontend to answer successfully
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ frontend_health_endpoint }}"
+        headers:
+          Host: "{{ frontend_domain }}"
+        ca_path: /etc/ssl/certs/uranus-ca.pem
+        status_code: 200
+  rescue:
+    - name: Restore the previous frontend artifact when available
+      ansible.builtin.file:
+        src: "{{ debian13_frontend_previous.stat.lnk_source }}"
+        dest: /opt/uranus/frontend/current
+        state: link
+      when: debian13_frontend_previous.stat.exists
+    - name: Report frontend activation failure and preserve release artifacts
+      ansible.builtin.fail:
+        msg: Frontend healthcheck failed; previous static artifact restored when available. Review before retry.

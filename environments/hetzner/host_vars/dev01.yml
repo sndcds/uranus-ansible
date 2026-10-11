@@ -1,0 +1,8 @@
+---
+app_env: development
+frontend_repo_version: ''
+backend_repo_version: ''
+db_host: '{{ hostvars[''db01''].ansible_host }}'
+db_name: uranus_dev
+db_user: uranus_dev
+db_password: '{{ vault_db_password_dev }}'

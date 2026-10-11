@@ -1,27 +1,21 @@
 ---
 all:
   children:
-    debian13_hypervisors:
+    incus_hosts:
       hosts:
         hetzner:
           ansible_host: 94.130.236.38
           ansible_user: awendelk
-    debian13_vms:
+    uranus_instances:
       vars:
         ansible_user: debian
         ansible_become: true
-        ansible_ssh_common_args: >-
-          -o ProxyJump=awendelk@94.130.236.38 -o StrictHostKeyChecking=yes
+        ansible_ssh_common_args: -o ProxyJump=awendelk@94.130.236.38 -o StrictHostKeyChecking=yes
+        ansible_host: '{{ (incus_instances | selectattr(''name'', ''equalto'', inventory_hostname) | first).ip }}'
       hosts:
-        db01:
-          ansible_host: 10.77.0.11
-        dev01:
-          ansible_host: 10.77.0.12
-        prod01:
-          ansible_host: 10.77.0.13
-        mon01:
-          ansible_host: 10.77.0.14
-        nom01:
-          ansible_host: 10.77.0.15
-        vers01:
-          ansible_host: 10.77.0.16
+        db01: {}
+        dev01: {}
+        prod01: {}
+        mon01: {}
+        nom01: {}
+        vers01: {}

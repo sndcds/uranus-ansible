@@ -1,0 +1,95 @@
+---
+- name: Validate all storage networks projects and instances before mutations
+  uranus_incus_guard:
+    instances: "{{ incus_instances }}"
+    images: "{{ incus_images }}"
+    reserve_gib: "{{ incus_storage_reserve_gib }}"
+    quotas: "{{ incus_container_quotas }}"
+  register: incus_instance_plan
+
+- name: Guard filesystem before creating project
+  uranus_storage_guard: {}
+  when: not incus_instance_plan.project_exists
+
+- name: Create the isolated Uranus project through the Incus CLI
+  ansible.builtin.command:
+    argv:
+      - incus
+      - --force-local
+      - project
+      - create
+      - uranus
+      - --description=uranus/incus/v1
+      - --config=features.images=true
+      - --config=features.profiles=true
+      - --config=features.storage.volumes=true
+      - --config=features.networks=false
+      - --config=restricted=true
+      - --config=restricted.containers.privilege=unprivileged
+      - --config=restricted.containers.nesting=block
+      - --config=restricted.devices.disk=managed
+      - --config=restricted.devices.nic=managed
+      - --config=restricted.networks.access=uranusincus0
+  changed_when: true
+  when: not incus_instance_plan.project_exists
+
+- name: Guard filesystem before creating pool
+  uranus_storage_guard: {}
+  when: not incus_instance_plan.pool_exists
+
+- name: Create the Directory pool on existing ext4 without formatting
+  ansible.builtin.command:
+    argv: [incus, --force-local, storage, create, uranus, dir, user.uranus.owner=uranus/incus/v1]
+  changed_when: true
+  when: not incus_instance_plan.pool_exists
+
+- name: Guard filesystem before creating network
+  uranus_storage_guard: {}
+  when: not incus_instance_plan.network_exists
+
+- name: Create the dedicated IPv4 NAT bridge
+  ansible.builtin.command:
+    argv: [incus, --force-local, network, create, uranusincus0, ipv4.address=10.77.0.1/24, ipv4.nat=true, ipv4.dhcp=true,
+           ipv6.address=none, user.uranus.owner=uranus/incus/v1]
+  changed_when: true
+  when: not incus_instance_plan.network_exists
+
+- name: Provision only missing instances using native Incus initialization
+  ansible.builtin.include_tasks: create.yml
+  loop: "{{ incus_instances }}"
+  loop_control:
+    loop_var: incus_instance
+    label: "{{ incus_instance.name }}"
+  when: incus_instance.name in incus_instance_plan.new_instances
+
+- name: Start stopped existing instances only on explicit request
+  ansible.builtin.include_tasks: start.yml
+  loop: "{{ incus_instance_plan.stopped_instances }}"
+  loop_control:
+    loop_var: incus_instance_name
+  when: incus_start_existing | bool
+
+- name: Verify the final complete resource state
+  uranus_incus_guard:
+    instances: "{{ incus_instances }}"
+    images: "{{ incus_images }}"
+    reserve_gib: "{{ incus_storage_reserve_gib }}"
+    quotas: "{{ incus_container_quotas }}"
+  register: incus_instance_verified
+
+- name: Require every requested instance to exist
+  ansible.builtin.assert:
+    that: incus_instance_verified.new_instances | length == 0
+
+- name: Install host monitoring certificate
+  ansible.builtin.include_role:
+    name: internal_tls
+
+- name: Monitor host resources and data NVMe through the same private agent
+  ansible.builtin.include_role:
+    name: icinga_agent
+
+- name: Install optional external Incus export schedule
+  ansible.builtin.include_role:
+    name: incus_backup
+  when: incus_export_backups_enabled | bool

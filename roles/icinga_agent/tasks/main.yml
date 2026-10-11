@@ -1,0 +1,121 @@
+---
+- name: Install native Icinga agent without starting its default configuration
+  ansible.builtin.apt:
+    name: [icinga2, monitoring-plugins]
+    state: present
+    policy_rc_d: 101
+
+- name: Permit Icinga to read its protected instance certificate key
+  ansible.builtin.user:
+    name: nagios
+    groups: ssl-cert
+    append: true
+
+- name: Create resource checker directory
+  ansible.builtin.file:
+    path: /usr/local/lib/uranus
+    state: directory
+    mode: '0755'
+
+- name: Install CPU memory disk and network checker
+  ansible.builtin.copy:
+    src: check-resources.py
+    dest: /usr/local/lib/uranus/check-resources.py
+    mode: '0755'
+
+- name: Pin the authenticated Icinga node identity
+  ansible.builtin.lineinfile:
+    path: /etc/icinga2/constants.conf
+    regexp: '^(//)?const NodeName ='
+    line: 'const NodeName = "{{ inventory_hostname }}"'
+  notify: Restart Icinga agent
+
+- name: Pin local Icinga zone consistently with its endpoint
+  ansible.builtin.lineinfile:
+    path: /etc/icinga2/constants.conf
+    regexp: '^const ZoneName ='
+    line: 'const ZoneName = "{{ "master" if inventory_hostname == "mon01" else inventory_hostname }}"'
+  notify: Restart Icinga agent
+
+- name: Select application configuration without distribution sample checks
+  ansible.builtin.copy:
+    dest: /etc/icinga2/icinga2.conf
+    mode: '0644'
+    content: |
+      include "constants.conf"
+      include "zones.conf"
+      include <itl>
+      include <plugins>
+      include <plugins-contrib>
+      include "features-enabled/*.conf"
+      include "conf.d/templates.conf"
+      include "conf.d/uranus-check-command.conf"
+      include "conf.d/api-users.conf"
+      include "conf.d/uranus-debian13.conf"
+  notify: Restart Icinga agent
+
+- name: Prepare optional master definitions without replacing configured checks
+  ansible.builtin.copy:
+    dest: "/etc/icinga2/conf.d/{{ item }}.conf"
+    content: "// Managed Uranus master configuration is installed by the monitoring role.\n"
+    force: false
+    mode: '0644'
+  loop: [api-users, uranus-debian13]
+
+- name: Configure authenticated master and agent zones
+  ansible.builtin.template:
+    src: zones.conf.j2
+    dest: /etc/icinga2/zones.conf
+    mode: '0644'
+  notify: Restart Icinga agent
+
+- name: Create native Icinga certificate directory
+  ansible.builtin.file:
+    path: /var/lib/icinga2/certs
+    state: directory
+    owner: nagios
+    group: nagios
+    mode: '0750'
+
+- name: Link native Icinga identity to the verified internal certificate
+  ansible.builtin.file:
+    src: "{{ item.source }}"
+    dest: "/var/lib/icinga2/certs/{{ item.dest }}"
+    state: link
+  loop:
+    - {source: /etc/ssl/certs/uranus-instance.pem, dest: "{{ inventory_hostname }}.crt"}
+    - {source: /etc/ssl/private/uranus-instance.key, dest: "{{ inventory_hostname }}.key"}
+    - {source: /etc/ssl/certs/uranus-ca.pem, dest: ca.crt}
+  notify: Restart Icinga agent
+
+- name: Configure private Icinga transport
+  ansible.builtin.template:
+    src: api.conf.j2
+    dest: /etc/icinga2/features-available/api.conf
+    mode: '0644'
+  notify: Restart Icinga agent
+
+- name: Enable Icinga TLS API only behind guest firewall
+  ansible.builtin.file:
+    src: /etc/icinga2/features-available/api.conf
+    dest: /etc/icinga2/features-enabled/api.conf
+    state: link
+  notify: Restart Icinga agent
+
+- name: Install guest resource command definition
+  ansible.builtin.template:
+    src: check-command.conf.j2
+    dest: /etc/icinga2/conf.d/uranus-check-command.conf
+    mode: '0644'
+  notify: Restart Icinga agent
+
+- name: Validate Icinga before activating agent configuration
+  ansible.builtin.command:
+    argv: [icinga2, daemon, -C]
+  changed_when: false
+
+- name: Start private Icinga agent
+  ansible.builtin.systemd_service:
+    name: icinga2
+    enabled: true
+    state: started

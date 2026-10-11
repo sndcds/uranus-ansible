@@ -1,9 +1,0 @@
-version: 2
-ethernets:
-  primary:
-    match:
-      macaddress: {{ item.mac | to_json }}
-    set-name: ens3
-    dhcp4: true
-    dhcp6: false
-    accept-ra: false

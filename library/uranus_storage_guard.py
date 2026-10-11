@@ -1,7 +1,7 @@
 #!/usr/bin/python
 """Verify the dedicated host's storage without changing it."""
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.uranus_debian13 import SafetyError, storage_guard
+from ansible.module_utils.uranus_safety import SafetyError, storage_guard
 
 DOCUMENTATION = r'''
 ---

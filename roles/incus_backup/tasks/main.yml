@@ -1,0 +1,72 @@
+---
+- name: Require external backup configuration for the optional export schedule
+  ansible.builtin.assert:
+    that:
+      - vault_restic_repository | default('') is match('^(sftp:|s3:https://|rest:https://)')
+      - vault_restic_password | default('') is match('^[A-Za-z0-9_-]{32,}$')
+      - vault_restic_repository is match('^[A-Za-z0-9:/._@-]+$')
+  no_log: true
+
+- name: Install encrypted backup client
+  ansible.builtin.apt:
+    name: restic
+    state: present
+
+- name: Guard storage before creating export directory
+  uranus_storage_guard: {}
+
+- name: Create protected Incus export directory
+  ansible.builtin.file:
+    path: /data/incus/backups
+    state: directory
+    mode: '0700'
+
+- name: Install guarded native Incus export script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: /usr/local/sbin/uranus-incus-backup
+    mode: '0700'
+
+- name: Write encrypted transport environment
+  ansible.builtin.copy:
+    dest: /etc/uranus/restic.env
+    mode: '0600'
+    content: |
+      RESTIC_REPOSITORY={{ vault_restic_repository }}
+      RESTIC_PASSWORD={{ vault_restic_password }}
+  no_log: true
+
+- name: Install Incus export service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-incus-backup.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Guarded Incus export to encrypted off-host storage
+      Requires=incus.service
+      After=incus.service
+      [Service]
+      Type=oneshot
+      EnvironmentFile=/etc/uranus/restic.env
+      ExecStart=/usr/local/sbin/uranus-incus-backup
+      UMask=0077
+
+- name: Install optional export schedule
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-incus-backup.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Weekly guarded Incus exports
+      [Timer]
+      OnCalendar=Sun *-*-* 04:00:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable the explicitly selected export schedule
+  ansible.builtin.systemd_service:
+    name: uranus-incus-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

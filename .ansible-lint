@@ -1,0 +1,6 @@
+---
+profile: production
+offline: true
+exclude_paths:
+  - .git/
+  - .pytest_cache/

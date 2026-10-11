@@ -1,7 +1,7 @@
 #!/usr/bin/python
 """Reject unsafe psql commands in initial application dumps."""
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.uranus_debian13 import SafetyError, validate_sql_dump
+from ansible.module_utils.uranus_safety import SafetyError, validate_sql_dump
 
 DOCUMENTATION = r'''
 ---

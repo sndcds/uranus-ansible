@@ -1,0 +1,9 @@
+---
+- name: Reload internal TLS consumers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: restarted
+  loop: [nginx, icinga2, influxdb, postgresql, php8.4-fpm, uranus-backend]
+  when:
+    - (item ~ '.service') in ansible_facts.services
+    - ansible_facts.services[item ~ '.service'].state == 'running'

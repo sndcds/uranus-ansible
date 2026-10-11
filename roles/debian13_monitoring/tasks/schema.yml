@@ -31,6 +31,8 @@
       - "--dbname={{ monitoring_schema.name }}"
       - "--file={{ monitoring_schema.file }}"
   environment:
+    PGSSLMODE: verify-full
+    PGSSLROOTCERT: /etc/ssl/certs/uranus-ca.pem
     PGPASSWORD: "{{ monitoring_schema.password }}"
   when: debian13_monitoring_schema_state.query_result[0].sentinel is none
   changed_when: true

@@ -1,0 +1,213 @@
+---
+- name: Validate Debian host and fixed storage layout
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+      - ansible_facts.architecture == 'x86_64'
+      - incus_data_path == '/data/incus'
+      - incus_pool_path == '/data/incus/storage-pools/uranus'
+      - incus_project == 'uranus'
+      - incus_pool == 'uranus'
+      - incus_network == 'uranusincus0'
+      - incus_gateway == '10.77.0.1'
+      - incus_subnet == '10.77.0.0/24'
+      - hetzner_public_ipv6 is match('^[0-9a-f:]+$')
+      - hetzner_storage_uuid == '7f882d89-a2cf-46d2-9db8-5333be51a300'
+      - incus_instances | map(attribute='memory') | sum + incus_host_reserve_mb | int <= ansible_facts.memtotal_mb
+      - hetzner_management_networks | length > 0
+      - not ansible_check_mode
+    fail_msg: Validate host capacity and layout; provisioning check mode is deliberately refused after the deployment gate.
+
+- name: Verify storage before installing or writing anything
+  uranus_storage_guard: {}
+
+- name: Inspect default Incus database directory without altering it
+  ansible.builtin.find:
+    paths: /var/lib/incus/database
+    file_type: any
+    hidden: true
+  register: incus_host_default_database
+
+- name: Inspect managed data ownership marker
+  ansible.builtin.stat:
+    path: /data/incus/.uranus-owner
+  register: incus_host_owner
+
+- name: Inspect any existing Incus state under the selected data directory
+  ansible.builtin.find:
+    paths: /data/incus
+    file_type: any
+    hidden: true
+  register: incus_host_existing
+
+- name: Require fresh storage or explicitly managed Incus state
+  ansible.builtin.assert:
+    that:
+      - incus_host_default_database.matched == 0
+      - incus_host_existing.matched == 0 or incus_host_owner.stat.exists
+    fail_msg: Existing unmanaged Incus state requires a separately authorized offline migration.
+
+- name: Read existing ownership marker
+  ansible.builtin.slurp:
+    src: /data/incus/.uranus-owner
+  register: incus_host_owner_content
+  when: incus_host_owner.stat.exists
+
+- name: Reject a foreign ownership marker
+  ansible.builtin.assert:
+    that: incus_host_owner_content.content | b64decode | trim == 'uranus/incus/v1'
+  when: incus_host_owner.stat.exists
+
+- name: Install Debian Incus packages without daemon startup
+  ansible.builtin.apt:
+    name: [incus, incus-client, nftables, python3, acl, openssh-client]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Read installed Incus version
+  ansible.builtin.command:
+    argv: [incus, --version]
+  register: incus_host_version
+  changed_when: false
+
+- name: Require the reviewed Debian Incus LTS series
+  ansible.builtin.assert:
+    that: incus_host_version.stdout is search('6\.0\.')
+
+- name: Verify KVM access when any instance uses virtualization
+  ansible.builtin.stat:
+    path: /dev/kvm
+  register: incus_host_kvm
+  when: incus_instances | selectattr('type', 'equalto', 'virtual-machine') | list | length > 0
+
+- name: Require hardware virtualization for selected VMs
+  ansible.builtin.assert:
+    that: incus_host_kvm.stat.exists and incus_host_kvm.stat.ischr
+    fail_msg: Hardware virtualization must be available before starting Incus VMs.
+  when: incus_instances | selectattr('type', 'equalto', 'virtual-machine') | list | length > 0
+
+- name: Guard storage immediately before directory creation
+  uranus_storage_guard: {}
+
+- name: Create protected Incus data directory
+  ansible.builtin.file:
+    path: /data/incus
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Verify mount before writing Incus ownership marker
+  uranus_storage_guard: {}
+
+- name: Record the dedicated Incus data ownership
+  ansible.builtin.copy:
+    dest: /data/incus/.uranus-owner
+    content: "uranus/incus/v1\n"
+    owner: root
+    group: root
+    mode: '0600'
+    force: false
+
+- name: Install boot-time storage guard
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../module_utils/uranus_safety.py"
+    dest: /usr/local/sbin/uranus-storage-guard.py
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Create Incus service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/incus.service.d
+    state: directory
+    mode: '0755'
+
+- name: Keep Incus database images volumes and backups together on data NVMe
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/incus.service.d/uranus.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      RequiresMountsFor=/data/incus
+      After=uranus-host-firewall.service
+      Requires=uranus-host-firewall.service
+      [Service]
+      EnvironmentFile=
+      EnvironmentFile=-/etc/default/incus
+      EnvironmentFile=-/etc/environment
+      EnvironmentFile=/etc/uranus/incus.env
+      ExecStartPre=/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+
+- name: Create host configuration directory
+  ansible.builtin.file:
+    path: /etc/uranus
+    state: directory
+    mode: '0755'
+
+- name: Configure Incus socket and startup units for the protected data mount
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.d"
+    state: directory
+    mode: '0755'
+  loop: [incus.socket, incus-startup.service]
+
+- name: Configure daemon environment shared by all lifecycle units
+  ansible.builtin.copy:
+    dest: /etc/uranus/incus.env
+    content: "INCUS_DIR=/data/incus\n"
+    mode: '0600'
+
+- name: Verify storage before opening the management socket at boot
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-incus-storage.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Verify Uranus Incus data mount
+      RequiresMountsFor=/data/incus
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+
+- name: Keep socket activation on the data NVMe
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/incus.socket.d/uranus.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      Requires=uranus-incus-storage.service
+      After=uranus-incus-storage.service
+      RequiresMountsFor=/data/incus
+      [Socket]
+      ListenStream=
+      ListenStream=/data/incus/unix.socket
+
+- name: Keep startup and shutdown operations on the same Incus database
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/incus-startup.service.d/uranus.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      RequiresMountsFor=/data/incus
+      [Service]
+      EnvironmentFile=/etc/uranus/incus.env
+
+- name: Configure host firewall with automatic SSH rollback
+  ansible.builtin.include_role:
+    name: host_firewall
+
+- name: Enable the guarded Incus daemon
+  ansible.builtin.systemd_service:
+    name: incus
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Wait for the local management socket
+  ansible.builtin.wait_for:
+    path: /data/incus/unix.socket
+    timeout: 60

@@ -11,6 +11,24 @@
     name: [postgresql-17, postgresql-client-17, postgresql-17-postgis-3, python3-psycopg2]
     state: present
 
+- name: Permit PostgreSQL to read its protected TLS key
+  ansible.builtin.user:
+    name: postgres
+    groups: ssl-cert
+    append: true
+
+- name: Require internal TLS for remote PostgreSQL clients
+  ansible.builtin.lineinfile:
+    path: /etc/postgresql/17/main/postgresql.conf
+    regexp: "^#?{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+  loop:
+    - {key: ssl, value: 'on'}
+    - {key: ssl_cert_file, value: "'/etc/ssl/certs/uranus-instance.pem'"}
+    - {key: ssl_key_file, value: "'/etc/ssl/private/uranus-instance.key'"}
+    - {key: ssl_min_protocol_version, value: "'TLSv1.2'"}
+  notify: Restart Debian PostgreSQL
+
 - name: Enable PostgreSQL
   ansible.builtin.systemd_service:
     name: postgresql
@@ -91,3 +109,10 @@
   become: true
   become_user: postgres
   no_log: true
+
+- name: Allow local unprivileged Icinga PostgreSQL availability checks
+  community.postgresql.postgresql_user:
+    name: nagios
+    role_attr_flags: LOGIN,NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
+  become_user: postgres

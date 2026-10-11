@@ -1,0 +1,20 @@
+[Unit]
+Description=Uranus Backend
+After=network-online.target
+[Service]
+User=uranus
+Group=uranus
+WorkingDirectory=/opt/uranus/backend/current/source
+Environment=PGSSLMODE=verify-full
+Environment=PGSSLROOTCERT=/etc/ssl/certs/uranus-ca.pem
+Environment=SSL_CERT_FILE=/etc/ssl/certs/uranus-ca.pem
+ExecStart=/opt/uranus/backend/current/bin/uranus-api -config /opt/uranus/backend/current/config.json
+StandardOutput=null
+StandardError=journal
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+[Install]
+WantedBy=multi-user.target

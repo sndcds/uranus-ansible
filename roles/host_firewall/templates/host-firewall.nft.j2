@@ -1,0 +1,24 @@
+# Preserve all tables except the dedicated Uranus host table, including Incus NAT.
+destroy table inet uranus_host
+table inet uranus_host {
+    chain input {
+        type filter hook input priority 10; policy drop;
+        iifname "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        meta l4proto { icmp, ipv6-icmp } accept
+        iifname "{{ incus_network }}" udp dport { 53, 67 } accept
+        iifname "{{ incus_network }}" tcp dport 53 accept
+        iifname "{{ incus_network }}" ip saddr 10.77.0.14 tcp dport 5665 accept
+        ip saddr { {{ hetzner_management_networks | join(', ') }} } tcp dport 22 accept
+{% if hetzner_management_ipv6_networks | length %}
+        ip6 saddr { {{ hetzner_management_ipv6_networks | join(', ') }} } tcp dport 22 accept
+{% endif %}
+        tcp dport { 80, 443 } accept
+    }
+    chain forward {
+        type filter hook forward priority 10; policy accept;
+        ct state established,related accept
+        iifname != "{{ incus_network }}" oifname "{{ incus_network }}" ct state new drop
+    }
+}

@@ -9,22 +9,26 @@
       - acl
       - python3
       - python3-psycopg2
-      - qemu-guest-agent
       - nftables
       - logrotate
       - unattended-upgrades
-      - systemd-timesyncd
       - openssl
     state: present
     update_cache: true
     cache_valid_time: 3600
 
-- name: Enable guest agent and time synchronization
+- name: Install time synchronization on virtual machines
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+  when: instance_type == 'virtual-machine'
+
+- name: Enable VM time synchronization
   ansible.builtin.systemd_service:
-    name: "{{ item }}"
+    name: systemd-timesyncd
     enabled: true
     state: started
-  loop: [qemu-guest-agent, systemd-timesyncd]
+  when: instance_type == 'virtual-machine'
 
 - name: Set the application timezone
   community.general.timezone:

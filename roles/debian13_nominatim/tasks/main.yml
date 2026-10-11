@@ -1,4 +1,11 @@
 ---
+- name: Require a pinned OSM extract for an authorized first import
+  ansible.builtin.assert:
+    that:
+      - nominatim_data_url is match('^https://')
+      - nominatim_data_sha256 is match('^[0-9a-f]{64}$')
+  when: hetzner_nominatim_initial_import | bool
+
 - name: Inspect Nominatim database existence without modifying it
   community.postgresql.postgresql_query:
     db: postgres
@@ -77,7 +84,7 @@
 
 - name: Deploy Nominatim database environment
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../../roles/nominatim/templates/nominatim.env.j2"
+    src: "nominatim.env.j2"
     dest: "{{ nominatim_project_dir }}/.env"
     owner: nominatim
     group: www-data
@@ -91,6 +98,7 @@
     - name: Download the selected initial OSM extract
       ansible.builtin.get_url:
         url: "{{ nominatim_data_url }}"
+        checksum: "sha256:{{ nominatim_data_sha256 }}"
         dest: "{{ nominatim_data_file }}"
         owner: nominatim
         group: www-data

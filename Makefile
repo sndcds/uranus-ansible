@@ -2,10 +2,13 @@ SHELL := /bin/bash
 export ANSIBLE_LOCAL_TEMP ?= /tmp/uranus-ansible-local
 export ANSIBLE_HOME ?= /tmp/uranus-ansible-home
 export ANSIBLE_COLLECTIONS_PATH ?= $(HOME)/.ansible/collections:/usr/share/ansible/collections:/usr/lib/python3/dist-packages/ansible_collections
-export ANSIBLE_CONFIG := $(CURDIR)/ansible-debian13.cfg
+export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
 
-.PHONY: check test syntax lint
-check: test syntax lint
+.PHONY: check policy test syntax lint
+check: policy test syntax lint
+
+policy:
+	python scripts/check_repository.py
 
 test:
 	python -m pytest -q tests
@@ -14,4 +17,4 @@ syntax:
 	python scripts/check_syntax.py
 
 lint:
-	ansible-lint --offline -c .ansible-lint-debian13.yml playbooks/debian13 roles/debian13_* environments/hetzner/inventory.yml environments/hetzner/group_vars/all.yml .github/workflows/debian13.yml requirements.yml
+	ansible-lint --offline -c .ansible-lint playbooks roles environments/hetzner/inventory.yml environments/hetzner/group_vars/all.yml .github/workflows/incus.yml requirements.yml

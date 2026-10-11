@@ -1,0 +1,5 @@
+object ApiUser "{{ monitoring_api_user }}" {
+  password = "{{ monitoring_api_password }}"
+  permissions = [ "status/query", "filter-expression", "objects/query/*", "actions/reschedule-check", "actions/acknowledge-problem", "actions/remove-acknowledgement",
+                  "actions/add-comment", "actions/remove-comment", "actions/schedule-downtime", "actions/remove-downtime" ]
+}

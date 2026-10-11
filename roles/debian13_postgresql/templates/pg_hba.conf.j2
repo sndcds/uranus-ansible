@@ -3,12 +3,12 @@ local all postgres peer
 local all all peer
 host all all 127.0.0.1/32 scram-sha-256
 host all all ::1/128 scram-sha-256
-host uranus_dev uranus_dev 10.77.0.12/32 scram-sha-256
-host uranus_prod uranus_prod 10.77.0.13/32 scram-sha-256
-host {{ monitoring_web_db_name }} {{ monitoring_web_db_user }} 10.77.0.14/32 scram-sha-256
-host {{ monitoring_ido_db_name }} {{ monitoring_ido_db_user }} 10.77.0.14/32 scram-sha-256
-host {{ nominatim_db_name }} {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
+hostssl uranus_dev uranus_dev 10.77.0.12/32 scram-sha-256
+hostssl uranus_prod uranus_prod 10.77.0.13/32 scram-sha-256
+hostssl {{ monitoring_web_db_name }} {{ monitoring_web_db_user }} 10.77.0.14/32 scram-sha-256
+hostssl {{ monitoring_ido_db_name }} {{ monitoring_ido_db_user }} 10.77.0.14/32 scram-sha-256
+hostssl {{ nominatim_db_name }} {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
 # createdb connects to postgres before creating the initial Nominatim database.
-host postgres {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
+hostssl postgres {{ nominatim_db_user }} 10.77.0.15/32 scram-sha-256
 host all all 0.0.0.0/0 reject
 host all all ::/0 reject

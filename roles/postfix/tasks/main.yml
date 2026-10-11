@@ -22,6 +22,7 @@
       - ca-certificates
       - rsyslog
     state: present
+    policy_rc_d: 101
   when: postfix_relay_enabled
 
 - name: Configure postfix main.cf
@@ -51,23 +52,9 @@
     mode: "0600"
     content: |
       [{{ postfix_relay_host }}]:{{ postfix_relay_port }} {{ postfix_relay_login }}:{{ postfix_relay_password }}
-  register: postfix_sasl_passwords
-  notify: Restart postfix
+  no_log: true
+  notify: Build postfix credentials
   when: postfix_relay_enabled
-
-- name: Build postfix relay credentials database
-  ansible.builtin.command:
-    cmd: postmap /etc/postfix/sasl_passwd
-  when: postfix_sasl_passwords.changed
-  notify: Restart postfix
-
-- name: Ensure hashed relay credential permissions
-  ansible.builtin.file:
-    path: /etc/postfix/sasl_passwd.db
-    owner: root
-    group: root
-    mode: "0600"
-  when: postfix_sasl_passwords.changed
 
 - name: Configure rsyslog mail log
   ansible.builtin.copy:
@@ -78,6 +65,9 @@
       & stop
   notify: Restart rsyslog
   when: postfix_relay_enabled
+
+- name: Build protected relay map before starting mail services
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure rsyslog is enabled and running
   ansible.builtin.systemd:
