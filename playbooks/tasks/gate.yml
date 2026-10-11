@@ -5,7 +5,9 @@
       - hetzner_deployment_approved | default(false) | bool
       - uranus_security_review_complete | default(false) | bool
     fail_msg: >-
-      Production deployment is disabled. Explicit owner authorization and closure
-      of documented security findings are required. Never target 94.130.236.38
-      during development, including check mode.
+      Production deployment is disabled. In environments/hetzner/deployment.yml,
+      hetzner_deployment_approved must record explicit production authorization
+      and uranus_security_review_complete must record the completed review in
+      docs/security.md. Pass the file with -e @environments/hetzner/deployment.yml.
+      Repository edits or a PR merge do not complete these prerequisites.
   tags: always

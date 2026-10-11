@@ -67,7 +67,8 @@ jobs:
           chmod 0755 /usr/sbin/policy-rc.d
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            git ca-certificates python3 python3-venv incus incus-client openssh-client icinga2 icinga2-ido-pgsql kmod
+            git ca-certificates python3 python3-venv incus incus-client openssh-client openssh-server icinga2 icinga2-ido-pgsql kmod
+          install -d -m 0755 /run/sshd
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Install template rendering dependencies
@@ -90,3 +91,5 @@ jobs:
         run: /opt/uranus-contract/bin/python scripts/check_icinga.py
       - name: Parse IPv4 and IPv6 host and guest firewall configuration
         run: /opt/uranus-contract/bin/python scripts/check_firewall.py
+      - name: Validate native key-only SSH for changing IPv4 and IPv6 sources
+        run: /opt/uranus-contract/bin/python scripts/check_ssh.py

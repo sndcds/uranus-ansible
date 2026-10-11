@@ -11,7 +11,8 @@ und CI dürfen nur Fixtures und isolierte Testumgebungen verwenden.
    NVMe-Mount/UUID, freie Kapazität, CPU/KVM, aktive Hypervisorinstanzen, nftables,
    SSH und DNS erfassen. Dieses Repository verändert bestehende Altsysteme nicht.
 3. `environments/hetzner/deployment.yml.example` nach `deployment.yml` kopieren.
-   Echte Domains, ACME-Kontakt, Management-CIDRs und private Web-CIDRs setzen.
+   Echte Domains, ACME-Kontakt und private Web-CIDRs setzen. Administrative SSH-
+   Verbindungen brauchen keine feste Quell-IP; sie erfordern einen Schlüssel.
    Beispielnetze `203.0.113.0/24` sind keine verwendbare Produktionsfreigabe.
 4. `vault.yml.example` nach `vault.yml` kopieren. Separate generierte Secrets
    (`openssl rand -hex 32`) einsetzen und mit `ansible-vault encrypt` verschlüsseln.
@@ -26,6 +27,9 @@ und CI dürfen nur Fixtures und isolierte Testumgebungen verwenden.
    abnehmen. Schlüssel aus der alten Git-Historie widerrufen/rotieren.
 8. Gast-SSH-Hostschlüssel aus vertrauenswürdigem Konsolenkanal in `known_hosts`
    aufnehmen. Firewall-Console/Rescuezugang verfügbar halten.
+   Der bestehende Hostbenutzer muss ohne Rootlogin per Schlüssel und mit sudo
+   erreichbar sein; einen verschlüsselten privaten Schlüssel vorher im SSH-Agent
+   laden. Die Provisionierung ersetzt keine Hostschlüssel oder `authorized_keys`.
 9. Erst nach **neuer ausdrücklicher Produktionsfreigabe** beide Sperrvariablen
    aktivieren. Diese Aufgabe enthält diese Freigabe nicht.
 

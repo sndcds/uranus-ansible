@@ -14,7 +14,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='uranus-nft-parser-') as name:
         for role in ['host','db','dev','prod','monitoring','nominatim','versatiles']:
             source='roles/host_firewall/templates/host-firewall.nft.j2' if role=='host' else 'roles/debian13_guest/templates/firewall.nft.j2'
-            context={**settings,'instance_role':role,'hetzner_management_networks':['203.0.113.0/24'],'hetzner_management_ipv6_networks':['2001:db8::/32']}
+            context={**settings,'instance_role':role}
             file=Path(name)/f'{role}.nft'
             file.write_text(jinja.from_string((ROOT/source).read_text()).render(context))
             result=subprocess.run(['nft','--check','--file',str(file)],text=True,capture_output=True)

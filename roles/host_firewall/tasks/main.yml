@@ -1,28 +1,27 @@
 ---
-- name: Read the current SSH source before changing access rules
+- name: Require a non-root administrative SSH account on the supported port
+  ansible.builtin.assert:
+    that:
+      - ansible_user != 'root'
+      - ansible_port | default(22) | int == 22
+    fail_msg: Use an existing non-root account with a working SSH key and sudo; this workflow does not create or replace host authorized_keys.
+
+- name: Close any previously authenticated SSH control connection
+  ansible.builtin.meta: reset_connection
+
+- name: Prove a fresh SSH connection using only a public key before changing access
+  ansible.builtin.wait_for_connection:
+    timeout: 45
+    connect_timeout: 5
+    sleep: 3
+  become: false
+
+- name: Read the current SSH endpoints before changing access rules
   ansible.builtin.command:
     argv: [printenv, SSH_CONNECTION]
   become: false
   changed_when: false
   register: host_firewall_ssh
-
-- name: Require strict CIDRs and permit the current SSH source in its address family
-  ansible.builtin.command:
-    argv:
-      - python3
-      - -c
-      - >-
-        import ipaddress,json,sys;
-        source=ipaddress.ip_address(sys.argv[1].split()[0]);
-        v4=[ipaddress.ip_network(c,strict=True) for c in json.loads(sys.argv[2])];
-        v6=[ipaddress.ip_network(c,strict=True) for c in json.loads(sys.argv[3])];
-        assert v4 and all(n.version==4 and n.prefixlen>0 for n in v4);
-        assert all(n.version==6 and n.prefixlen>0 for n in v6);
-        assert any(source in n for n in v4+v6 if source.version==n.version)
-      - "{{ host_firewall_ssh.stdout }}"
-      - "{{ hetzner_management_networks | to_json }}"
-      - "{{ hetzner_management_ipv6_networks | to_json }}"
-  changed_when: false
 
 - name: Create firewall configuration directory
   ansible.builtin.file:
@@ -32,21 +31,49 @@
     group: root
     mode: '0755'
 
-- name: Install firewall transaction helper
+- name: Check for an existing unconfirmed firewall transaction
+  ansible.builtin.stat:
+    path: /var/lib/uranus/host-access/pending
+  register: host_firewall_pending
+
+- name: Check for an unconfirmed transaction from the previous helper version
+  ansible.builtin.stat:
+    path: /run/uranus-firewall/pending
+  register: host_firewall_previous_pending
+
+- name: Stop before overwriting an unconfirmed candidate
+  ansible.builtin.assert:
+    that:
+      - not host_firewall_pending.stat.exists
+      - not host_firewall_previous_pending.stat.exists
+    fail_msg: Wait for the timed rollback before another firewall update.
+
+- name: Install firewall transaction helper only after excluding pending updates
   ansible.builtin.copy:
     src: firewall.py
     dest: /usr/local/sbin/uranus-firewall.py
     mode: '0700'
 
-- name: Check for an existing unconfirmed firewall transaction
-  ansible.builtin.stat:
-    path: /run/uranus-firewall/pending
-  register: host_firewall_pending
+- name: Stage key-only SSH policy without changing the running daemon
+  ansible.builtin.copy:
+    src: host-ssh.conf
+    dest: /etc/uranus/host-ssh.candidate.conf
+    owner: root
+    group: root
+    mode: '0600'
+    validate: /usr/sbin/sshd -t -f %s
+  register: host_firewall_ssh_candidate
 
-- name: Stop before overwriting an unconfirmed candidate
-  ansible.builtin.assert:
-    that: not host_firewall_pending.stat.exists
-    fail_msg: Wait for the timed rollback before another firewall update.
+- name: Audit supported SSH configuration and detect policy drift without changes
+  ansible.builtin.command:
+    argv:
+      - python3
+      - /usr/local/sbin/uranus-firewall.py
+      - audit
+      - "{{ ansible_user }}"
+      - "{{ host_firewall_ssh.stdout }}"
+  register: host_firewall_ssh_audit
+  changed_when: false
 
 - name: Render and parse candidate without applying it
   ansible.builtin.template:
@@ -64,30 +91,85 @@
     checksum_algorithm: sha1
   register: host_firewall_confirmed
 
-- name: Apply changed rules with automatic rollback and a new SSH connection
-  when: host_firewall_candidate.checksum != host_firewall_confirmed.stat.checksum | default('')
+- name: Install recovery of unconfirmed access changes before SSH starts at boot
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-access-recovery.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Recover unconfirmed Uranus SSH and firewall changes
+      After=local-fs.target
+      Before=ssh.service uranus-host-firewall.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/bin/python3 /usr/local/sbin/uranus-firewall.py rollback
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Create the SSH service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.service.d
+    state: directory
+    mode: '0755'
+
+- name: Require recovery before starting SSH
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.service.d/uranus-access-recovery.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      Requires=uranus-access-recovery.service
+      After=uranus-access-recovery.service
+
+- name: Enable access recovery before applying the first transaction
+  ansible.builtin.systemd_service:
+    name: uranus-access-recovery
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Apply SSH and firewall changes with automatic rollback and a new key connection
+  when: >-
+    host_firewall_candidate.checksum != host_firewall_confirmed.stat.checksum | default('')
+    or host_firewall_ssh_audit.stdout | trim != 'current'
   block:
-    - name: Arm rollback before applying the candidate
+    - name: Arm combined rollback before applying either candidate
       ansible.builtin.command:
-        argv: [python3, /usr/local/sbin/uranus-firewall.py, begin, "{{ host_firewall_candidate.checksum }}"]
+        argv:
+          - python3
+          - /usr/local/sbin/uranus-firewall.py
+          - begin
+          - "{{ host_firewall_candidate.checksum }}"
+          - "{{ host_firewall_ssh_candidate.checksum }}"
+          - "{{ ansible_user }}"
+          - "{{ host_firewall_ssh.stdout }}"
       register: host_firewall_transaction
       changed_when: true
     - name: Close the existing SSH control connection
       ansible.builtin.meta: reset_connection
-    - name: Verify a fresh authenticated SSH connection before confirmation
+    - name: Verify a fresh public-key SSH connection before confirmation
       ansible.builtin.wait_for_connection:
         timeout: 45
         connect_timeout: 5
         sleep: 3
       become: false
-    - name: Persist only the confirmed firewall
+    - name: Confirm only the tested SSH policy and firewall
       ansible.builtin.command:
-        argv: [python3, /usr/local/sbin/uranus-firewall.py, confirm, "{{ host_firewall_transaction.stdout | trim }}"]
+        argv:
+          - python3
+          - /usr/local/sbin/uranus-firewall.py
+          - confirm
+          - "{{ host_firewall_transaction.stdout | trim }}"
+          - "{{ ansible_user }}"
+          - "{{ host_firewall_ssh.stdout }}"
       changed_when: true
   rescue:
     - name: Explain timed recovery without depending on a broken SSH connection
       ansible.builtin.fail:
-        msg: Firewall confirmation failed. Automatic rollback restores the previous Uranus table within 120 seconds. Reconnect and inspect.
+        msg: >-
+          SSH/firewall confirmation failed. Automatic rollback restores the previous
+          SSH drop-in and Uranus firewall table within 120 seconds. Reconnect and inspect.
 
 - name: Install persistent firewall service
   ansible.builtin.copy:

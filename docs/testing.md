@@ -12,7 +12,8 @@ Profil. Tests verwenden ausschließlich lokale Fixtures und isolierte Datenbanke
 | UUID / Read-only / fehlender Mount / Symlink / Unter-Mount | Fehler-Injektion, kein Formatieren |
 | Kapazität / Netzwerküberschneidung / APIfehler / Drift | adversariale Python-Tests |
 | Init-Abbruch / fremde Geräte / Owner / verwaiste Daten | Erhaltungstests und Fail-closed-Verhalten |
-| Firewallrecovery | Timerreihenfolge, bestätigter Wechsel, Ablauf, Applyfehler, konkurrierende Updates; native nftables-Parser für Host und sechs Gäste |
+| SSH/Firewallrecovery | Timer vor SSH-Änderung, Schlüsselpflicht vor öffentlicher Freigabe, neue Verbindung, Ablauf, Apply-/Reloadfehler, konkurrierende Updates, Boot-Recovery und Konfigurationsdrift; native nftables-Parser für Host und sechs Gäste |
+| Host-SSH ohne feste IP | wechselnde IPv4-/IPv6-Quellen, Root-/Passwort-/Keyboard-Interactive-Sperre, fremde SSH-Konfigurationen; `scripts/check_ssh.py` prüft mit echtem OpenSSH wirksame Einstellungen und Include-Priorität |
 | Cloud-init | native Cloud-init-Schemaprüfung für VM und Container |
 | Nginx und TLSrouting | echter Nginxparser mit isolierten Loopbackports und Testzertifikaten |
 | PostgreSQL Erstimport / Wiederholung / Pending / SQL-Escape | reale Ansible-DB-Tasks gegen temporären Unix-Socket, ohne TCP |
@@ -61,3 +62,20 @@ verweigerte VM-Initialisierung wegen des fehlenden Moduls. Die CI lädt es jetzt
 ausschließlich auf dem wegwerfbaren GitHub-Runner und stellt dessen Device im
 Testcontainer bereit. Kernelmodul-Dateien werden nur lesend eingebunden; bei
 fehlendem KVM/Transport bricht der Job ab, ohne VMprüfungen zu überspringen.
+
+## SSH-Umstellung auf wechselnde Quelladressen
+
+Die lokale Suite umfasst jetzt 115 Tests, darunter 39 Tests für die kombinierte
+SSH-/Firewalltransaktion und die Erhaltung des Verwaltungszugangs. Die 115 Tests
+waren lokal erfolgreich. Nach den letzten Task-/Gate-Anpassungen bestanden
+zusätzlich alle 48 gezielten SSH-/Policy-Tests sowie alle vier Ansible-
+Syntaxprüfungen, Repository-Policy und ansible-lint im Production-Profil.
+Sandbox-Läufe können Loopback-/Unix-Sockets verweigern; der
+vollständige Lauf benötigt diese ausschließlich für isolierte lokale Fixtures.
+
+Die CI enthält zusätzlich `scripts/check_ssh.py` mit dem echten Debian-OpenSSH.
+Für diese Änderung wird gemäß Betreiberwunsch kein weiterer Docker-Lauf gestartet
+und kein CI-Ergebnis abgewartet. Der bereits gestartete Docker-Test wurde vor
+der OpenSSH-Prüfung beendet; der neue native SSH-Vertragstest ist deshalb lokal
+**nicht ausgeführt**. Auch eine reale systemd-Timer-/Boot-Recovery und die
+SSH-Erreichbarkeit auf Hetzner sind weiterhin **nicht getestet**.

@@ -15,7 +15,8 @@
       - hetzner_public_ipv6 is match('^[0-9a-f:]+$')
       - hetzner_storage_uuid == '7f882d89-a2cf-46d2-9db8-5333be51a300'
       - incus_instances | map(attribute='memory') | sum + incus_host_reserve_mb | int <= ansible_facts.memtotal_mb
-      - hetzner_management_networks | length > 0
+      - ansible_user != 'root'
+      - ansible_port | default(22) | int == 22
       - not ansible_check_mode
     fail_msg: Validate host capacity and layout; provisioning check mode is deliberately refused after the deployment gate.
 
@@ -196,7 +197,7 @@
       [Service]
       EnvironmentFile=/etc/uranus/incus.env
 
-- name: Configure host firewall with automatic SSH rollback
+- name: Configure key-only host SSH and firewall with automatic rollback
   ansible.builtin.include_role:
     name: host_firewall
 
