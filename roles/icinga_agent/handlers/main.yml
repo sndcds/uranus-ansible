@@ -1,0 +1,5 @@
+---
+- name: Restart Icinga agent
+  ansible.builtin.systemd_service:
+    name: icinga2
+    state: restarted

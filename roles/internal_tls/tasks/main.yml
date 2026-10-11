@@ -1,0 +1,97 @@
+---
+- name: Install certificate validation tools without daemon startup
+  ansible.builtin.apt:
+    name: [openssl, ssl-cert]
+    state: present
+    policy_rc_d: 101
+
+- name: Gather service state for controlled certificate rotation
+  ansible.builtin.service_facts: {}
+
+- name: Identify immutable public certificate inputs
+  ansible.builtin.set_fact:
+    internal_tls_revision: >-
+      {{ (lookup('file', uranus_pki_dir ~ '/ca.crt') ~
+          lookup('file', uranus_pki_dir ~ '/' ~ inventory_hostname ~ '.crt')) | hash('sha256') }}
+
+- name: Create staged identity directory
+  ansible.builtin.file:
+    path: "/etc/uranus/tls/{{ internal_tls_revision }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Stage internal CA and node certificate without replacing active identity
+  ansible.builtin.copy:
+    src: "{{ uranus_pki_dir }}/{{ item.source }}"
+    dest: "/etc/uranus/tls/{{ internal_tls_revision }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+    force: false
+    validate: /usr/bin/openssl x509 -noout -in %s
+  loop:
+    - {source: ca.crt, dest: ca.pem}
+    - {source: "{{ inventory_hostname }}.crt", dest: instance.pem}
+
+- name: Stage protected instance key from encrypted controller file
+  ansible.builtin.copy:
+    src: "{{ uranus_pki_dir }}/{{ inventory_hostname }}.key"
+    dest: "/etc/uranus/tls/{{ internal_tls_revision }}/instance.key"
+    owner: root
+    group: ssl-cert
+    mode: '0640'
+    force: false
+    validate: /usr/bin/openssl pkey -noout -in %s
+  no_log: true
+
+- name: Verify staged certificate chain and node identity
+  ansible.builtin.command:
+    argv: [openssl, verify, -purpose, sslserver, -CAfile, "/etc/uranus/tls/{{ internal_tls_revision }}/ca.pem", -verify_hostname,
+           "{{ inventory_hostname }}", "/etc/uranus/tls/{{ internal_tls_revision }}/instance.pem"]
+  changed_when: false
+
+- name: Verify that the identity is also valid for authenticated agent clients
+  ansible.builtin.command:
+    argv: [openssl, verify, -purpose, sslclient, -CAfile, "/etc/uranus/tls/{{ internal_tls_revision }}/ca.pem",
+           "/etc/uranus/tls/{{ internal_tls_revision }}/instance.pem"]
+  changed_when: false
+
+- name: Verify staged certificate IP for PostgreSQL and metrics clients
+  ansible.builtin.command:
+    argv: [openssl, verify, -CAfile, "/etc/uranus/tls/{{ internal_tls_revision }}/ca.pem", -verify_ip,
+           "{{ ansible_host }}", "/etc/uranus/tls/{{ internal_tls_revision }}/instance.pem"]
+  changed_when: false
+
+- name: Verify the staged private key matches the certificate without exposing either key
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import subprocess,sys;
+        cert=subprocess.check_output(['openssl','x509','-pubkey','-noout','-in',sys.argv[1]]);
+        key=subprocess.check_output(['openssl','pkey','-pubout','-in',sys.argv[2]]);
+        assert cert.strip()==key.strip(), 'Certificate key mismatch'
+      - "/etc/uranus/tls/{{ internal_tls_revision }}/instance.pem"
+      - "/etc/uranus/tls/{{ internal_tls_revision }}/instance.key"
+  changed_when: false
+  no_log: true
+
+- name: Activate the complete verified identity atomically
+  ansible.builtin.file:
+    src: "/etc/uranus/tls/{{ internal_tls_revision }}"
+    dest: /etc/uranus/tls/current
+    state: link
+  notify: Reload internal TLS consumers
+
+- name: Publish stable certificate paths
+  ansible.builtin.file:
+    src: "/etc/uranus/tls/current/{{ item.source }}"
+    dest: "{{ item.dest }}"
+    state: link
+  loop:
+    - {source: ca.pem, dest: /etc/ssl/certs/uranus-ca.pem}
+    - {source: instance.pem, dest: /etc/ssl/certs/uranus-instance.pem}
+    - {source: instance.key, dest: /etc/ssl/private/uranus-instance.key}

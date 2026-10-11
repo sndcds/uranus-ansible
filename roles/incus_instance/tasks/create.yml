@@ -1,0 +1,30 @@
+---
+- name: Revalidate the complete plan before each instance creation
+  uranus_incus_guard:
+    instances: "{{ incus_instances }}"
+    images: "{{ incus_images }}"
+    reserve_gib: "{{ incus_storage_reserve_gib }}"
+    quotas: "{{ incus_container_quotas }}"
+  register: incus_instance_current
+
+- name: Require the planned instance to remain absent
+  ansible.builtin.assert:
+    that: incus_instance.name in incus_instance_current.new_instances
+    fail_msg: Concurrent provisioning detected; stop and inspect rather than overwrite.
+
+- name: Initialize with full configuration atomically before the first start
+  ansible.builtin.command:
+    argv: >-
+      {{ ['incus', '--force-local', '--project', incus_project, 'init',
+          'images:' ~ incus_images[incus_instance.type], incus_instance.name, '--no-profiles'] +
+         (['--vm'] if incus_instance.type == 'virtual-machine' else []) }}
+    stdin: "{{ lookup('template', 'instance.yml.j2') }}"
+  changed_when: true
+
+- name: Guard filesystem immediately before starting the new instance
+  uranus_storage_guard: {}
+
+- name: Start the fully initialized instance through Incus
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, uranus, start, "{{ incus_instance.name }}"]
+  changed_when: true

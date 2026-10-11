@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+export INCUS_DIR=/data/incus
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+exec 9>/run/lock/uranus-incus-backup.lock
+flock -n 9
+# Reserve a full export budget plus image/snapshot headroom before writing.
+python3 -c 'import shutil; assert shutil.disk_usage("/data").free >= {{ ((incus_instances | map(attribute="disk") | sum) + incus_storage_reserve_gib) * 1024 ** 3 }}'
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+backup_dir=$(mktemp -d /data/incus/backups/export-XXXXXXXX)
+{% for instance in incus_instances %}
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+incus --force-local --project uranus export {{ instance.name }} "$backup_dir/{{ instance.name }}.tar.gz.partial"
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+mv --no-clobber "$backup_dir/{{ instance.name }}.tar.gz.partial" "$backup_dir/{{ instance.name }}.tar.gz"
+{% endfor %}
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+incus --force-local admin init --dump > "$backup_dir/init.yaml"
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+incus --force-local admin sql global .dump > "$backup_dir/database.sql"
+# Off-host encrypted transport. Credentials live in a protected environment file.
+/usr/bin/python3 /usr/local/sbin/uranus-storage-guard.py
+restic backup "$backup_dir"
+restic check
+# Deliberately no automatic prune, snapshot deletion or instance deletion.

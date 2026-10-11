@@ -1,0 +1,47 @@
+config:
+  user.uranus.owner: uranus/incus/v1
+  user.uranus.disk_gib: "{{ incus_instance.disk }}"
+  limits.cpu: "{{ incus_instance.cpu }}"
+  limits.memory: "{{ incus_instance.memory }}MiB"
+  boot.autostart: "true"
+  security.protection.delete: "true"
+{% if incus_instance.type == 'container' %}
+  security.privileged: "false"
+  security.nesting: "false"
+  security.idmap.isolated: "true"
+{% endif %}
+  user.user-data: |
+    #cloud-config
+    hostname: {{ incus_instance.name }}
+    manage_etc_hosts: true
+    disable_root: true
+    ssh_pwauth: false
+    users:
+      - name: debian
+        shell: /bin/bash
+        groups: [adm, sudo]
+        sudo: 'ALL=(ALL) NOPASSWD:ALL'
+        lock_passwd: true
+        ssh_authorized_keys:
+          - {{ lookup('file', hetzner_ssh_public_key_file) | to_json }}
+    package_update: true
+    packages: [openssh-server, python3, sudo, acl]
+    runcmd:
+      - [systemctl, enable, --now, ssh]
+profiles: []
+devices:
+  root:
+    type: disk
+    path: /
+    pool: uranus
+{% if incus_instance.type == 'virtual-machine' or incus_container_quotas %}
+    size: {{ incus_instance.disk }}GiB
+{% endif %}
+  eth0:
+    type: nic
+    name: eth0
+    network: uranusincus0
+    ipv4.address: {{ incus_instance.ip }}
+    security.mac_filtering: "true"
+    security.ipv4_filtering: "true"
+    security.ipv6_filtering: "true"

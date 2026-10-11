@@ -1,4 +1,16 @@
 ---
+- name: Require a reviewed immutable frontend revision
+  ansible.builtin.assert:
+    that: frontend_repo_version is match('^[0-9a-f]{40}$')
+
+- name: Identify immutable frontend build configuration
+  ansible.builtin.set_fact:
+    debian13_frontend_input_hash: "{{ (lookup('template', 'frontend.env.local.j2') ~ ':' ~ hetzner_nodejs_major) | hash('sha256') }}"
+
+- name: Set versioned frontend release path
+  ansible.builtin.set_fact:
+    debian13_frontend_path: "/opt/uranus/frontend/releases/{{ frontend_repo_version }}-{{ debian13_frontend_input_hash }}"
+
 - name: Ensure NodeSource keyring directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings
@@ -33,7 +45,7 @@
 
 - name: Create frontend checkout directory
   ansible.builtin.file:
-    path: /opt/uranus/frontend
+    path: "{{ debian13_frontend_path }}"
     state: directory
     owner: uranus
     group: uranus
@@ -42,7 +54,7 @@
 - name: Check out frontend source without overwriting local modifications
   ansible.builtin.git:
     repo: "{{ frontend_repo_url }}"
-    dest: /opt/uranus/frontend
+    dest: "{{ debian13_frontend_path }}"
     version: "{{ frontend_repo_version }}"
     update: true
     force: false
@@ -52,8 +64,8 @@
 
 - name: Deploy environment for the public TLS origin
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../../roles/app_frontend/templates/frontend.env.local.j2"
-    dest: /opt/uranus/frontend/.env.local
+    src: "frontend.env.local.j2"
+    dest: "{{ debian13_frontend_path }}/.env.local"
     owner: uranus
     group: uranus
     mode: '0644'
@@ -61,7 +73,7 @@
 
 - name: Inspect supported frontend lockfiles
   ansible.builtin.stat:
-    path: "/opt/uranus/frontend/{{ item }}"
+    path: "{{ debian13_frontend_path }}/{{ item }}"
     checksum_algorithm: sha256
   loop: [package-lock.json, pnpm-lock.yaml]
   register: debian13_frontend_lockfiles
@@ -73,7 +85,7 @@
 
 - name: Read declared package manager
   ansible.builtin.slurp:
-    src: /opt/uranus/frontend/package.json
+    src: "{{ debian13_frontend_path }}/package.json"
   register: debian13_frontend_package_json
 
 - name: Determine the locked build inputs
@@ -92,12 +104,12 @@
 
 - name: Inspect successful build signature
   ansible.builtin.stat:
-    path: /opt/uranus/frontend/.uranus-build-revision
+    path: "{{ debian13_frontend_path }}/.uranus-build-revision"
   register: debian13_frontend_build_marker
 
 - name: Read successful build signature
   ansible.builtin.slurp:
-    src: /opt/uranus/frontend/.uranus-build-revision
+    src: "{{ debian13_frontend_path }}/.uranus-build-revision"
   register: debian13_frontend_last_build
   when: debian13_frontend_build_marker.stat.exists
 
@@ -109,7 +121,7 @@
     - name: Install npm dependencies with the repository lockfile
       ansible.builtin.command:
         argv: [npm, ci]
-        chdir: /opt/uranus/frontend
+        chdir: "{{ debian13_frontend_path }}"
       become: true
       become_user: uranus
       changed_when: true
@@ -117,7 +129,7 @@
     - name: Install pnpm dependencies with the pinned package manager
       ansible.builtin.command:
         argv: [npm, exec, --yes, "--package={{ debian13_frontend_package_manager }}", --, pnpm, install, --frozen-lockfile]
-        chdir: /opt/uranus/frontend
+        chdir: "{{ debian13_frontend_path }}"
       become: true
       become_user: uranus
       changed_when: true
@@ -127,14 +139,47 @@
         argv: >-
           {{ ['npm', 'exec', '--yes', '--package=' ~ debian13_frontend_package_manager, '--', 'pnpm', 'run', 'build']
              if debian13_frontend_pnpm else ['npm', 'run', 'build'] }}
-        chdir: /opt/uranus/frontend
+        chdir: "{{ debian13_frontend_path }}"
       become: true
       become_user: uranus
       changed_when: true
     - name: Record only the successfully built inputs
       ansible.builtin.copy:
-        dest: /opt/uranus/frontend/.uranus-build-revision
+        dest: "{{ debian13_frontend_path }}/.uranus-build-revision"
         content: "{{ debian13_frontend_build_signature }}\n"
         owner: uranus
         group: uranus
         mode: '0644'
+
+- name: Inspect generated frontend artifacts
+  ansible.builtin.stat:
+    path: "{{ debian13_frontend_path }}/{{ item }}/index.html"
+  loop: [dist, .output/public]
+  register: debian13_frontend_artifacts
+
+- name: Require a static artifact before activating the release
+  ansible.builtin.assert:
+    that: debian13_frontend_artifacts.results | selectattr('stat.exists') | list | length > 0
+    fail_msg: Build must emit dist/index.html or .output/public/index.html; SSR requires a reviewed separate service definition.
+
+- name: Inspect previous frontend activation
+  ansible.builtin.stat:
+    path: /opt/uranus/frontend/current
+    follow: false
+  register: debian13_frontend_previous
+
+- name: Require a managed frontend symlink
+  ansible.builtin.assert:
+    that:
+      - not debian13_frontend_previous.stat.exists or debian13_frontend_previous.stat.islnk
+      - >-
+        not debian13_frontend_previous.stat.exists or
+        debian13_frontend_previous.stat.lnk_source is match('^/opt/uranus/frontend/releases/[0-9a-f]{40}-[0-9a-f]{64}/(dist|\\.output/public)$')
+
+- name: Activate the successfully built static release
+  ansible.builtin.file:
+    src: "{{ debian13_frontend_path }}/{{ (debian13_frontend_artifacts.results | selectattr('stat.exists') | first).item }}"
+    dest: /opt/uranus/frontend/current
+    state: link
+    owner: uranus
+    group: uranus

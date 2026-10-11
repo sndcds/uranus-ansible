@@ -1,0 +1,11 @@
+---
+- name: Require explicit deployment authorization before any connection
+  ansible.builtin.assert:
+    that:
+      - hetzner_deployment_approved | default(false) | bool
+      - uranus_security_review_complete | default(false) | bool
+    fail_msg: >-
+      Production deployment is disabled. Explicit owner authorization and closure
+      of documented security findings are required. Never target 94.130.236.38
+      during development, including check mode.
+  tags: always

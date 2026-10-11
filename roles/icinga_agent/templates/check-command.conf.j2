@@ -1,0 +1,13 @@
+object CheckCommand "uranus-resources" {
+  arguments = {
+    "--disk-path" = "$uranus_disk_path$"
+    "--cpu-warning" = "{{ monitoring_cpu_warning }}"
+    "--cpu-critical" = "{{ monitoring_cpu_critical }}"
+    "--memory-warning" = "{{ monitoring_memory_warning }}"
+    "--memory-critical" = "{{ monitoring_memory_critical }}"
+    "--disk-warning" = "{{ incus_storage_warning_percent }}"
+    "--disk-critical" = "{{ incus_storage_critical_percent }}"
+  }
+  vars.uranus_disk_path = "/"
+  command = [ "/usr/local/lib/uranus/check-resources.py" ]
+}

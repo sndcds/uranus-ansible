@@ -1,13 +1,66 @@
-{% for vm in hetzner_vms %}
-object Host "{{ vm.name }}" {
+{% for instance in incus_instances %}
+object Host "{{ instance.name }}" {
   import "generic-host"
-  address = "{{ vm.ip }}"
+  zone = "master"
+  address = "{{ instance.ip }}"
   check_command = "hostalive"
 }
+object Service "resources" {
+  import "generic-service"
+  zone = "master"
+  host_name = "{{ instance.name }}"
+  check_command = "uranus-resources"
+{% if instance.name != 'mon01' %}
+  command_endpoint = "{{ instance.name }}"
+{% endif %}
+}
+{% if instance.role != 'db' %}
+object Service "https" {
+  import "generic-service"
+  zone = "master"
+  host_name = "{{ instance.name }}"
+  check_command = "http"
+  vars.http_ssl = true
+  vars.http_port = 443
+  vars.http_vhost = "{{ hetzner_domains.dev_frontend if instance.role == 'dev' else hetzner_domains.prod_frontend if instance.role == 'prod' else hetzner_domains.icinga if instance.role == 'monitoring' else hetzner_domains.nominatim if instance.role == 'nominatim' else hetzner_domains.versatiles }}"
+  vars.http_uri = "{{ '/status' if instance.role == 'nominatim' else '/status' if instance.role == 'versatiles' else '/' }}"
+  command_endpoint = "{{ instance.name }}"
+}
+{% endif %}
+{% if instance.role in ['dev', 'prod'] %}
+object Service "backend-health" {
+  import "generic-service"
+  zone = "master"
+  host_name = "{{ instance.name }}"
+  check_command = "http"
+  vars.http_address = "127.0.0.1"
+  vars.http_port = {{ backend_port }}
+  vars.http_uri = "{{ api_health_endpoint }}"
+  command_endpoint = "{{ instance.name }}"
+}
+{% endif %}
 {% endfor %}
 object Service "postgresql" {
   import "generic-service"
+  zone = "master"
   host_name = "db01"
-  check_command = "tcp"
-  vars.tcp_port = 5432
+  check_command = "pgsql"
+  vars.pgsql_hostname = "/var/run/postgresql"
+  vars.pgsql_username = "nagios"
+  command_endpoint = "db01"
+}
+
+object Host "hetzner" {
+  import "generic-host"
+  zone = "master"
+  address = "{{ incus_gateway }}"
+  check_command = "hostalive"
+}
+object Service "data-storage" {
+  import "generic-service"
+  zone = "master"
+  host_name = "hetzner"
+  check_command = "uranus-resources"
+  command_endpoint = "hetzner"
+  vars.uranus_disk_path = "/data"
 }

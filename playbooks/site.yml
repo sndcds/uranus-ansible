@@ -1,3 +1,7 @@
 ---
-- import_playbook: provision.yml
-- import_playbook: configure.yml
+- name: Provision Incus infrastructure
+  ansible.builtin.import_playbook: provision.yml
+- name: Configure guests with shared application roles
+  ansible.builtin.import_playbook: configure.yml
+- name: Configure public ingress
+  ansible.builtin.import_playbook: ingress.yml

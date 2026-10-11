@@ -1,0 +1,19 @@
+object Endpoint "mon01" { host = "{{ hostvars['mon01'].ansible_host }}" }
+object Zone "master" { endpoints = [ "mon01" ] }
+{% for instance in incus_instances if instance.name != 'mon01' %}
+{% if inventory_hostname == 'mon01' or inventory_hostname == instance.name %}
+object Endpoint "{{ instance.name }}" { }
+object Zone "{{ instance.name }}" {
+  endpoints = [ "{{ instance.name }}" ]
+  parent = "master"
+}
+{% endif %}
+{% endfor %}
+
+{% if inventory_hostname in ['mon01', 'hetzner'] %}
+object Endpoint "hetzner" { }
+object Zone "hetzner" {
+  endpoints = [ "hetzner" ]
+  parent = "master"
+}
+{% endif %}

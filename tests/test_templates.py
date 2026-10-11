@@ -1,57 +1,15 @@
-import json
-from pathlib import Path
 import re
 import shutil
 import socket
 import subprocess
-
 import pytest
-import yaml
-
 from conftest import ROOT
-
-
-def test_private_nat_has_six_stable_reservations_and_no_public_bridge(settings, render):
-    import xml.etree.ElementTree as ET
-    xml = ET.fromstring(render('roles/debian13_hypervisor/templates/network.xml.j2'))
-    assert xml.find('forward').attrib == {'mode': 'nat'}
-    assert xml.find('bridge').get('name') == 'virbr-uranus'
-    assert len(xml.findall('ip/dhcp/host')) == 6
-    assert {h.get('ip') for h in xml.findall('ip/dhcp/host')} == {v['ip'] for v in settings['hetzner_vms']}
-    assert not xml.findall("ip[@family='ipv6']")
-    assert not xml.findall('forward/interface')
-
-
-@pytest.mark.parametrize('name', ['db01', 'dev01', 'prod01', 'mon01', 'nom01', 'vers01'])
-def test_cloud_init_disables_passwords_and_validates_with_real_schema(name, settings, render, tmp_path):
-    vm = next(v for v in settings['hetzner_vms'] if v['name'] == name)
-    text = render('roles/debian13_hypervisor/templates/user-data.yml.j2', item=vm, hetzner_ssh_public_key_file='fixture.pub')
-    data = yaml.safe_load(text)
-    assert data['disable_root'] and data['ssh_pwauth'] is False
-    assert data['users'][0]['lock_passwd'] and data['users'][0]['name'] == 'debian'
-    assert 'password' not in data
-    assert 'qemu-guest-agent' in data['packages']
-    path = tmp_path / 'user-data.yml'
-    path.write_text(text)
-    assert shutil.which('cloud-init'), 'Install cloud-init to validate its actual schema'
-    subprocess.run(['cloud-init', 'schema', '-c', str(path)], check=True, capture_output=True, text=True)
-    network = render('roles/debian13_hypervisor/templates/network-config.yml.j2', item=vm)
-    path.write_text(network)
-    subprocess.run(['cloud-init', 'schema', '-t', 'network-config', '-c', str(path)], check=True, capture_output=True, text=True)
-    converted = tmp_path / 'debian-network'
-    subprocess.run(['cloud-init', 'devel', 'net-convert', '-p', str(path), '-k', 'yaml',
-                    '-d', str(converted), '-D', 'debian', '-O', 'eni', '-m', f"ens3,{vm['mac']}"],
-                   check=True, capture_output=True, text=True)
-    eni = (converted / 'etc/network/interfaces.d/50-cloud-init').read_text()
-    assert 'iface ens3 inet dhcp' in eni and re.search(r'accept[-_]ra\s+0', eni)
-    rules = (converted / 'etc/udev/rules.d/70-persistent-net.rules').read_text()
-    assert vm['mac'] in rules and 'NAME="ens3"' in rules
-    metadata = yaml.safe_load(render('roles/debian13_hypervisor/templates/meta-data.yml.j2', item=vm))
-    assert metadata['instance-id'] == f'uranus-debian13-{name}-v1'
-
 
 def nginx_check(text, tmp_path):
     assert shutil.which('nginx'), 'Install nginx for the actual parser check'
+    key,cert=tmp_path/'guest-key.pem',tmp_path/'guest-cert.pem'
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=guest'],check=True,capture_output=True)
+    text=text.replace('/etc/ssl/certs/uranus-instance.pem',str(cert)).replace('/etc/ssl/private/uranus-instance.key',str(key)).replace('/etc/ssl/certs/uranus-ca.pem',str(cert))
     # nginx -t also probes listening sockets. Use temporary, unprivileged
     # loopback ports so the fixtures never bind the production interfaces.
     ports = []
@@ -75,12 +33,12 @@ def nginx_check(text, tmp_path):
 @pytest.mark.parametrize('role', ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles'])
 def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp_path):
     text = render('roles/debian13_guest_web/templates/guest.conf.j2',
-                  vm_role=role, ansible_host='10.77.0.12', frontend_domain='app.example.test',
+                  instance_role=role, ansible_host='10.77.0.12', frontend_domain='app.example.test',
                   backend_domain='api.example.test', icinga_web_domain='mon.example.test',
                   nominatim_domain='nom.example.test', versatiles_domain='tiles.example.test',
                   backend_port=9090, versatiles_port=8080)
     text = text.replace('include fastcgi_params;', 'include /etc/nginx/fastcgi_params;')
-    assert 'listen 443' not in text
+    assert 'ssl_certificate' in text
     assert 'set_real_ip_from 10.77.0.1;' in text
     if role == 'monitoring':
         assert '/run/php/php8.4-fpm.sock' in text and 'fastcgi_param HTTPS on;' in text
@@ -90,10 +48,10 @@ def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp
 
 @pytest.mark.parametrize('tls', [False, True])
 def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tmp_path):
-    sites = [dict(key='prod_frontend', domain='app.example.test', upstream='10.77.0.13'),
-             dict(key='dev_frontend', domain='dev.example.test', upstream='10.77.0.12'),
-             dict(key='icinga', domain='monitoring.example.test', upstream='10.77.0.14'),
-             dict(key='nominatim', domain='nom.example.test', upstream='10.77.0.15')]
+    sites = [dict(instance='fixture',key='prod_frontend', domain='app.example.test', upstream='10.77.0.13'),
+             dict(instance='fixture',key='dev_frontend', domain='dev.example.test', upstream='10.77.0.12'),
+             dict(instance='fixture',key='icinga', domain='monitoring.example.test', upstream='10.77.0.14'),
+             dict(instance='fixture',key='nominatim', domain='nom.example.test', upstream='10.77.0.15')]
     text = render('roles/debian13_ingress/templates/ingress.conf.j2',
                   debian13_ingress_sites=sites, debian13_ingress_tls_ready=tls,
                   hetzner_private_web_networks=['203.0.113.0/24'])
@@ -108,26 +66,23 @@ def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tm
         assert text.count('deny all;') == 2
         assert 'proxy_set_header X-Forwarded-For $remote_addr;' in text
         assert '$proxy_add_x_forwarded_for' not in text
-        assert 'proxy_pass http://10.77.0.13:80;' in text
+        assert 'proxy_pass https://10.77.0.13:443;' in text
+        assert 'proxy_ssl_verify on;' in text
     assert '/.well-known/acme-challenge/' in text
     nginx_check(text, tmp_path)
 
 
-def test_host_firewall_keeps_libvirt_and_restricts_public_ports(render):
-    text = render('roles/debian13_hypervisor/templates/host-firewall.nft.j2', hetzner_management_networks=['203.0.113.10/32'])
-    assert 'flush ruleset' not in text
-    assert 'destroy table inet uranus_debian13' in text
-    assert 'tcp dport { 80, 443 } accept' in text
-    assert 'ip saddr { 203.0.113.10/32 } tcp dport 22 accept' in text
-    assert '5432' not in text and '8086' not in text and '5665' not in text
-    assert 'oifname "virbr-uranus" ct state new drop' in text
-
-
-@pytest.mark.parametrize('role', ['db', 'dev', 'prod', 'monitoring', 'nominatim', 'versatiles'])
-def test_guest_firewall_exposes_web_only_to_gateway_and_database_to_clients(role, render):
-    text = render('roles/debian13_guest/templates/firewall.nft.j2', vm_role=role)
-    assert 'policy drop' in text
-    assert 'ip saddr 10.77.0.1 tcp dport 22 accept' in text
-    assert ('tcp dport 5432 accept' in text) == (role == 'db')
-    assert ('tcp dport 8086 accept' in text) == (role == 'monitoring')
-    assert ('ip saddr 10.77.0.1 tcp dport 80 accept' in text) == (role != 'db')
+@pytest.mark.parametrize('kind',['container','virtual-machine'])
+def test_native_cloud_init_schema_for_both_instance_types(kind,render,tmp_path):
+    import yaml
+    instance=dict(name='db01' if kind=='virtual-machine' else 'dev01',type=kind,cpu=2,memory=4096,disk=60,ip='10.77.0.12')
+    text=render('roles/incus_instance/templates/instance.yml.j2',incus_instance=instance,incus_container_quotas=False,hetzner_ssh_public_key_file='fixture')
+    config=yaml.safe_load(text)
+    assert config['profiles']==[] and config['config']['security.protection.delete']=='true'
+    if kind=='container':
+        assert config['config']['security.privileged']=='false' and 'size' not in config['devices']['root']
+    else: assert config['devices']['root']['size']=='60GiB'
+    cloud=tmp_path/'cloud-config.yml';cloud.write_text(config['config']['user.user-data'])
+    assert shutil.which('cloud-init'), 'Install cloud-init for the native schema check'
+    result=subprocess.run(['cloud-init','schema','--config-file',str(cloud)],text=True,capture_output=True)
+    assert result.returncode==0,result.stdout+result.stderr

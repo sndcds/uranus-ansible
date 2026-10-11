@@ -23,6 +23,11 @@ def postgres(tmp_path_factory):
     socket.mkdir()
     subprocess.run([str(binary_dir / 'initdb'), '-D', str(data), '-U', 'postgres', '--auth=trust', '--no-locale'],
                    check=True, capture_output=True, text=True)
+    key,cert=directory/'key.pem',directory/'cert.pem'
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=local-postgres'],check=True,capture_output=True)
+    key.chmod(0o600)
+    with (data/'postgresql.conf').open('a') as stream:
+        stream.write(f"\nssl=on\nssl_cert_file='{cert}'\nssl_key_file='{key}'\n")
     subprocess.run([str(binary_dir / 'pg_ctl'), '-D', str(data), '-l', str(directory / 'postgres.log'),
                     '-o', f"-k {socket} -c listen_addresses=''", '-w', 'start'],
                    check=True, capture_output=True, text=True)
@@ -68,7 +73,7 @@ def configure_database(postgres, tmp_path, name, dump, *, allow_import=True, exp
     }]))
     inventory = tmp_path / 'inventory.yml'
     inventory.write_text('all:\n  hosts:\n    localhost:\n      ansible_connection: local\n      ansible_python_interpreter: /usr/bin/python3\n')
-    env = {**os.environ, 'ANSIBLE_CONFIG': str(ROOT / 'ansible-debian13.cfg'),
+    env = {**os.environ, 'ANSIBLE_CONFIG': str(ROOT / 'ansible.cfg'),
            'ANSIBLE_LOCAL_TEMP': str(tmp_path / 'ansible-local'),
            'ANSIBLE_REMOTE_TEMP': str(tmp_path / 'ansible-remote')}
     result = subprocess.run(['ansible-playbook', '-i', str(inventory), str(playbook)],
@@ -97,7 +102,7 @@ def test_database_acl_parses_and_limits_nominatim_maintenance_connection(postgre
         rules = json.loads(sql(postgres, """
             SELECT json_agg(json_build_object('database',database,'user',user_name,
                                              'address',address,'method',auth_method))
-            FROM pg_hba_file_rules WHERE type='host' AND 'nominatim'=ANY(user_name)
+            FROM pg_hba_file_rules WHERE type='hostssl' AND 'nominatim'=ANY(user_name)
         """))
         assert rules == [
             {'database': ['nominatim'], 'user': ['nominatim'], 'address': '10.77.0.15', 'method': 'scram-sha-256'},

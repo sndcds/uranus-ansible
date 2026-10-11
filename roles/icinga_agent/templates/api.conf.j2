@@ -1,0 +1,6 @@
+object ApiListener "api" {
+  accept_commands = true
+  accept_config = true
+  bind_host = "{{ incus_gateway if inventory_hostname == 'hetzner' else ansible_host }}"
+  enforce_filter_expression_permission = true
+}

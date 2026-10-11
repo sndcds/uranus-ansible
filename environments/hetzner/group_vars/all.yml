@@ -1,33 +1,98 @@
 ---
-# Enable only after the owner explicitly authorizes a production deployment.
+postgresql_version: 17
+ssl_email: noreply@oklabflensburg.de
+backend_port: 9090
+frontend_repo_url: https://github.com/sndcds/uranus-dashboard.git
+backend_repo_url: https://github.com/sndcds/uranus.git
+backend_go_version: 1.25.8
+backend_go_archive_sha256: ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6
+backend_db_schema: uranus
+backend_supported_languages:
+  - de
+  - en
+  - da
+backend_profile_image_quality: 75
+backend_pluto_image_max_file_size: 20
+backend_pluto_image_max_px: 1920
+backend_auth_token_expiration_time: 600
+backend_auth_smtp_host: ''
+backend_auth_smtp_port: 587
+backend_auth_smtp_login: ''
+backend_auth_smtp_password: '{{ vault_backend_smtp_password | default('''') }}'
+backend_auth_reply_email_address: '{{ ssl_email }}'
+backend_smtp_host: '{{ backend_auth_smtp_host }}'
+backend_smtp_port: '{{ backend_auth_smtp_port }}'
+backend_smtp_login: '{{ backend_auth_smtp_login }}'
+backend_smtp_password: '{{ vault_backend_smtp_password | default('''') }}'
+postfix_relay_host: '{{ backend_smtp_host }}'
+postfix_relay_port: '{{ backend_smtp_port }}'
+postfix_relay_login: '{{ backend_smtp_login }}'
+postfix_relay_password: '{{ backend_smtp_password }}'
+backend_jwt_secret: '{{ vault_backend_jwt_secret }}'
+backend_secret_key: '{{ vault_backend_secret_key }}'
+nominatim_data_url: https://download.geofabrik.de/europe/germany/schleswig-holstein-latest.osm.pbf
+nominatim_data_file: /srv/nominatim/data/schleswig-holstein-latest.osm.pbf
+nominatim_project_dir: /srv/nominatim/nominatim-project
+nominatim_import_style: address
+nominatim_default_language: de
+nominatim_languages:
+  - de
+  - en
+  - da
+nominatim_db_delegate_host: db01
+nominatim_db_name: nominatim
+nominatim_db_user: nominatim
+nominatim_db_password: '{{ vault_nominatim_db_password }}'
+versatiles_port: 8080
+versatiles_system_user: versatiles
+versatiles_data_dir: /srv/versatiles
+versatiles_tiles_url: https://download.versatiles.org/osm.versatiles
+versatiles_tileset_name: schleswig-holstein.versatiles
+versatiles_bbox: 8.35,53.25,11.40,55.10
+versatiles_bbox_border: 3
+monitoring_db_delegate_host: db01
+monitoring_web_db_name: icingaweb2
+monitoring_web_db_user: icingaweb2
+monitoring_web_db_password: '{{ vault_monitoring_web_db_password }}'
+monitoring_ido_db_name: icinga_ido
+monitoring_ido_db_user: icinga_ido
+monitoring_ido_db_password: '{{ vault_monitoring_ido_db_password }}'
+monitoring_admin_user: icingaadmin
+monitoring_admin_password: '{{ vault_monitoring_admin_password }}'
+monitoring_api_user: icingaweb2
+monitoring_api_password: '{{ vault_monitoring_api_password }}'
+monitoring_influx_database: uranus_metrics
+monitoring_influx_retention_name: thirty_days
+monitoring_influx_retention_duration: 30d
+monitoring_influx_icinga_port: 8086
+monitoring_influx_icinga_service_measurement: icinga2_service_perfdata
+monitoring_influx_icinga_host_measurement: icinga2_host_perfdata
+pluto_metrics_enabled: true
+pluto_metrics_measurement: pluto_image_files
+pluto_metrics_directory: /opt/uranus/backend/pluto/images
+pluto_metrics_push_schedule: hourly
+monitoring_grafana_apt_key_url: https://apt.grafana.com/gpg-full.key
+monitoring_grafana_domain: '{{ uranus_domains.icinga }}'
+monitoring_grafana_admin_user: admin
+monitoring_grafana_admin_password: '{{ vault_monitoring_grafana_admin_password }}'
+monitoring_grafana_datasource_name: uranus-influxdb
+monitoring_grafana_datasource_uid: uranus-influxdb
+monitoring_grafana_dashboard_provider_name: uranus
+monitoring_grafana_dashboard_path: /var/lib/grafana/dashboards
+monitoring_cpu_warning: 85
+monitoring_cpu_critical: 95
+monitoring_memory_warning: 85
+monitoring_memory_critical: 95
+api_health_endpoint: /api/events
+frontend_health_endpoint: /
+backup_retention_days: 14
+logrotate_retention: 14
 hetzner_deployment_approved: false
 hetzner_public_ipv4: 94.130.236.38
-hetzner_ssh_public_key_file: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
+hetzner_ssh_public_key_file: '{{ lookup(''env'', ''HOME'') }}/.ssh/id_ed25519.pub'
 hetzner_management_networks: []
 hetzner_management_ipv6_networks: []
 hetzner_storage_uuid: 7f882d89-a2cf-46d2-9db8-5333be51a300
-hetzner_storage_path: /data/libvirt/images
-hetzner_host_reserve_mb: 4096
-hetzner_network_name: uranus-debian13
-hetzner_bridge: virbr-uranus
-hetzner_gateway: 10.77.0.1
-hetzner_subnet: 10.77.0.0/24
-hetzner_image_url: >-
-  https://cloud.debian.org/images/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
-hetzner_image_sha512: >-
-  f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d
-hetzner_image_path: "{{ hetzner_storage_path }}/.base/debian13-{{ hetzner_image_sha512[:16] }}.qcow2"
-hetzner_start_existing_vms: false
-hetzner_target_vm: ""
-hetzner_vms:
-  - {name: db01, role: db, memory: 12288, cpu: 4, disk: 150, ip: 10.77.0.11, mac: '52:54:00:77:00:11'}
-  - {name: dev01, role: dev, memory: 4096, cpu: 2, disk: 60, ip: 10.77.0.12, mac: '52:54:00:77:00:12'}
-  - {name: prod01, role: prod, memory: 8192, cpu: 4, disk: 100, ip: 10.77.0.13, mac: '52:54:00:77:00:13'}
-  - {name: mon01, role: monitoring, memory: 4096, cpu: 2, disk: 50, ip: 10.77.0.14, mac: '52:54:00:77:00:14'}
-  - {name: nom01, role: nominatim, memory: 12288, cpu: 6, disk: 200, ip: 10.77.0.15, mac: '52:54:00:77:00:15'}
-  - {name: vers01, role: versatiles, memory: 2048, cpu: 2, disk: 40, ip: 10.77.0.16, mac: '52:54:00:77:00:16'}
-
-# Supply real, owner-controlled domains in deployment.yml (see docs).
 hetzner_domains:
   dev_frontend: dev.example.invalid
   dev_backend: api.dev.example.invalid
@@ -37,8 +102,11 @@ hetzner_domains:
   nominatim: nominatim.example.invalid
   versatiles: tiles.example.invalid
   mail_mx: mail.example.invalid
-hetzner_acme_email: ""
-hetzner_private_sites: [dev_frontend, dev_backend, icinga]
+hetzner_acme_email: ''
+hetzner_private_sites:
+  - dev_frontend
+  - dev_backend
+  - icinga
 hetzner_private_web_networks: []
 hetzner_nominatim_initial_import: false
 hetzner_app_initial_import: false
@@ -47,4 +115,70 @@ hetzner_versatiles_archive_sha256: 0023972d18df71b509ece6b46c4c6f4b0537af9c904a1
 hetzner_versatiles_frontend_url: https://github.com/versatiles-org/versatiles-frontend/releases/download/v3.16.0/frontend.br.tar.gz
 hetzner_versatiles_frontend_sha256: ac5f5ae18107cd7c7c804c21107813e182ca65024b70b71dd23df7d1887b2ec3
 hetzner_nodejs_major: '24'
-hetzner_nominatim_version: "5.1.0"
+hetzner_nominatim_version: 5.1.0
+hetzner_public_ipv6: 2a01:4f8:13b:1405::2
+incus_data_path: /data/incus
+incus_pool_path: /data/incus/storage-pools/uranus
+incus_project: uranus
+incus_pool: uranus
+incus_network: uranusincus0
+incus_gateway: 10.77.0.1
+incus_subnet: 10.77.0.0/24
+incus_host_reserve_mb: 8192
+incus_storage_reserve_gib: 160
+incus_storage_warning_percent: 75
+incus_storage_critical_percent: 85
+incus_start_existing: false
+incus_container_quotas: false
+incus_images:
+  container: ebdc531119fec1563bd0cafcd3efc01560daccd0ae61bff1f736768e211faa83
+  virtual-machine: cb356a9e2b8f35924c539fef0ee44f2996b9ac22a932ec02c69c1eabcb45f9c8
+incus_instances:
+  - name: db01
+    role: db
+    type: virtual-machine
+    memory: 12288
+    cpu: 4
+    disk: 150
+    ip: 10.77.0.11
+  - name: dev01
+    role: dev
+    type: container
+    memory: 4096
+    cpu: 2
+    disk: 60
+    ip: 10.77.0.12
+  - name: prod01
+    role: prod
+    type: container
+    memory: 8192
+    cpu: 4
+    disk: 100
+    ip: 10.77.0.13
+  - name: mon01
+    role: monitoring
+    type: container
+    memory: 4096
+    cpu: 2
+    disk: 50
+    ip: 10.77.0.14
+  - name: nom01
+    role: nominatim
+    type: container
+    memory: 12288
+    cpu: 6
+    disk: 200
+    ip: 10.77.0.15
+  - name: vers01
+    role: versatiles
+    type: container
+    memory: 2048
+    cpu: 2
+    disk: 40
+    ip: 10.77.0.16
+uranus_security_review_complete: false
+uranus_pki_dir: '{{ playbook_dir }}/../environments/hetzner/pki'
+backend_ssl_mode: verify-full
+monitoring_notifications_mail: alerts@example.invalid
+nominatim_data_sha256: ''
+incus_export_backups_enabled: false

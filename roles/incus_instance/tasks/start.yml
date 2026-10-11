@@ -1,0 +1,7 @@
+---
+- name: Guard filesystem before explicitly requested start
+  uranus_storage_guard: {}
+- name: Start the retained instance
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, uranus, start, "{{ incus_instance_name }}"]
+  changed_when: true

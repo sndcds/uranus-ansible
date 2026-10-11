@@ -55,6 +55,16 @@
     state: present
     policy_rc_d: 101
 
+- name: Require verified PostgreSQL transport in the PHP runtime
+  ansible.builtin.lineinfile:
+    path: /etc/php/8.4/fpm/pool.d/www.conf
+    regexp: "^;?env\\[{{ item.key }}\\]\\s*="
+    line: "env[{{ item.key }}] = {{ item.value }}"
+  loop:
+    - {key: PGSSLMODE, value: verify-full}
+    - {key: PGSSLROOTCERT, value: /etc/ssl/certs/uranus-ca.pem}
+  notify: Restart Debian PHP
+
 - name: Create monitoring configuration directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -122,7 +132,7 @@
 
 - name: Deploy private monitoring connection settings
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../../roles/monitoring/templates/{{ item.template }}"
+    src: "{{ item.template }}"
     dest: "{{ item.dest }}"
     owner: root
     group: "{{ item.group | default('www-data') }}"
@@ -146,11 +156,6 @@
     dest: /etc/icingaweb2/enabledModules/monitoring
     state: link
 
-- name: Initialize private Icinga API certificates once
-  ansible.builtin.command:
-    argv: [icinga2, api, setup]
-    creates: "/var/lib/icinga2/certs/{{ inventory_hostname }}.crt"
-
 - name: Enable IDO and InfluxDB writers
   ansible.builtin.file:
     src: "/etc/icinga2/features-available/{{ item }}.conf"
@@ -171,12 +176,23 @@
     argv: [icinga2, daemon, -C]
   changed_when: false
 
-- name: Configure InfluxDB with access restricted by the guest firewall
+- name: Permit InfluxDB to read its protected TLS key
+  ansible.builtin.user:
+    name: influxdb
+    groups: ssl-cert
+    append: true
+
+- name: Configure authenticated transport encryption for private metrics
   ansible.builtin.lineinfile:
     path: /etc/influxdb/influxdb.conf
-    regexp: '^\s*bind-address\s*='
-    line: '  bind-address = "0.0.0.0:8086"'
-    insertafter: '^\[http\]'
+    regexp: "^\\s*{{ item.key }}\\s*="
+    line: "  {{ item.key }} = {{ item.value }}"
+    insertafter: '^\\[http\\]'
+  loop:
+    - {key: bind-address, value: '"{{ ansible_host }}:8086"'}
+    - {key: https-enabled, value: 'true'}
+    - {key: https-certificate, value: '"/etc/ssl/certs/uranus-instance.pem"'}
+    - {key: https-private-key, value: '"/etc/ssl/private/uranus-instance.key"'}
   notify: Restart Debian InfluxDB
 
 - name: Start private InfluxDB
@@ -190,7 +206,8 @@
 
 - name: Ensure the metrics database exists
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:8086/query"
+    url: "https://{{ ansible_host }}:8086/query"
+    ca_path: /etc/ssl/certs/uranus-ca.pem
     method: POST
     body_format: form-urlencoded
     body: {q: "CREATE DATABASE {{ monitoring_influx_database }}"}
@@ -201,7 +218,8 @@
 
 - name: Configure metrics retention
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:8086/query"
+    url: "https://{{ ansible_host }}:8086/query"
+    ca_path: /etc/ssl/certs/uranus-ca.pem
     method: POST
     body_format: form-urlencoded
     body:
@@ -247,7 +265,7 @@
 
 - name: Deploy Grafana metrics datasource and Pluto dashboard
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/../../roles/monitoring/templates/{{ item.template }}"
+    src: "{{ item.template }}"
     dest: "{{ item.dest }}"
     owner: root
     group: grafana

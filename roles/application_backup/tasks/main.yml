@@ -1,0 +1,54 @@
+---
+- name: Create protected application backup directory
+  ansible.builtin.file:
+    path: /var/backups/uranus/app
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install atomic application backup script without embedded secrets
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/uranus-app-backup
+    mode: '0700'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      umask 077
+      archive=/var/backups/uranus/app/{{ inventory_hostname }}_$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+      test ! -e "$archive"
+      tar -C / -czf "$archive.partial" opt/uranus etc/nginx etc/uranus
+      mv --no-clobber "$archive.partial" "$archive"
+      find /var/backups/uranus/app -maxdepth 1 -type f -name '*.tar.gz' -mtime +{{ backup_retention_days }} -delete
+
+- name: Install application backup service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-app-backup.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Protected Uranus application archive
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/uranus-app-backup
+      NoNewPrivileges=true
+
+- name: Install application backup timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-app-backup.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Daily application backup
+      [Timer]
+      OnCalendar=*-*-* 03:00:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable application backups
+  ansible.builtin.systemd_service:
+    name: uranus-app-backup.timer
+    daemon_reload: true
+    enabled: true
+    state: started
