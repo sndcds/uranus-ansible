@@ -1,0 +1,37 @@
+---
+- name: Install private guest nginx without starting the default site
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    policy_rc_d: 101
+
+- name: Remove distribution default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload Debian guest nginx
+
+- name: Render private application vhosts
+  ansible.builtin.template:
+    src: guest.conf.j2
+    dest: /etc/nginx/sites-available/uranus-debian13.conf
+    mode: '0644'
+  notify: Reload Debian guest nginx
+
+- name: Enable private vhosts
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-debian13.conf
+    dest: /etc/nginx/sites-enabled/uranus-debian13.conf
+    state: link
+  notify: Reload Debian guest nginx
+
+- name: Validate private guest nginx configuration
+  ansible.builtin.command:
+    argv: [nginx, -t]
+  changed_when: false
+
+- name: Start private guest nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started

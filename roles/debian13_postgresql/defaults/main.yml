@@ -1,0 +1,7 @@
+---
+debian13_postgresql_state_dir: /var/lib/postgresql
+debian13_postgresql_dump_root: "{{ playbook_dir }}/../../"
+debian13_postgresql_owner: postgres
+debian13_postgresql_group: postgres
+debian13_postgresql_socket: /var/run/postgresql
+debian13_postgresql_postgis_enabled: true

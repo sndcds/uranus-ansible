@@ -1,0 +1,6 @@
+---
+- name: Restart Debian VersaTiles
+  ansible.builtin.systemd_service:
+    name: versatiles
+    daemon_reload: true
+    state: restarted

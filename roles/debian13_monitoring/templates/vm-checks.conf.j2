@@ -1,0 +1,13 @@
+{% for vm in hetzner_vms %}
+object Host "{{ vm.name }}" {
+  import "generic-host"
+  address = "{{ vm.ip }}"
+  check_command = "hostalive"
+}
+{% endfor %}
+object Service "postgresql" {
+  import "generic-service"
+  host_name = "db01"
+  check_command = "tcp"
+  vars.tcp_port = 5432
+}

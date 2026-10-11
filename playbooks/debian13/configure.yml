@@ -1,0 +1,118 @@
+---
+- name: Prepare all Debian 13 guests
+  hosts: debian13_vms
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../../group_vars/all.yml
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: gate.yml
+    - name: Load dedicated guest variables and secrets
+      ansible.builtin.import_tasks: guest-vars.yml
+    - name: Wait for authorized SSH access
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+    - name: Gather guest facts
+      ansible.builtin.setup:
+    - name: Require Debian 13 guests
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Debian'
+          - ansible_facts.distribution_major_version == '13'
+    - name: Wait for initial cloud-init to finish
+      ansible.builtin.command:
+        argv: [cloud-init, status, --wait]
+      changed_when: false
+  roles:
+    - role: debian13_guest
+
+- name: Prepare PostgreSQL without destructive resets
+  hosts: 'debian13_vms:&db01'
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../../group_vars/all.yml
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: gate.yml
+    - name: Load dedicated database settings
+      ansible.builtin.import_tasks: guest-vars.yml
+  roles:
+    - role: debian13_postgresql
+
+- name: Configure Debian applications and monitoring
+  hosts: debian13_vms
+  order: sorted
+  serial: 1
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../../group_vars/all.yml
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: gate.yml
+    - name: Load dedicated application settings
+      ansible.builtin.import_tasks: guest-vars.yml
+  tasks:
+    - name: Configure application backend with existing compatible role
+      ansible.builtin.include_role:
+        name: app_backend
+        apply:
+          no_log: true
+      when: vm_role in ['dev', 'prod']
+    - name: Configure Debian frontend with the repository lockfile
+      ansible.builtin.include_role:
+        name: debian13_frontend
+      when: vm_role in ['dev', 'prod']
+    - name: Configure outbound SMTP relay
+      ansible.builtin.include_role:
+        name: postfix
+        apply:
+          no_log: true
+      when: vm_role in ['dev', 'prod']
+    - name: Configure native Debian monitoring
+      ansible.builtin.include_role:
+        name: debian13_monitoring
+      when: vm_role == 'monitoring'
+    - name: Configure guarded Nominatim import
+      ansible.builtin.include_role:
+        name: debian13_nominatim
+      when: vm_role == 'nominatim'
+    - name: Configure pinned VersaTiles binary and data
+      ansible.builtin.include_role:
+        name: debian13_versatiles
+      when: vm_role == 'versatiles'
+    - name: Configure private guest HTTP routing
+      ansible.builtin.include_role:
+        name: debian13_guest_web
+      when: vm_role != 'db'
+    - name: Configure application log rotation
+      ansible.builtin.include_role:
+        name: logrotate
+    - name: Configure backups of all dedicated databases
+      ansible.builtin.include_role:
+        name: debian13_backup
+      when: vm_role == 'db'
+    - name: Configure application backups
+      ansible.builtin.include_role:
+        name: backup
+        apply:
+          no_log: true
+      when: vm_role in ['dev', 'prod']
+
+- name: Push initial metrics after all monitoring services are configured
+  hosts: debian13_vms
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: gate.yml
+  tasks:
+    - name: Push the first application image metric sample
+      ansible.builtin.systemd_service:
+        name: pluto-image-metrics.service
+        state: started
+      when:
+        - inventory_hostname in ['dev01', 'prod01']
+        - pluto_metrics_enabled | default(true) | bool

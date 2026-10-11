@@ -1,0 +1,27 @@
+---
+all:
+  children:
+    debian13_hypervisors:
+      hosts:
+        hetzner:
+          ansible_host: 94.130.236.38
+          ansible_user: awendelk
+    debian13_vms:
+      vars:
+        ansible_user: debian
+        ansible_become: true
+        ansible_ssh_common_args: >-
+          -o ProxyJump=awendelk@94.130.236.38 -o StrictHostKeyChecking=yes
+      hosts:
+        db01:
+          ansible_host: 10.77.0.11
+        dev01:
+          ansible_host: 10.77.0.12
+        prod01:
+          ansible_host: 10.77.0.13
+        mon01:
+          ansible_host: 10.77.0.14
+        nom01:
+          ansible_host: 10.77.0.15
+        vers01:
+          ansible_host: 10.77.0.16

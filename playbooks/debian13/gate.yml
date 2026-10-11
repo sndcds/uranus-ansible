@@ -1,0 +1,10 @@
+---
+- name: Require explicit deployment authorization
+  ansible.builtin.assert:
+    that:
+      - hetzner_deployment_approved | default(false) | bool
+    fail_msg: >-
+      Production deployment is disabled. The owner must explicitly approve it
+      before setting hetzner_deployment_approved=true. Do not run this playbook
+      on 94.130.236.38 during development or tests, including check mode.
+  tags: always

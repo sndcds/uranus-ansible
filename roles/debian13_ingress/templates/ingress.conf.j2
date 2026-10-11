@@ -1,0 +1,62 @@
+limit_req_zone $binary_remote_addr zone=uranus_general:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=uranus_geocoder:10m rate=1r/s;
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+{% if debian13_ingress_tls_ready %}
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    ssl_reject_handshake on;
+}
+{% endif %}
+{% for site in debian13_ingress_sites %}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ site.domain }};
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        try_files $uri =404;
+    }
+    location / { return 301 https://{{ site.domain }}$request_uri; }
+}
+{% if debian13_ingress_tls_ready %}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ site.domain }};
+    ssl_certificate /etc/letsencrypt/live/uranus-hetzner/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/uranus-hetzner/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:uranus_tls:10m;
+    ssl_session_tickets off;
+    server_tokens off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    client_max_body_size 20m;
+{% if site.key in hetzner_private_sites %}
+{% for network in hetzner_private_web_networks %}
+    allow {{ network }};
+{% endfor %}
+    deny all;
+{% endif %}
+    location / {
+        limit_req zone={{ 'uranus_geocoder' if site.key == 'nominatim' else 'uranus_general' }} burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://{{ site.upstream }}:80;
+        proxy_http_version 1.1;
+        proxy_set_header Host {{ site.domain }};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+}
+{% endif %}
+{% endfor %}

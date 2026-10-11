@@ -1,0 +1,85 @@
+---
+- name: Check for an interrupted initial import
+  ansible.builtin.stat:
+    path: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_pending"
+  register: debian13_postgresql_import_pending
+
+- name: Stop rather than retry an interrupted import
+  ansible.builtin.assert:
+    that: not debian13_postgresql_import_pending.stat.exists
+    fail_msg: >-
+      A previous initial import was interrupted. Preserve the database and
+      recover manually; automatic reimport is prohibited.
+
+- name: Inspect database existence before any creation
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    db: postgres
+    query: SELECT oid FROM pg_database WHERE datname = %(name)s
+    named_args:
+      name: "{{ application_db.name }}"
+  become: true
+  become_user: postgres
+  register: debian13_postgresql_existing_db
+
+- name: Create only an absent application database
+  community.postgresql.postgresql_db:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    name: "{{ application_db.name }}"
+    owner: "{{ application_db.user }}"
+    state: present
+  become: true
+  become_user: postgres
+  when: debian13_postgresql_existing_db.rowcount == 0
+  register: debian13_postgresql_created_db
+
+- name: Enable PostGIS without replacing application data
+  community.postgresql.postgresql_ext:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    name: postgis
+    db: "{{ application_db.name }}"
+    state: present
+  become: true
+  become_user: postgres
+  when: debian13_postgresql_postgis_enabled | bool
+
+- name: Initialize only a newly created database when explicitly requested
+  ansible.builtin.include_tasks: initial-import.yml
+  when:
+    - debian13_postgresql_created_db is changed
+    - hetzner_app_initial_import | bool
+    - application_db.dump_file is defined
+
+- name: Create the application schema without altering existing objects
+  community.postgresql.postgresql_schema:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    name: uranus
+    db: "{{ application_db.name }}"
+    owner: "{{ application_db.user }}"
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Grant access to existing application tables
+  community.postgresql.postgresql_privs:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    database: "{{ application_db.name }}"
+    roles: "{{ application_db.user }}"
+    type: table
+    schema: uranus
+    objs: ALL_IN_SCHEMA
+    privs: SELECT,INSERT,UPDATE,DELETE
+  become: true
+  become_user: postgres
+
+- name: Grant access to existing application sequences
+  community.postgresql.postgresql_privs:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    database: "{{ application_db.name }}"
+    roles: "{{ application_db.user }}"
+    type: sequence
+    schema: uranus
+    objs: ALL_IN_SCHEMA
+    privs: USAGE,SELECT,UPDATE
+  become: true
+  become_user: postgres

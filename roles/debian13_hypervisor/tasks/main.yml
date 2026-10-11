@@ -1,0 +1,198 @@
+---
+- name: Require Debian 13 on an amd64 dedicated host
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+      - ansible_facts.architecture == 'x86_64'
+      - hetzner_storage_uuid == '7f882d89-a2cf-46d2-9db8-5333be51a300'
+      - hetzner_storage_path == '/data/libvirt/images'
+      - not (recreate_existing_vms | default(false) | bool)
+      - hetzner_vms | map(attribute='name') | sort == ['db01', 'dev01', 'mon01', 'nom01', 'prod01', 'vers01']
+      - hetzner_target_vm == '' or hetzner_target_vm in (hetzner_vms | map(attribute='name') | list)
+      - (hetzner_vms | map(attribute='memory') | sum) + hetzner_host_reserve_mb | int <= ansible_facts.memtotal_mb
+    fail_msg: Invalid host, resource layout or destructive recreation requested.
+
+- name: Verify data filesystem before any package or provisioning change
+  uranus_storage_guard: {}
+
+- name: Read CPU virtualization capabilities
+  ansible.builtin.command:
+    argv: [cat, /proc/cpuinfo]
+  register: debian13_hypervisor_cpuinfo
+  changed_when: false
+
+- name: Require hardware virtualization and explicit management networks
+  ansible.builtin.assert:
+    that:
+      - debian13_hypervisor_cpuinfo.stdout is search('\b(vmx|svm)\b')
+      - hetzner_management_networks | length > 0
+      - "'0.0.0.0/0' not in hetzner_management_networks"
+      - "'::/0' not in hetzner_management_ipv6_networks"
+      - hetzner_image_url is match('^https://')
+      - hetzner_image_sha512 is match('^[0-9a-f]{128}$')
+      - lookup('file', hetzner_ssh_public_key_file) is match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-)')
+
+- name: Validate management CIDRs before changing the firewall
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import ipaddress,sys;
+        network=ipaddress.ip_network(sys.argv[1],strict=True);
+        sys.exit(0 if network.prefixlen > 0 else 1)
+      - "{{ item }}"
+  loop: "{{ hetzner_management_networks + hetzner_management_ipv6_networks }}"
+  changed_when: false
+
+- name: Install Debian virtualization packages without starting daemons
+  ansible.builtin.apt:
+    name:
+      - qemu-system-x86
+      - qemu-utils
+      - libvirt-daemon-system
+      - libvirt-clients
+      - virt-install
+      - cloud-image-utils
+      - libosinfo-bin
+      - dnsmasq-base
+      - nftables
+      - python3
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Load the appropriate hardware virtualization module
+  community.general.modprobe:
+    name: "{{ 'kvm_intel' if debian13_hypervisor_cpuinfo.stdout is search('\bvmx\b') else 'kvm_amd' }}"
+    state: present
+
+- name: Verify KVM device availability after loading the hardware module
+  ansible.builtin.stat:
+    path: /dev/kvm
+  register: debian13_hypervisor_kvm_device
+
+- name: Require a usable KVM character device
+  ansible.builtin.assert:
+    that:
+      - debian13_hypervisor_kvm_device.stat.exists
+      - debian13_hypervisor_kvm_device.stat.ischr
+
+- name: Verify storage immediately before creating libvirt directories
+  uranus_storage_guard: {}
+
+- name: Create protected storage paths before enabling libvirt
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: [/data/libvirt/images, /data/libvirt/cloud-init]
+
+- name: Require QEMU traversal access without changing the data mount permissions
+  ansible.builtin.command:
+    argv: [runuser, --user, libvirt-qemu, --, test, -x, /data/libvirt/images]
+  changed_when: false
+
+- name: Install storage guard for daemon startup
+  ansible.builtin.copy:
+    src: storage-guard.py
+    dest: /usr/local/sbin/uranus-storage-guard
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create libvirt systemd override directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    mode: '0755'
+  loop: [libvirtd, virtqemud, libvirt-guests]
+
+- name: Require protected storage when libvirt starts
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item }}.service.d/uranus-storage.conf"
+    content: |
+      [Unit]
+      RequiresMountsFor=/data/libvirt/images
+      [Service]
+      ExecStartPre=/usr/local/sbin/uranus-storage-guard
+    mode: '0644'
+  loop: [libvirtd, virtqemud, libvirt-guests]
+  notify: Reload Debian hypervisor systemd
+
+- name: Configure the dedicated host firewall
+  ansible.builtin.include_tasks: firewall.yml
+
+- name: Apply daemon dependencies before starting libvirt
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start libvirt
+  ansible.builtin.systemd_service:
+    name: libvirtd
+    enabled: true
+    state: started
+
+- name: Select requested guests
+  ansible.builtin.set_fact:
+    debian13_hypervisor_selected_vms: >-
+      {{ hetzner_vms if not hetzner_target_vm else
+         hetzner_vms | selectattr('name', 'equalto', hetzner_target_vm) | list }}
+    debian13_hypervisor_seed_configs: {}
+
+- name: Validate all VM and network state before downloading or creating anything
+  uranus_debian13_libvirt:
+    state: planned
+    vms: "{{ debian13_hypervisor_selected_vms }}"
+    network_xml: "{{ lookup('template', 'network.xml.j2') }}"
+  register: debian13_hypervisor_plan
+
+- name: Verify storage again before image download
+  uranus_storage_guard: {}
+  when: debian13_hypervisor_plan.new_vms | length > 0
+
+- name: Create protected cloud-image directory
+  ansible.builtin.file:
+    path: "{{ hetzner_storage_path }}/.base"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: debian13_hypervisor_plan.new_vms | length > 0
+
+- name: Verify storage immediately before downloading the base image
+  uranus_storage_guard: {}
+  when: debian13_hypervisor_plan.new_vms | length > 0
+
+- name: Download pinned Debian 13 genericcloud image
+  ansible.builtin.get_url:
+    url: "{{ hetzner_image_url }}"
+    dest: "{{ hetzner_image_path }}"
+    checksum: "sha512:{{ hetzner_image_sha512 }}"
+    owner: root
+    group: root
+    mode: '0644'
+    timeout: 300
+  when: debian13_hypervisor_plan.new_vms | length > 0
+
+- name: Render initial cloud-init data only for absent guests
+  ansible.builtin.set_fact:
+    debian13_hypervisor_seed_configs: >-
+      {{ debian13_hypervisor_seed_configs | combine({item.name: {
+        'user_data': lookup('template', 'user-data.yml.j2'),
+        'meta_data': lookup('template', 'meta-data.yml.j2'),
+        'network_config': lookup('template', 'network-config.yml.j2') }}) }}
+  loop: "{{ debian13_hypervisor_selected_vms }}"
+  when: item.name in debian13_hypervisor_plan.new_vms
+
+- name: Create absent domains and preserve existing domains and disks
+  uranus_debian13_libvirt:
+    vms: "{{ debian13_hypervisor_selected_vms }}"
+    network_xml: "{{ lookup('template', 'network.xml.j2') }}"
+    image: "{{ hetzner_image_path }}"
+    image_sha512: "{{ hetzner_image_sha512 }}"
+    seeds: "{{ debian13_hypervisor_seed_configs }}"
+    start_existing: "{{ hetzner_start_existing_vms }}"

@@ -1,1 +1,8 @@
 group_vars/vault.yml
+environments/hetzner/vault.yml
+environments/hetzner/deployment.yml
+.pytest_cache/
+__pycache__/
+*.pyc
+.ansible/cache/
+.venv/

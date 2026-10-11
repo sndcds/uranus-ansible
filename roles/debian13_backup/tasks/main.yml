@@ -1,0 +1,61 @@
+---
+- name: Create database backup directory with peer-authenticated writer access
+  ansible.builtin.file:
+    path: /var/backups/uranus/databases
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0750'
+
+- name: Install backups for every non-template database including monitoring and Nominatim
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/uranus-debian13-db-backup
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      umask 077
+      backup_dir=/var/backups/uranus/databases
+      backup_timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+      while IFS= read -r database; do
+        [[ "$database" =~ ^[a-zA-Z0-9_]+$ ]] || exit 1
+        archive="$backup_dir/${database}_${backup_timestamp}.dump"
+        pg_dump --format=custom --dbname="$database" --file="$archive.partial"
+        mv --no-clobber "$archive.partial" "$archive"
+      done < <(psql --no-psqlrc --tuples-only --no-align --dbname=postgres \
+        --command="SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn")
+      find "$backup_dir" -maxdepth 1 -type f -name '*.dump' -mtime +{{ backup_retention_days }} -delete
+
+- name: Install database backup service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-debian13-db-backup.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Dedicated Uranus database backups
+      After=postgresql.service
+      [Service]
+      Type=oneshot
+      User=postgres
+      ExecStart=/usr/local/sbin/uranus-debian13-db-backup
+      NoNewPrivileges=true
+
+- name: Install database backup timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uranus-debian13-db-backup.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Daily dedicated database backups
+      [Timer]
+      OnCalendar=*-*-* 02:00:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable daily database backups
+  ansible.builtin.systemd_service:
+    name: uranus-debian13-db-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

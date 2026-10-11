@@ -1,0 +1,7 @@
+---
+- name: Provision the dedicated host
+  ansible.builtin.import_playbook: provision.yml
+- name: Configure the Debian guests
+  ansible.builtin.import_playbook: configure.yml
+- name: Configure public ingress
+  ansible.builtin.import_playbook: ingress.yml

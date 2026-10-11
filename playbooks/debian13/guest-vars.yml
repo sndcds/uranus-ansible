@@ -1,0 +1,65 @@
+---
+- name: Load existing host role assignments without modifying the Ubuntu path
+  ansible.builtin.include_vars:
+    file: "../../host_vars/{{ inventory_hostname }}.yml"
+
+- name: Load required encrypted deployment secrets
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../environments/hetzner/vault.yml"
+  no_log: true
+
+- name: Override lab addresses and domains for private Debian guests
+  ansible.builtin.set_fact:
+    vm_role: "{{ (hetzner_vms | selectattr('name', 'equalto', inventory_hostname) | first).role }}"
+    uranus_domains: "{{ hetzner_domains }}"
+    frontend_domain: "{{ hetzner_domains.dev_frontend if inventory_hostname == 'dev01' else hetzner_domains.prod_frontend }}"
+    backend_domain: "{{ hetzner_domains.dev_backend if inventory_hostname == 'dev01' else hetzner_domains.prod_backend }}"
+    icinga_web_domain: "{{ hetzner_domains.icinga }}"
+    monitoring_grafana_domain: "{{ hetzner_domains.icinga }}"
+    nominatim_domain: "{{ hetzner_domains.nominatim }}"
+    versatiles_domain: "{{ hetzner_domains.versatiles }}"
+    local_test_mode: false
+    postgresql_listen_addresses: "localhost,{{ hostvars['db01'].ansible_host }}"
+    postgresql_allowed_networks:
+      - 127.0.0.1/32
+      - 10.77.0.12/32
+      - 10.77.0.13/32
+      - 10.77.0.14/32
+      - 10.77.0.15/32
+    monitoring_bandwidth_enabled: false
+    monitoring_influx_allowed_networks: [10.77.0.12/32, 10.77.0.13/32]
+    pluto_metrics_influx_host: "{{ hostvars['mon01'].ansible_host }}"
+    pluto_metrics_enabled: true
+
+- name: Require database and backend secrets before application changes
+  ansible.builtin.assert:
+    that:
+      - vault_db_password_dev | default('') | length >= 20
+      - vault_db_password_prod | default('') | length >= 20
+      - vault_nominatim_db_password | default('') | length >= 20
+      - vault_backend_jwt_secret | default('') | length >= 32
+      - vault_backend_secret_key | default('') | length >= 32
+      - vault_monitoring_web_db_password | default('') | length >= 20
+      - vault_monitoring_ido_db_password | default('') | length >= 20
+      - vault_monitoring_admin_password | default('') | length >= 20
+      - vault_monitoring_grafana_admin_password | default('') | length >= 20
+      - vault_monitoring_api_password | default('') | length >= 20
+      - hetzner_domains.values() | select('search', '\.invalid$|\.home\.arpa$') | list | length == 0
+    fail_msg: Supply production secrets and real domains in the dedicated vault and deployment variables.
+  no_log: true
+
+- name: Require serialization-safe generated secrets for the existing backend templates
+  ansible.builtin.assert:
+    that: item is match('^[A-Za-z0-9_-]{20,}$')
+    fail_msg: Use generated alphanumeric secrets, for example openssl rand -hex 32.
+  loop:
+    - "{{ vault_db_password_dev }}"
+    - "{{ vault_db_password_prod }}"
+    - "{{ vault_nominatim_db_password }}"
+    - "{{ vault_backend_jwt_secret }}"
+    - "{{ vault_backend_secret_key }}"
+    - "{{ vault_monitoring_web_db_password }}"
+    - "{{ vault_monitoring_ido_db_password }}"
+    - "{{ vault_monitoring_api_password }}"
+    - "{{ vault_monitoring_grafana_admin_password }}"
+  no_log: true

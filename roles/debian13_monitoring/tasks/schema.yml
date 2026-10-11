@@ -1,0 +1,37 @@
+---
+- name: Inspect actual database schema before initialization
+  community.postgresql.postgresql_query:
+    db: "{{ monitoring_schema.name }}"
+    query: >-
+      SELECT to_regclass(%(sentinel)s)::text AS sentinel,
+      (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname NOT LIKE 'pg_%%' AND n.nspname <> 'information_schema') AS object_count
+    named_args: {sentinel: "{{ monitoring_schema.sentinel }}"}
+  delegate_to: db01
+  become: true
+  become_user: postgres
+  register: debian13_monitoring_schema_state
+
+- name: Refuse to initialize an unknown populated monitoring database
+  ansible.builtin.assert:
+    that: >-
+      debian13_monitoring_schema_state.query_result[0].sentinel is not none or
+      debian13_monitoring_schema_state.query_result[0].object_count | int == 0
+    fail_msg: Unknown existing monitoring data found. Preserve it and recover manually.
+
+- name: Initialize only the empty monitoring schema atomically
+  ansible.builtin.command:
+    argv:
+      - psql
+      - --no-psqlrc
+      - --single-transaction
+      - --set=ON_ERROR_STOP=1
+      - "--host={{ hostvars['db01'].ansible_host }}"
+      - "--username={{ monitoring_schema.user }}"
+      - "--dbname={{ monitoring_schema.name }}"
+      - "--file={{ monitoring_schema.file }}"
+  environment:
+    PGPASSWORD: "{{ monitoring_schema.password }}"
+  when: debian13_monitoring_schema_state.query_result[0].sentinel is none
+  changed_when: true
+  no_log: true

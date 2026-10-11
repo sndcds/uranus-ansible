@@ -1,0 +1,62 @@
+---
+- name: Install native Debian baseline without a distribution upgrade
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - git
+      - acl
+      - python3
+      - python3-psycopg2
+      - qemu-guest-agent
+      - nftables
+      - logrotate
+      - unattended-upgrades
+      - systemd-timesyncd
+      - openssl
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable guest agent and time synchronization
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [qemu-guest-agent, systemd-timesyncd]
+
+- name: Set the application timezone
+  community.general.timezone:
+    name: Europe/Berlin
+
+- name: Disable SSH password and root authentication
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-uranus.conf
+    mode: '0644'
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+  notify: Reload Debian guest SSH
+
+- name: Validate sshd before reload
+  ansible.builtin.command:
+    argv: [/usr/sbin/sshd, -t]
+  changed_when: false
+
+- name: Create private guest firewall configuration
+  ansible.builtin.template:
+    src: firewall.nft.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: '0600'
+    validate: /usr/sbin/nft --check --file %s
+  notify: Reload Debian guest firewall
+
+- name: Enable guest firewall
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started

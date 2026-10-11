@@ -1,0 +1,21 @@
+---
+# These are documentation-only examples. Replace addresses/domains before use.
+# Keep approval false until the owner explicitly authorizes production deployment.
+hetzner_deployment_approved: false
+hetzner_management_networks: [203.0.113.10/32]
+hetzner_management_ipv6_networks: []
+hetzner_private_web_networks: [203.0.113.10/32]
+hetzner_acme_email: admin@example.com
+hetzner_domains:
+  dev_frontend: dev.example.com
+  dev_backend: api.dev.example.com
+  prod_frontend: example.com
+  prod_backend: api.example.com
+  icinga: monitoring.example.com
+  nominatim: nominatim.example.com
+  versatiles: tiles.example.com
+  mail_mx: mail.example.com
+# Set only for an explicitly authorized FIRST initialization of absent databases.
+hetzner_app_initial_import: false
+hetzner_nominatim_initial_import: false
+# Pin frontend_repo_version and backend_repo_version to reviewed commits for releases.
