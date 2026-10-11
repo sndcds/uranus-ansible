@@ -77,10 +77,12 @@ jobs:
       - name: Load VM transport only on the disposable GitHub runner
         run: |
           modprobe vhost_vsock
-          if ! test -c /dev/vhost-vsock; then
-            IFS=: read -r qa_vsock_major qa_vsock_minor < /sys/class/misc/vhost-vsock/dev
-            mknod -m 0600 /dev/vhost-vsock c "$qa_vsock_major" "$qa_vsock_minor"
-          fi
+          for qa_vsock_node in vsock vhost-vsock; do
+            if ! test -c "/dev/$qa_vsock_node"; then
+              IFS=: read -r qa_vsock_major qa_vsock_minor < "/sys/class/misc/$qa_vsock_node/dev"
+              mknod -m 0600 "/dev/$qa_vsock_node" c "$qa_vsock_major" "$qa_vsock_minor"
+            fi
+          done
           test -c /dev/kvm
       - name: Exercise native CLI and API in disposable storage
         run: /opt/uranus-contract/bin/python scripts/incus_smoke.py --data-dir /tmp/uranus-incus-smoke-ci
