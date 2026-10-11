@@ -34,7 +34,9 @@ def main():
     data.mkdir(mode=0o700)
     env={**os.environ,'INCUS_DIR':str(data)}
     def run(argv,stdin=None):
-        result=subprocess.run(argv,input=stdin,env=env,check=True,capture_output=True,text=True,timeout=300)
+        result=subprocess.run(argv,input=stdin,env=env,capture_output=True,text=True,timeout=300)
+        if result.returncode:
+            raise RuntimeError(f"{argv[0]} exited {result.returncode}: {result.stderr.strip()}")
         return result.stdout
     log=(data/'daemon.log').open('w')
     daemon=subprocess.Popen(['/usr/libexec/incus/incusd'],env=env,stdout=log,stderr=log)
@@ -87,7 +89,7 @@ def main():
                         release=run(project+['exec',name,'--','cat','/etc/os-release'])
                         assert 'VERSION_ID="13"' in release
                         break
-                    except subprocess.CalledProcessError:
+                    except RuntimeError:
                         if attempt==89: raise
                         time.sleep(2)
                 run(project+['exec',name,'--','timeout','180','cloud-init','status','--wait'])
@@ -96,6 +98,10 @@ def main():
             print('PASS: container and VM boot, Incus agent, cloud-init and real SSH',flush=True)
         else:
             print('NOT RUN: boot, guest SSH and applications; use --boot in a lab with delegated cgroups and /dev/kvm',flush=True)
+    except Exception:
+        print('Native Incus daemon diagnostics:',file=sys.stderr)
+        print((data/'daemon.log').read_text()[-12000:],file=sys.stderr)
+        raise
     finally:
         daemon.terminate()
         try: daemon.wait(timeout=30)
