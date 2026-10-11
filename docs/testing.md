@@ -55,3 +55,9 @@ als `NOT RUN` ausgegeben. Auch dieser Test verwendet niemals den Zielhost.
 Ein vollständiger Anwendungspilot einschließlich Healthchecks, TLS, realen
 Importen und externem Restore ist weiterhin offen. Ein grüner CI-Lauf ersetzt
 keinen dieser ausdrücklich fehlenden Nachweise.
+
+Der native GitHub-Vertragstest benötigt `vhost_vsock`. Das erste CI-Lab
+verweigerte VM-Initialisierung wegen des fehlenden Moduls. Die CI lädt es jetzt
+ausschließlich auf dem wegwerfbaren GitHub-Runner und stellt dessen Device im
+Testcontainer bereit. Kernelmodul-Dateien werden nur lesend eingebunden; bei
+fehlendem KVM/Transport bricht der Job ab, ohne VMprüfungen zu überspringen.

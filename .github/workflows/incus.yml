@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: debian:13
-      options: --privileged
+      options: --privileged --volume /lib/modules:/lib/modules:ro
     timeout-minutes: 20
     steps:
       - name: Install native Incus without starting package services
@@ -67,13 +67,21 @@ jobs:
           chmod 0755 /usr/sbin/policy-rc.d
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            git ca-certificates python3 python3-venv incus incus-client openssh-client icinga2 icinga2-ido-pgsql
+            git ca-certificates python3 python3-venv incus incus-client openssh-client icinga2 icinga2-ido-pgsql kmod
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Install template rendering dependencies
         run: |
           python3 -m venv /opt/uranus-contract
           /opt/uranus-contract/bin/pip install PyYAML==6.0.3 Jinja2==3.1.6
+      - name: Load VM transport only on the disposable GitHub runner
+        run: |
+          modprobe vhost_vsock
+          if ! test -c /dev/vhost-vsock; then
+            IFS=: read -r qa_vsock_major qa_vsock_minor < /sys/class/misc/vhost-vsock/dev
+            mknod -m 0600 /dev/vhost-vsock c "$qa_vsock_major" "$qa_vsock_minor"
+          fi
+          test -c /dev/kvm
       - name: Exercise native CLI and API in disposable storage
         run: /opt/uranus-contract/bin/python scripts/incus_smoke.py --data-dir /tmp/uranus-incus-smoke-ci
       - name: Parse master and agent monitoring configuration
