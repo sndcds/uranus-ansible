@@ -86,3 +86,27 @@ def test_native_cloud_init_schema_for_both_instance_types(kind,render,tmp_path):
     assert shutil.which('cloud-init'), 'Install cloud-init for the native schema check'
     result=subprocess.run(['cloud-init','schema','--config-file',str(cloud)],text=True,capture_output=True)
     assert result.returncode==0,result.stdout+result.stderr
+    network=tmp_path/'network-config.yml'
+    network.write_text(config['config']['user.network-config'])
+    rendered=tmp_path/'network-rendered'
+    # The real renderer chowns its output to systemd-network. Suppress only
+    # that ownership change so this native conversion runs unprivileged.
+    converter = '''
+import runpy
+import sys
+from unittest.mock import patch
+sys.argv = sys.argv[1:]
+with patch('cloudinit.util.chownbyname'):
+    runpy.run_path(sys.argv[0], run_name='__main__')
+'''
+    result=subprocess.run(['/usr/bin/python3','-c',converter,shutil.which('cloud-init'),
+                           'devel','net-convert','-p',str(network),'-k','yaml',
+                           '-d',str(rendered),'-D','debian','-O','networkd'],text=True,capture_output=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    files=list((rendered/'etc/systemd/network').glob('*.network'))
+    assert len(files)==1
+    import configparser
+    native=configparser.ConfigParser()
+    native.read(files[0])
+    assert native['Match']['Name']=='e*'
+    assert native['Network']['DHCP']=='ipv4'

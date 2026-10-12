@@ -10,7 +10,7 @@ class API:
     def __init__(self):
         self.calls=[]
         self.data={
-            '/1.0':{'config':{},'environment':{'server_version':'6.0.4','server_clustered':False}},
+            '/1.0':{'config':{},'environment':{'server_version':'6.0.4','server_clustered':False,'driver':'lxc | qemu'}},
             '/1.0/projects?recursion=1':[],
             '/1.0/storage-pools?recursion=1':[],
             '/1.0/networks?recursion=1':[],
@@ -43,6 +43,56 @@ def test_first_installation_plans_all_six_without_mutation(layout):
     api=API(); result=plan(api,layout)
     assert set(result['new_instances'])==incus.NAMES
     assert not result['project_exists']
+
+@pytest.mark.parametrize('drivers',['lxc','',None,[],{},'lxc | not-qemu'])
+def test_unavailable_qemu_stops_before_resource_inspection(layout,drivers):
+    api=API();api.data['/1.0']['environment']['driver']=drivers
+    before=copy.deepcopy(api.data)
+    with pytest.raises(safety.SafetyError,match='QEMU driver is not operational') as error:
+        plan(api,layout)
+    assert 'journalctl -u incus' in str(error.value)
+    assert api.data==before
+    assert len(api.calls)==1 and api.calls[0][-1]=='/1.0'
+
+def test_missing_driver_metadata_stops_before_resource_inspection(layout):
+    api=API();del api.data['/1.0']['environment']['driver']
+    with pytest.raises(safety.SafetyError,match='QEMU driver is not operational'):
+        plan(api,layout)
+    assert len(api.calls)==1
+
+@pytest.mark.parametrize('drivers',['qemu','qemu | lxc',' lxc | qemu '])
+def test_operational_qemu_allows_vm_provisioning(layout,drivers):
+    api=API();api.data['/1.0']['environment']['driver']=drivers
+    assert set(plan(api,layout)['new_instances'])==incus.NAMES
+
+def test_container_only_layout_does_not_require_qemu(layout):
+    api=API();api.data['/1.0']['environment']['driver']='lxc'
+    for instance in layout[0]:instance['type']='container'
+    assert set(plan(api,layout)['new_instances'])==incus.NAMES
+
+@pytest.mark.parametrize('path',[
+    '/1.0/projects?recursion=1',
+    '/1.0/storage-pools?recursion=1',
+    '/1.0/networks?recursion=1',
+])
+def test_first_installation_accepts_null_empty_collections(layout,path):
+    api=API();api.data[path]=None;before=copy.deepcopy(api.data)
+    result=plan(api,layout)
+    assert set(result['new_instances'])==incus.NAMES
+    assert not any(result[key] for key in ('project_exists','pool_exists','network_exists'))
+    assert api.data==before
+
+@pytest.mark.parametrize('path',[
+    '/1.0/instances?recursion=2&project=uranus',
+    '/1.0/storage-pools/uranus/volumes?recursion=1&project=uranus',
+])
+def test_existing_project_accepts_null_empty_collections(layout,path):
+    api=API();api.managed(layout[0]);api.data[path]=None;before=copy.deepcopy(api.data)
+    result=plan(api,layout)
+    expected=incus.NAMES if path.startswith('/1.0/instances?') else set()
+    assert set(result['new_instances'])==expected
+    assert all(result[key] for key in ('project_exists','pool_exists','network_exists'))
+    assert api.data==before
 
 def test_repeat_is_read_only_and_preserves_instance_state(layout):
     api=API();api.managed(layout[0]);before=copy.deepcopy(api.data)
@@ -81,8 +131,9 @@ def test_shared_resource_drift_is_preserved(layout,kind):
     else:api.data['/1.0/networks?recursion=1'][0]['config']['ipv6.address']='auto'
     with pytest.raises(safety.SafetyError):plan(api,layout)
 
-def test_orphaned_volume_stops_before_any_creation(layout):
-    api=API();api.managed(layout[0]);api.data['/1.0/instances?recursion=2&project=uranus']=[]
+@pytest.mark.parametrize('empty',[[],None])
+def test_orphaned_volume_stops_before_any_creation(layout,empty):
+    api=API();api.managed(layout[0]);api.data['/1.0/instances?recursion=2&project=uranus']=empty
     api.data['/1.0/storage-pools/uranus/volumes?recursion=1&project=uranus']=[{'name':'db01','type':'virtual-machine'}]
     with pytest.raises(safety.SafetyError,match='Orphaned'):plan(api,layout)
 
@@ -91,9 +142,11 @@ def test_interrupted_init_preserves_orphaned_disk(layout):
     with pytest.raises(safety.SafetyError,match='Orphaned'):plan(api,layout)
     assert (path/'valuable').read_text()=='keep'
 
-def test_nonempty_unregistered_pool_is_not_adopted(layout):
+@pytest.mark.parametrize('empty',[[],None])
+def test_nonempty_unregistered_pool_is_not_adopted(layout,empty):
     incus.POOL_PATH.mkdir(parents=True);(incus.POOL_PATH/'keep').write_text('data')
-    with pytest.raises(safety.SafetyError,match='Orphaned'):plan(API(),layout)
+    api=API();api.data['/1.0/storage-pools?recursion=1']=empty
+    with pytest.raises(safety.SafetyError,match='Orphaned'):plan(api,layout)
 
 def test_out_of_space_aborts_even_when_pool_exists(layout,monkeypatch):
     api=API();api.managed(layout[0]);api.data['/1.0/instances?recursion=2&project=uranus']=[]
@@ -130,6 +183,35 @@ def test_failed_api_read_never_means_resource_absent(layout):
     api=API()
     def run(args):raise safety.SafetyError('API unavailable')
     with pytest.raises(safety.SafetyError,match='unavailable'):incus.preflight(*layout,run=run,guard=lambda run:{'options':'rw'})
+
+@pytest.mark.parametrize('response',[
+    None,
+    [],
+    {'type':'sync','status_code':200},
+    {'type':'error','status_code':500,'metadata':None},
+    {'type':'sync','status_code':500,'metadata':None},
+    {'type':'async','status_code':200,'metadata':None},
+])
+def test_invalid_api_envelope_never_means_resource_absent(layout,response):
+    api=API();path='/1.0/storage-pools?recursion=1'
+    def run(args):
+        result=api.run(args)
+        return json.dumps(response) if args[-1]==path else result
+    with pytest.raises(safety.SafetyError,match=r'response for /1.0/storage-pools\?recursion=1'):
+        incus.preflight(*layout,run=run,guard=lambda run:{'options':'rw'})
+    assert api.calls[-1][-1]==path
+
+@pytest.mark.parametrize('metadata',[{},'',0,False,[None],['/1.0/storage-pools/uranus']])
+def test_invalid_collection_metadata_never_means_resource_absent(layout,metadata):
+    api=API();api.data['/1.0/storage-pools?recursion=1']=metadata
+    with pytest.raises(safety.SafetyError,match=r'metadata for /1.0/storage-pools\?recursion=1'):
+        plan(api,layout)
+
+def test_null_server_metadata_is_rejected(layout):
+    api=API();api.data['/1.0']=None
+    with pytest.raises(safety.SafetyError,match='metadata for /1.0'):
+        plan(api,layout)
+    assert len(api.calls)==1
 
 def test_wrong_mount_stops_before_api_read(layout):
     api=API()

@@ -15,6 +15,15 @@ Ein bisheriger Incus-Zustand unter `/var/lib/incus` wird nicht automatisch
 verschoben oder adoptiert. Die Incus-internen Symlinks auf eigene Volumes sind
 normal; fremde Symlinks an den geschützten Basispfaden werden abgelehnt.
 
+Das Basisverzeichnis `/data/incus` gehört `root:root` und hat Modus `0711`.
+Der auf eine Host-UID abgebildete Rootbenutzer eines unprivilegierten Containers
+braucht das Suchrecht (`x`), um dessen Rootdateisystem zu erreichen. Modus `0700`
+verhindert deshalb den LXC-Start. `0711` erlaubt anderen Benutzern die Traversierung,
+aber kein Auflisten oder Schreiben im Basisverzeichnis. Incus verwaltet die
+Rechte seiner Unterverzeichnisse und Volumes; die Hostrolle ändert ausschließlich
+das Basisverzeichnis, ohne rekursiven `chmod` oder `chown`.
+[LXC-Pfadprüfung](https://github.com/lxc/lxc/blob/stable-6.0/src/lxc/start.c#L73).
+
 | Backend | Bewertung bei vorhandener ext4-NVMe |
 |---|---|
 | Directory | Standard: bestehendes ext4 nutzbar, keine Partitionseingriffe; höhere Kosten für Kopien/Snapshots |

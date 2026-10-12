@@ -21,10 +21,7 @@
     stdin: "{{ lookup('template', 'instance.yml.j2') }}"
   changed_when: true
 
-- name: Guard filesystem immediately before starting the new instance
-  uranus_storage_guard: {}
-
 - name: Start the fully initialized instance through Incus
-  ansible.builtin.command:
-    argv: [incus, --force-local, --project, uranus, start, "{{ incus_instance.name }}"]
-  changed_when: true
+  ansible.builtin.include_tasks: start.yml
+  vars:
+    incus_instance_name: "{{ incus_instance.name }}"

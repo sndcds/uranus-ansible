@@ -128,6 +128,13 @@ incus_storage_warning_percent: 75
 incus_storage_critical_percent: 85
 incus_start_existing: false
 incus_container_quotas: false
+incus_guest_bootstrap_packages:
+  - ca-certificates
+  - openssh-server
+  - python3
+  - sudo
+  - acl
+  - htop
 incus_images:
   container: ebdc531119fec1563bd0cafcd3efc01560daccd0ae61bff1f736768e211faa83
   virtual-machine: cb356a9e2b8f35924c539fef0ee44f2996b9ac22a932ec02c69c1eabcb45f9c8

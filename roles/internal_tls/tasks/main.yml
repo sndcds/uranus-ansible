@@ -1,4 +1,7 @@
 ---
+- name: Validate controller PKI inputs before installing or staging TLS
+  ansible.builtin.import_tasks: inputs.yml
+
 - name: Install certificate validation tools without daemon startup
   ansible.builtin.apt:
     name: [openssl, ssl-cert]

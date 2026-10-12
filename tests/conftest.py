@@ -16,9 +16,11 @@ def settings():
 
 @pytest.fixture
 def render(settings):
-    from jinja2 import Environment, StrictUndefined
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
     import json
-    environment = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
+    environment = Environment(
+        loader=FileSystemLoader(ROOT / 'roles/incus_instance/templates'),
+        undefined=StrictUndefined, keep_trailing_newline=True)
     environment.filters['to_json'] = json.dumps
     environment.filters['bool'] = bool
     environment.filters['regex_replace'] = __import__('re').sub

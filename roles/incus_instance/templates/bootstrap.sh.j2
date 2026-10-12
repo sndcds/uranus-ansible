@@ -1,0 +1,177 @@
+set -eu
+packages_changed=false
+missing_packages=
+for package in {{ incus_guest_bootstrap_packages | join(' ') }}; do
+    if [ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]; then
+        missing_packages="$missing_packages $package"
+    fi
+done
+if [ -n "$missing_packages" ]; then
+    apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update >&2
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends install $missing_packages >&2
+    packages_changed=true
+fi
+for package in {{ incus_guest_bootstrap_packages | join(' ') }}; do
+    test "$(dpkg-query -W -f='${Status}' "$package")" = 'install ok installed'
+done
+python3 - "$packages_changed" <<'URANUS_BOOTSTRAP_PY'
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+import tempfile
+
+instance = {{ incus_instance.name | to_json }}
+public_key = {{ lookup('file', hetzner_ssh_public_key_file) | to_json }}.strip()
+changed = sys.argv[1] == 'true'
+root_owner = (os.geteuid(), os.getegid())
+
+
+def run(argv):
+    subprocess.run(argv, check=True, stdout=subprocess.DEVNULL)
+
+
+def output(argv):
+    return subprocess.check_output(argv, text=True).strip()
+
+
+def directory(path, mode, owner=root_owner):
+    global changed
+    path = Path(path)
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise RuntimeError(f'Require a regular managed directory: {path}')
+    if not path.exists():
+        path.mkdir(mode=mode)
+        changed = True
+    info = path.stat()
+    if stat.S_IMODE(info.st_mode) != mode or (info.st_uid, info.st_gid) != owner:
+        os.chown(path, *owner)
+        path.chmod(mode)
+        changed = True
+    return path
+
+
+def install_file(path, content, mode, owner=root_owner, validate=None):
+    global changed
+    path = Path(path)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise RuntimeError(f'Require a regular managed file: {path}')
+    if path.exists():
+        info = path.stat()
+        if (path.read_text() == content and stat.S_IMODE(info.st_mode) == mode
+                and (info.st_uid, info.st_gid) == owner):
+            return False
+    descriptor, staged = tempfile.mkstemp(dir=path.parent, prefix='.uranus-')
+    try:
+        with os.fdopen(descriptor, 'w') as stream:
+            stream.write(content)
+        os.chown(staged, *owner)
+        os.chmod(staged, mode)
+        if validate:
+            validate(staged)
+        os.replace(staged, path)
+    finally:
+        if os.path.exists(staged):
+            os.unlink(staged)
+    changed = True
+    return True
+
+
+with tempfile.TemporaryDirectory(prefix='uranus-public-key-') as temporary:
+    key_file = Path(temporary) / 'identity.pub'
+    key_file.write_text(public_key + '\n')
+    if len(public_key.splitlines()) != 1:
+        raise RuntimeError('Require exactly one SSH public key')
+    run(['ssh-keygen', '-l', '-f', str(key_file)])
+
+install_file('/etc/hostname', instance + '\n', 0o644)
+if output(['hostname']) != instance:
+    run(['hostnamectl', 'set-hostname', instance])
+    changed = True
+hosts_file = Path('/etc/hosts')
+hosts = hosts_file.read_text().splitlines()
+hosts = [line for line in hosts if not line.split() or line.split()[0] != '127.0.1.1']
+hosts.append('127.0.1.1\t' + instance)
+install_file(hosts_file, '\n'.join(hosts) + '\n', 0o644)
+
+account = subprocess.run(['getent', 'passwd', 'debian'], text=True, capture_output=True)
+if account.returncode == 2:
+    run(['useradd', '--create-home', '--shell', '/bin/bash', '--groups', 'adm,sudo', 'debian'])
+    changed = True
+elif account.returncode:
+    raise RuntimeError('Cannot read the debian account')
+account_fields = output(['getent', 'passwd', 'debian']).split(':')
+uid, gid = int(account_fields[2]), int(account_fields[3])
+home = Path(account_fields[5])
+if uid == 0 or not home.is_absolute() or home == Path('/') or home == Path('/root'):
+    raise RuntimeError('Refuse an unsafe debian account or home directory')
+if home.is_symlink() or (home.exists() and not home.is_dir()):
+    raise RuntimeError('Require a regular debian home directory')
+groups = set(output(['id', '-Gn', 'debian']).split())
+if not {'adm', 'sudo'} <= groups or account_fields[6] != '/bin/bash':
+    run(['usermod', '--append', '--groups', 'adm,sudo', '--shell', '/bin/bash', 'debian'])
+    changed = True
+shadow = output(['getent', 'shadow', 'debian']).split(':')[1]
+if not shadow.startswith(('!', '*')):
+    run(['usermod', '--lock', 'debian'])
+    changed = True
+if not home.exists():
+    directory(home, 0o755, (uid, gid))
+ssh_directory = directory(home / '.ssh', 0o700, (uid, gid))
+authorized_keys = ssh_directory / 'authorized_keys'
+if authorized_keys.is_symlink():
+    raise RuntimeError('Refuse a symlinked authorized_keys file')
+keys = authorized_keys.read_text().splitlines() if authorized_keys.exists() else []
+if not any(line.split()[:2] == public_key.split()[:2] for line in keys):
+    keys.append(public_key)
+install_file(authorized_keys, '\n'.join(keys) + '\n', 0o600, (uid, gid))
+directory('/etc/sudoers.d', 0o755)
+sudoers = '/etc/sudoers.d/60-uranus-debian'
+install_file(sudoers, 'debian ALL=(ALL) NOPASSWD:ALL\n', 0o440,
+             validate=lambda staged: run(['visudo', '-cf', staged]))
+run(['visudo', '-c'])
+
+host_keys = set(Path('/etc/ssh').glob('ssh_host_*_key'))
+run(['ssh-keygen', '-A'])
+keys_created = set(Path('/etc/ssh').glob('ssh_host_*_key')) != host_keys
+changed = changed or keys_created
+directory('/run/sshd', 0o755)
+run(['/usr/sbin/sshd', '-t'])
+initial_effective = output(['/usr/sbin/sshd', '-T']).splitlines()
+has_sftp = any(line.split()[:2] == ['subsystem', 'sftp'] for line in initial_effective)
+directory('/etc/ssh/sshd_config.d', 0o755)
+{% set guest_ssh_config %}{% include 'guest-sshd.conf.j2' %}{% endset %}
+ssh_changed = install_file('/etc/ssh/sshd_config.d/00-uranus.conf',
+                           {{ guest_ssh_config | to_json }}, 0o644)
+main_config = Path('/etc/ssh/sshd_config')
+managed_include = 'Include /etc/ssh/sshd_config.d/00-uranus.conf\n'
+previous_config = main_config.read_text()
+desired_config = previous_config if previous_config.startswith(managed_include) else managed_include + previous_config
+if not has_sftp:
+    desired_config = managed_include + 'Subsystem sftp internal-sftp\n' + desired_config[len(managed_include):]
+ssh_changed = install_file(main_config, desired_config, 0o644,
+                           validate=lambda staged: run(['/usr/sbin/sshd', '-t', '-f', staged])) or ssh_changed
+run(['/usr/sbin/sshd', '-t'])
+effective = dict(line.split(None, 1) for line in output(['/usr/sbin/sshd', '-T']).splitlines() if ' ' in line)
+expected = {'passwordauthentication': 'no', 'kbdinteractiveauthentication': 'no', 'permitrootlogin': 'no',
+            'usepam': 'yes', 'pubkeyauthentication': 'yes', 'authenticationmethods': 'publickey'}
+for option, value in expected.items():
+    if effective.get(option) != value:
+        raise RuntimeError(f'Expected sshd {option}={value}, got {effective.get(option, "missing")}; inspect the effective configuration')
+enabled = subprocess.run(['systemctl', 'is-enabled', '--quiet', 'ssh']).returncode == 0
+active = subprocess.run(['systemctl', 'is-active', '--quiet', 'ssh']).returncode == 0
+if not enabled or not active:
+    run(['systemctl', 'enable', '--now', 'ssh'])
+    changed = True
+if active and (ssh_changed or keys_created):
+    run(['systemctl', 'reload', 'ssh'])
+run(['systemctl', 'is-active', '--quiet', 'ssh'])
+if output(['hostname']) != instance:
+    raise RuntimeError('Guest hostname does not match the planned instance')
+directory('/var/lib/uranus', 0o755)
+install_file('/var/lib/uranus/instance-bootstrap.json',
+             json.dumps({'version': 1, 'instance': instance}, sort_keys=True) + '\n', 0o600)
+print(json.dumps({'changed': changed, 'instance': instance, 'ready': True}))
+URANUS_BOOTSTRAP_PY

@@ -20,7 +20,7 @@ UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,uniq
 
 def check():
     paths=[]
-    for folder in ('roles','playbooks','environments','library','module_utils','scripts','.github'):
+    for folder in ('roles','playbooks','environments','library','module_utils','filter_plugins','scripts','.github'):
         paths.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix in ('.yml','.yaml','.j2','.py','.sh','.example'))
     for p in paths:
         if p.name in ('vault.yml','deployment.yml') or 'pki' in p.parts: continue

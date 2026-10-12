@@ -1,6 +1,7 @@
 environments/hetzner/vault.yml
 environments/hetzner/deployment.yml
 environments/hetzner/pki/
+.uranus-private/
 .pytest_cache/
 __pycache__/
 *.pyc

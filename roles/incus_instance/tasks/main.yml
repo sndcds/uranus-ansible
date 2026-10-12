@@ -81,6 +81,22 @@
   ansible.builtin.assert:
     that: incus_instance_verified.new_instances | length == 0
 
+- name: Configure MAC-based DHCP on running new and existing instances
+  ansible.builtin.include_tasks: network.yml
+  loop: "{{ incus_instances }}"
+  loop_control:
+    loop_var: incus_instance
+    label: "{{ incus_instance.name }}"
+  when: incus_instance.name not in incus_instance_verified.stopped_instances
+
+- name: Prepare the baseline on every running VM and container through Incus
+  ansible.builtin.include_tasks: bootstrap.yml
+  loop: "{{ incus_instances }}"
+  loop_control:
+    loop_var: incus_instance
+    label: "{{ incus_instance.name }}"
+  when: incus_instance.name not in incus_instance_verified.stopped_instances
+
 - name: Install host monitoring certificate
   ansible.builtin.include_role:
     name: internal_tls

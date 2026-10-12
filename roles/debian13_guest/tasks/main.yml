@@ -1,18 +1,10 @@
 ---
 - name: Install native Debian baseline without a distribution upgrade
   ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-      - gnupg
-      - git
-      - acl
-      - python3
-      - python3-psycopg2
-      - nftables
-      - logrotate
-      - unattended-upgrades
-      - openssl
+    name: >-
+      {{ incus_guest_bootstrap_packages +
+         ['curl', 'gnupg', 'git', 'python3-psycopg2', 'nftables',
+          'logrotate', 'unattended-upgrades', 'openssl'] }}
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -35,13 +27,10 @@
     name: Europe/Berlin
 
 - name: Disable SSH password and root authentication
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: "{{ role_path }}/../incus_instance/templates/guest-sshd.conf.j2"
     dest: /etc/ssh/sshd_config.d/00-uranus.conf
     mode: '0644'
-    content: |
-      PasswordAuthentication no
-      KbdInteractiveAuthentication no
-      PermitRootLogin no
   notify: Reload Debian guest SSH
 
 - name: Validate sshd before reload

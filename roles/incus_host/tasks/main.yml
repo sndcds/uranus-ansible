@@ -62,11 +62,52 @@
 
 - name: Install Debian Incus packages without daemon startup
   ansible.builtin.apt:
-    name: [incus, incus-client, nftables, python3, acl, openssh-client]
+    name: [incus, incus-client, dnsmasq-base, nftables, python3, acl, openssh-client, kmod, procps]
     state: present
     update_cache: true
     cache_valid_time: 3600
     policy_rc_d: 101
+
+- name: Install VM firmware and QEMU tools explicitly without daemon startup
+  ansible.builtin.apt:
+    name: [qemu-system-x86, qemu-utils, qemu-system-modules-spice, ovmf]
+    state: present
+    policy_rc_d: 101
+  register: incus_host_vm_packages
+  when: incus_instances | selectattr('type', 'equalto', 'virtual-machine') | list | length > 0
+
+- name: Load bridge netfilter at boot for Incus NIC filtering
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/uranus-incus.conf
+    content: "br_netfilter\n"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Load bridge netfilter before starting Incus instances
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Persist IPv6 bridge netfilter required by Incus NIC filtering
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/90-uranus-incus.conf
+    content: "net.bridge.bridge-nf-call-ip6tables = 1\n"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Read the current IPv6 bridge netfilter setting
+  ansible.builtin.command:
+    argv: [sysctl, -n, net.bridge.bridge-nf-call-ip6tables]
+  register: incus_host_bridge_ipv6_filtering
+  changed_when: false
+
+- name: Enable IPv6 bridge netfilter when the current setting differs
+  ansible.builtin.command:
+    argv: [sysctl, --load, /etc/sysctl.d/90-uranus-incus.conf]
+  changed_when: true
+  when: incus_host_bridge_ipv6_filtering.stdout | trim != '1'
 
 - name: Read installed Incus version
   ansible.builtin.command:
@@ -93,13 +134,14 @@
 - name: Guard storage immediately before directory creation
   uranus_storage_guard: {}
 
-- name: Create protected Incus data directory
+- name: Create traversable Incus data directory for unprivileged containers
   ansible.builtin.file:
     path: /data/incus
     state: directory
     owner: root
     group: root
-    mode: '0700'
+    # The mapped container root needs traversal access to reach its rootfs.
+    mode: '0711'
 
 - name: Verify mount before writing Incus ownership marker
   uranus_storage_guard: {}
@@ -206,7 +248,8 @@
     name: incus
     daemon_reload: true
     enabled: true
-    state: started
+    # Incus caches QEMU feature checks at startup, including missing firmware.
+    state: "{{ 'restarted' if incus_host_vm_packages is changed else 'started' }}"
 
 - name: Wait for the local management socket
   ansible.builtin.wait_for:

@@ -1,0 +1,65 @@
+---
+- name: Require safe package names and the complete guest bootstrap tools
+  ansible.builtin.assert:
+    that:
+      - incus_guest_bootstrap_packages | length > 0
+      - incus_guest_bootstrap_packages | reject('match', '^[a-z0-9][a-z0-9+.-]*$') | list | length == 0
+      - "['openssh-server', 'python3', 'sudo', 'acl', 'htop'] | difference(incus_guest_bootstrap_packages) | length == 0"
+
+- name: Guard filesystem before preparing the guest baseline
+  uranus_storage_guard: {}
+
+- name: Wait for active cloud-init before managing the same guest settings
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, uranus, exec, "{{ incus_instance.name }}", --,
+           timeout, '600', cloud-init, status, --wait, --format, json]
+  changed_when: false
+  register: incus_instance_cloud_init
+  failed_when: incus_instance_cloud_init.rc not in [0, 1, 2]
+
+- name: Require terminal cloud-init with only failures covered by the bootstrap
+  ansible.builtin.assert:
+    that:
+      - (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).allowed
+    fail_msg: Inspect unfinished cloud-init or failures outside the managed package and SSH bootstrap.
+
+- name: Read the existing cloud configuration before recovering its failed steps
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, uranus, exec, "{{ incus_instance.name }}", --,
+           cat, /var/lib/cloud/instance/cloud-config.txt]
+  register: incus_instance_failed_cloud_config
+  changed_when: false
+  no_log: true
+  when: (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).recover
+
+- name: Require failed cloud-init steps to match the baseline managed by Ansible
+  ansible.builtin.assert:
+    that:
+      - (incus_instance_failed_cloud_config.stdout | from_yaml).packages | default([]) | difference(incus_guest_bootstrap_packages) | length == 0
+      - (incus_instance_failed_cloud_config.stdout | from_yaml).runcmd | default([]) == [['systemctl', 'enable', '--now', 'ssh']]
+    fail_msg: Failed cloud-init includes custom packages or commands; inspect it before proceeding.
+  no_log: true
+  when: (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).recover
+
+- name: Report the initial package and SSH failures being repaired by Ansible
+  ansible.builtin.debug:
+    msg: >-
+      Repairing completed cloud-init package/SSH failures through the guest bootstrap.
+      The original cloud-init error history is retained; readiness requires the checks below to pass.
+  when: (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).recover
+
+- name: Revalidate storage after waiting before guest mutations
+  uranus_storage_guard: {}
+
+- name: Configure hostname user SSH and shared packages without guest SSH access
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, uranus, exec, "{{ incus_instance.name }}", --, timeout, '900', sh, -s]
+    stdin: "{{ lookup('template', 'bootstrap.sh.j2') }}"
+  register: incus_instance_bootstrap
+  changed_when: incus_instance_bootstrap.rc == 0 and (incus_instance_bootstrap.stdout | from_json).changed
+
+- name: Require a verified baseline for the expected instance
+  ansible.builtin.assert:
+    that:
+      - (incus_instance_bootstrap.stdout | from_json).instance == incus_instance.name
+      - (incus_instance_bootstrap.stdout | from_json).ready

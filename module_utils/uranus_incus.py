@@ -75,11 +75,19 @@ def preflight(instances, images, reserve_gib=160, quotas=False, run=execute, gua
     mount=guard(run)
     if quotas and 'prjquota' not in mount.get('options','').split(','):
         raise SafetyError('Container quotas require pre-existing ext4 project quotas; no mount changes permitted')
-    def query(path):
+    def query(path, expected_type=dict):
         result=json.loads(run(['incus','--force-local','query','--raw',path]))
-        if result.get('type') != 'sync' or result.get('status_code') != 200:
-            raise SafetyError('Unexpected Incus API response')
-        return result['metadata']
+        if (not isinstance(result,dict) or result.get('type') != 'sync'
+                or result.get('status_code') != 200 or 'metadata' not in result):
+            raise SafetyError(f'Unexpected Incus API response for {path}')
+        metadata=result['metadata']
+        # Incus 6.0 serializes some empty Go slices as JSON null instead of [].
+        if expected_type is list and metadata is None:
+            return []
+        if (not isinstance(metadata,expected_type)
+                or (expected_type is list and any(not isinstance(item,dict) for item in metadata))):
+            raise SafetyError(f'Unexpected Incus API metadata for {path}')
+        return metadata
     server=query('/1.0')
     for key in ('core.https_address','core.metrics_address','core.debug_address','core.storage_buckets_address'):
         if server.get('config',{}).get(key):
@@ -88,19 +96,27 @@ def preflight(instances, images, reserve_gib=160, quotas=False, run=execute, gua
         raise SafetyError('Require Debian Incus 6.0 LTS; review newer versions separately')
     if server.get('environment',{}).get('server_clustered'):
         raise SafetyError('Cluster adoption is not supported by this single-host workflow')
-    projects={p['name']:p for p in query('/1.0/projects?recursion=1')}
+    if any(i['type'] == 'virtual-machine' for i in instances):
+        # Incus 6.0 lists only operational instance drivers in this API field.
+        drivers=server.get('environment',{}).get('driver','')
+        if not isinstance(drivers,str) or 'qemu' not in {d.strip() for d in drivers.split('|')}:
+            raise SafetyError(
+                'Incus QEMU driver is not operational; refuse VM provisioning before resource creation. '
+                'Read sudo journalctl -u incus -b --no-pager for the underlying QEMU feature-check error. '
+                'Verify KVM access and Debian ovmf/QEMU packages, then restart incus after repairing prerequisites.')
+    projects={p['name']:p for p in query('/1.0/projects?recursion=1',list)}
     project=projects.get(PROJECT)
     if project:
         if project.get('description') != OWNER or any(project['config'].get(k) != v for k,v in PROJECT_CONFIG.items()):
             raise SafetyError('Unmanaged or drifted Uranus project')
-    pools={p['name']:p for p in query('/1.0/storage-pools?recursion=1')}
+    pools={p['name']:p for p in query('/1.0/storage-pools?recursion=1',list)}
     pool=pools.get(POOL)
     if pool:
         if pool['driver'] != 'dir' or pool['config'].get('source') != str(POOL_PATH) or pool['config'].get('user.uranus.owner') != OWNER:
             raise SafetyError('Unmanaged or drifted storage pool')
     elif POOL_PATH.exists() and any(POOL_PATH.iterdir()):
         raise SafetyError('Orphaned non-empty pool directory; preserve and recover manually')
-    networks=query('/1.0/networks?recursion=1')
+    networks=query('/1.0/networks?recursion=1',list)
     network=next((n for n in networks if n['name']==NETWORK),None)
     if network and (not network.get('managed') or network.get('type') != 'bridge' or any(network['config'].get(k) != v for k,v in NETWORK_CONFIG.items())):
         raise SafetyError('Unmanaged or drifted private network')
@@ -122,7 +138,7 @@ def preflight(instances, images, reserve_gib=160, quotas=False, run=execute, gua
         other=ipaddress.ip_network(route['dst'],strict=False)
         if other.version==4 and subnet.overlaps(other):
             raise SafetyError('Private subnet overlaps a host route')
-    actual=query('/1.0/instances?recursion=2&project=uranus') if project else []
+    actual=query('/1.0/instances?recursion=2&project=uranus',list) if project else []
     by_name={i['name']:i for i in actual}
     if set(by_name) - NAMES:
         raise SafetyError('Unexpected instances in the dedicated Uranus project; preserve and audit manually')
@@ -147,7 +163,7 @@ def preflight(instances, images, reserve_gib=160, quotas=False, run=execute, gua
             raise SafetyError(f'Incomplete or unexpected instance state: {name}')
         if old['status']=='Stopped': stopped.append(name)
     if pool:
-        volumes=query('/1.0/storage-pools/uranus/volumes?recursion=1&project=uranus') if project else []
+        volumes=query('/1.0/storage-pools/uranus/volumes?recursion=1&project=uranus',list) if project else []
         for volume in volumes:
             if volume['type'] in ('container','virtual-machine') and volume['name'].split('/')[0] not in by_name:
                 raise SafetyError('Orphaned Incus storage volume')

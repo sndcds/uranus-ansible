@@ -1,0 +1,31 @@
+---
+- name: Inspect required PKI files on the controller before TLS changes
+  ansible.builtin.stat:
+    path: "{{ uranus_pki_dir }}/{{ item }}"
+    follow: true
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop:
+    - ca.crt
+    - "{{ inventory_hostname }}.crt"
+    - "{{ inventory_hostname }}.key"
+  delegate_to: localhost
+  become: false
+  register: internal_tls_inputs
+
+- name: Require readable controller PKI inputs
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg | default(false)
+      - item.stat.readable | default(false)
+    fail_msg: >-
+      Required controller PKI file {{ uranus_pki_dir }}/{{ item.item }} is missing or unreadable.
+      Provide ca.crt, {{ inventory_hostname }}.crt and its Vault-encrypted .key, or select
+      an existing PKI directory with -e uranus_pki_dir=/absolute/path.
+      To prepare a new CA only when no PKI exists, run python scripts/prepare_pki.py on the controller;
+      see docs/deployment.md. Include the PKI Vault credential when running Ansible.
+  loop: "{{ internal_tls_inputs.results }}"
+  loop_control:
+    label: "{{ item.item }}"

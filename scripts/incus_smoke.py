@@ -31,10 +31,11 @@ def main():
     if not data.is_absolute() or not str(data).startswith('/tmp/uranus-incus-smoke-') or data.exists():
         raise RuntimeError('Require a fresh disposable /tmp/uranus-incus-smoke-* directory')
     if os.geteuid()!=0: raise RuntimeError('Run only as root inside a disposable privileged test environment')
-    data.mkdir(mode=0o700)
+    data.mkdir(mode=0o711)
+    data.chmod(0o711)  # Match the host role even under a restrictive lab umask.
     env={**os.environ,'INCUS_DIR':str(data)}
-    def run(argv,stdin=None):
-        result=subprocess.run(argv,input=stdin,env=env,capture_output=True,text=True,timeout=300)
+    def run(argv,stdin=None,timeout=300):
+        result=subprocess.run(argv,input=stdin,env=env,capture_output=True,text=True,timeout=timeout)
         if result.returncode:
             raise RuntimeError(f"{argv[0]} exited {result.returncode}: {result.stderr.strip()}")
         return result.stdout
@@ -62,7 +63,8 @@ def main():
         # Production reserves are tested separately; a CI runner cannot reserve 160 GiB.
         key=data/'identity'
         run(['ssh-keygen','-q','-t','ed25519','-N','','-f',str(key)])
-        jinja=Environment(undefined=StrictUndefined)
+        from jinja2 import FileSystemLoader
+        jinja=Environment(loader=FileSystemLoader(ROOT/'roles/incus_instance/templates'),undefined=StrictUndefined)
         jinja.filters['to_json']=json.dumps
         template=jinja.from_string((ROOT/'roles/incus_instance/templates/instance.yml.j2').read_text())
         if args.image_cache:
@@ -73,6 +75,7 @@ def main():
                 assert image['metadata']['fingerprint']==cfg['incus_images'][kind]
         for instance in resources:
             body=template.render(incus_instance=instance,incus_container_quotas=False,
+                                 incus_guest_bootstrap_packages=cfg['incus_guest_bootstrap_packages'],
                                  hetzner_ssh_public_key_file=str(key)+'.pub',lookup=lambda kind,path: Path(path).read_text())
             command=project+['init',('' if args.image_cache else 'images:')+cfg['incus_images'][instance['type']],instance['name'],'--no-profiles']
             if instance['type']=='virtual-machine': command+=['--vm']
@@ -92,10 +95,24 @@ def main():
                     except RuntimeError:
                         if attempt==89: raise
                         time.sleep(2)
-                run(project+['exec',name,'--','timeout','180','cloud-init','status','--wait'])
+                instance=next(i for i in resources if i['name']==name)
+                context=dict(incus_instance=instance,
+                             incus_guest_bootstrap_packages=cfg['incus_guest_bootstrap_packages'],
+                             hetzner_ssh_public_key_file=str(key)+'.pub',
+                             lookup=lambda kind,path: Path(path).read_text())
+                network=jinja.get_template('dhcp-mac.sh.j2').render(**context)
+                run(project+['exec',name,'--','timeout','150','sh','-s'],stdin=network)
+                cloud=json.loads(run(project+['exec',name,'--','timeout','600','cloud-init','status','--wait','--format','json'],timeout=620))
+                # New cloud images must initialize without historical failures.
+                assert cloud['status'] in ('done','disabled') and not cloud['errors']
+                baseline=jinja.get_template('bootstrap.sh.j2').render(**context)
+                initialized=json.loads(run(project+['exec',name,'--','timeout','900','sh','-s'],stdin=baseline,timeout=920))
+                assert initialized['ready'] and initialized['instance']==name
+                repeated=json.loads(run(project+['exec',name,'--','timeout','900','sh','-s'],stdin=baseline,timeout=920))
+                assert repeated['ready'] and not repeated['changed']
                 ip=next(i['ip'] for i in resources if i['name']==name)
-                run(['ssh','-i',str(key),'-o','StrictHostKeyChecking=accept-new','-o','UserKnownHostsFile='+str(data/'known_hosts'),'-o','BatchMode=yes','debian@'+ip,'true'])
-            print('PASS: container and VM boot, Incus agent, cloud-init and real SSH',flush=True)
+                run(['ssh','-i',str(key),'-o','StrictHostKeyChecking=accept-new','-o','UserKnownHostsFile='+str(data/'known_hosts'),'-o','BatchMode=yes','debian@'+ip,'htop --version && sudo -n true'])
+            print('PASS: container and VM boot, DHCP, repeated baseline bootstrap and real SSH with sudo and htop',flush=True)
         else:
             print('NOT RUN: boot, guest SSH and applications; use --boot in a lab with delegated cgroups and /dev/kvm',flush=True)
     except Exception:

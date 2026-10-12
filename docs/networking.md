@@ -6,6 +6,25 @@ Instanzliste. Die Bridge ist nicht an eine physische öffentliche Schnittstelle
 angebunden; IPv6 ist innerhalb der Instanzen deaktiviert. Öffentliche IPv6-
 Verbindungen enden wie IPv4 am Host-Ingress, nie direkt an Gästen.
 
+Die Debian-Cloud-Images verwenden `systemd-networkd`. Dessen DHCPv4-Client
+verwendet standardmäßig eine DUID; die festen Incus-DHCP-Zuweisungen erfordern
+eine MAC-basierte Kennung. Die Rolle erkennt die einzige Ethernet-Schnittstelle
+des Gasts und schreibt `/etc/systemd/network/05-uranus-incus.network`. Die Datei
+ordnet den Link anhand von `[Match] MACAddress=...` zu und setzt IPv4-DHCP mit
+`[DHCPv4] ClientIdentifier=mac`. Dadurch funktionieren sowohl `eth0` in einem
+Container als auch `enp5s0` in einer VM, selbst wenn die bisherige Cloud-init-
+Datei die VM-Karte nicht erfasst. Null oder mehrere Ethernet-Schnittstellen
+werden vor Änderungen abgelehnt. Neue Instanzen erhalten explizite Cloud-init-
+Netzwerkdaten mit Renderer `networkd` und Namensmuster `e*`; die eigene
+MAC-basierte Konfiguration wird über `bootcmd` vor
+Paketinstallationen an. Die Hostrolle konfiguriert außerdem alle laufenden
+neuen und bestehenden Instanzen über den lokalen Incus-Kanal und wartet auf
+ihre vorgegebene IPv4-Adresse. Gestoppte Instanzen bleiben gestoppt, sofern
+kein Start angefordert wurde. Wiederholungen mit gültiger Netzwerkdatei und gültiger
+Adresse laden das Netzwerk nicht neu.
+[networkd-Dokumentation](https://manpages.debian.org/trixie/systemd/systemd.network.5.en.html)
+und [Incus-DHCP-Zuweisungen](https://linuxcontainers.org/incus/docs/main/reference/network_bridge/).
+
 Host-input erlaubt Loopback, etablierte Verbindungen, ICMP/ICMPv6, DNS/DHCP auf
 der privaten Bridge sowie öffentlich SSH auf Port 22 und HTTP/HTTPS auf 80/443.
 SSH erfordert einen gültigen Schlüssel, ohne feste IPv4- oder IPv6-Quelladresse.

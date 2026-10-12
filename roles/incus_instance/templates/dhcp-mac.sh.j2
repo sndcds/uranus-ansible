@@ -1,0 +1,72 @@
+set -eu
+
+# The managed instances have one Ethernet NIC, named eth0 in containers but
+# potentially enp5s0 in a VM. Match its MAC rather than assuming a guest name.
+network_file=/etc/systemd/network/05-uranus-incus.network
+network_details=$(ip -o link show | awk '
+    /link\/ether/ {
+        name = $2
+        sub(/:$/, "", name)
+        sub(/@.*/, "", name)
+        for (field = 1; field < NF; field++) {
+            if ($field == "link/ether") print name, $(field + 1)
+        }
+    }')
+set -- $network_details
+if test "$#" -ne 2; then
+    printf 'Expected exactly one Ethernet interface before Uranus DHCP recovery\n' >&2
+    exit 1
+fi
+network_interface=$1
+network_mac=$2
+
+network_content=$(printf '[Match]\nMACAddress=%s\n\n[Network]\nDHCP=ipv4\nIPv6AcceptRA=no\n\n[DHCPv4]\nClientIdentifier=mac\n' "$network_mac")
+
+has_expected_address() {
+    ip -4 -o address show dev "$network_interface" |
+        awk '$4 == "{{ incus_instance.ip }}/24" { found = 1 } END { exit !found }'
+}
+
+# A newly started instance may still be bringing up networkd.
+for dhcp_attempt in $(seq 1 60); do
+    if systemctl is-active --quiet systemd-networkd; then
+        break
+    fi
+    sleep 1
+done
+if ! systemctl is-active --quiet systemd-networkd; then
+    printf 'Expected active systemd-networkd before DHCP recovery\n' >&2
+    exit 1
+fi
+
+changed=false
+if ! printf '%s\n' "$network_content" | cmp -s - "$network_file"; then
+    install -d -m 0755 /etc/systemd/network
+    network_temp=$(mktemp /etc/systemd/network/.uranus-dhcp-XXXXXX)
+    trap 'rm -f "$network_temp"' EXIT HUP INT TERM
+    printf '%s\n' "$network_content" > "$network_temp"
+    chmod 0644 "$network_temp"
+    mv "$network_temp" "$network_file"
+    changed=true
+fi
+
+if "$changed" || ! has_expected_address; then
+    networkctl reload
+    networkctl reconfigure "$network_interface"
+    networkctl up "$network_interface"
+    changed=true
+fi
+
+for dhcp_attempt in $(seq 1 60); do
+    if has_expected_address; then
+        if "$changed"; then
+            printf 'changed\n'
+        else
+            printf 'unchanged\n'
+        fi
+        exit 0
+    fi
+    sleep 1
+done
+printf 'Expected %s address {{ incus_instance.ip }}/24 after MAC-based DHCP configuration\n' "$network_interface" >&2
+exit 1
