@@ -34,6 +34,30 @@ def test_completed_package_and_ssh_failures_can_be_repaired():
     }
 
 
+def test_completed_bootcmd_failure_is_a_candidate_for_verified_dhcp_recovery():
+    errors = ["('bootcmd', ProcessExecutionError('early network configuration failed'))"]
+    details = {'status': 'error', 'stage': None, 'errors': errors, 'init': {'errors': errors},
+               'init-local': {'errors': []}, 'modules-config': {'errors': []},
+               'modules-final': {'errors': []}}
+    assert module.bootstrap_status(details) == {
+        'allowed': True, 'recover': True, 'modules': ['bootcmd'],
+    }
+    details['init']['errors'] = errors + ["('users-groups', RuntimeError('missing user'))"]
+    assert not module.bootstrap_status(details)['allowed']
+
+
+@pytest.mark.parametrize('commands, expected', [
+    ([['sh', '-ec', 'managed DHCP script\n']], True),
+    ([['sh', '-ec', 'custom command']], False),
+    ([['sh', '-ec', 'managed DHCP script'], ['sh', '-c', 'custom command']], False),
+    ([['sh', '-c', 'managed DHCP script']], False),
+    ([['sh', '-ec', None]], False),
+    ([], False), (None, False),
+])
+def test_recovery_requires_the_single_exact_managed_bootcmd(commands, expected):
+    assert module.managed_bootcmd({'bootcmd': commands}, 'managed DHCP script\n') is expected
+
+
 @pytest.mark.parametrize('change', ['running', 'unknown', 'init', 'config', 'final-only'])
 def test_other_failures_or_incomplete_initialization_are_rejected(change):
     details = completed_failure()

@@ -252,12 +252,23 @@ def test_failed_bootstrap_never_claims_readiness(render, settings, bootstrap_fix
 @pytest.mark.parametrize('cloud_status, guard_failed', [
     ('disabled', False), ('done', False), ('baseline-error', False),
     ('custom-command', False), ('error', False), ('running-error', False), ('disabled', True),
+    ('bootcmd-error', False), ('custom-bootcmd', False), ('bootcmd-network-failed', False),
 ])
 def test_ansible_bootstrap_checks_cloud_init_and_storage_before_mutations(
-        tmp_path, settings, bootstrap_fixture, cloud_status, guard_failed):
+        tmp_path, settings, render, bootstrap_fixture, cloud_status, guard_failed):
     fixture = bootstrap_fixture
     library = tmp_path / 'library'
     library.mkdir()
+    bootcmd_failure = cloud_status in ['bootcmd-error', 'custom-bootcmd', 'bootcmd-network-failed']
+    dhcp_script = render('roles/incus_instance/templates/dhcp-mac.sh.j2',
+                         incus_instance=settings['incus_instances'][0])
+    cloud_config = {
+        'packages': ['openssh-server', 'python3', 'sudo', 'acl'],
+        'runcmd': [['systemctl', 'enable', '--now', 'ssh']]
+                  if cloud_status != 'custom-command' else [['custom-application-import']],
+    }
+    if bootcmd_failure:
+        cloud_config['bootcmd'] = [['sh', '-ec', 'custom command' if cloud_status == 'custom-bootcmd' else dhcp_script]]
     incus = fixture['bin'] / 'incus'
     incus.write_text(f'''#!{sys.executable}
 import json
@@ -273,12 +284,23 @@ if args == ['timeout', '600', 'cloud-init', 'status', '--wait', '--format', 'jso
     historical = kind in ['baseline-error', 'custom-command', 'running-error']
     errors = ["('package-update-upgrade-install', ProcessExecutionError('fixture apt failure'))",
               "('scripts-user', RuntimeError('fixture ssh failure'))"] if historical else (['fixture error'] if kind == 'error' else [])
+    if {bootcmd_failure!r}:
+        errors = ["('bootcmd', ProcessExecutionError('fixture early network failure'))"]
     print(json.dumps({{'status': 'error' if errors else kind, 'errors': errors,
                       'stage': 'modules-final' if kind == 'running-error' else None,
-                      'modules-final': {{'errors': errors}}}}))
+                      'init': {{'errors': errors if {bootcmd_failure!r} else []}},
+                      'modules-final': {{'errors': [] if {bootcmd_failure!r} else errors}}}}))
     sys.exit(1 if errors else 0)
 if args == ['cat', '/var/lib/cloud/instance/cloud-config.txt']:
-    print({yaml.safe_dump({'packages': ['openssh-server', 'python3', 'sudo', 'acl'], 'runcmd': [['systemctl', 'enable', '--now', 'ssh']] if cloud_status != 'custom-command' else [['custom-application-import']]})!r})
+    print({yaml.safe_dump(cloud_config)!r})
+    sys.exit(0)
+if args == ['timeout', '150', 'sh', '-s']:
+    assert {bootcmd_failure!r}
+    assert sys.stdin.read().strip() == {dhcp_script.strip()!r}
+    if {cloud_status == 'bootcmd-network-failed'!r}:
+        print('fixture reserved DHCP address unavailable', file=sys.stderr)
+        sys.exit(1)
+    print('unchanged')
     sys.exit(0)
 assert args == ['timeout', '900', 'sh', '-s']
 script = sys.stdin.read()
@@ -320,28 +342,47 @@ module.exit_json(changed=False)
            'ANSIBLE_LIBRARY': str(library), 'ANSIBLE_HOME': str(tmp_path / 'ansible-home'),
            'ANSIBLE_LOCAL_TEMP': str(tmp_path / 'ansible-local'),
            'ANSIBLE_REMOTE_TEMP': str(tmp_path / 'ansible-remote')}
-    success = cloud_status in ['disabled', 'done', 'baseline-error'] and not guard_failed
+    success = cloud_status in ['disabled', 'done', 'baseline-error', 'bootcmd-error'] and not guard_failed
     for changed in ([1, 0] if success else [0]):
         result = subprocess.run(['ansible-playbook', '-i', str(inventory), str(playbook)],
                                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
         output = result.stdout + result.stderr
         assert result.returncode == (0 if success else 2), output
         assert f'changed={changed}' in output, output
+        if cloud_status in ['error', 'running-error'] and not guard_failed:
+            assert 'Cloud-init baseline rejected for db01' in output
+            assert 'Cloud-init status:' in output
+            expected_error = 'fixture error' if cloud_status == 'error' else 'fixture apt failure'
+            assert expected_error in output
     calls = [json.loads(line) for line in fixture['events'].read_text().splitlines()] if fixture['events'].exists() else []
     if not success:
         assert not any(call[:3] == ['incus', 'timeout', '900'] for call in calls)
         assert not (fixture['guest'] / 'var/lib/uranus/instance-bootstrap.json').exists()
+    if cloud_status == 'bootcmd-error':
+        network_call = next(index for index, call in enumerate(calls) if call[:3] == ['incus', 'timeout', '150'])
+        baseline_call = next(index for index, call in enumerate(calls) if call[:3] == ['incus', 'timeout', '900'])
+        assert network_call < baseline_call
+    if cloud_status == 'custom-bootcmd':
+        assert not any(call[:3] == ['incus', 'timeout', '150'] for call in calls)
 
 
 @pytest.mark.parametrize('entrypoint', ['configure', 'postgresql'])
-@pytest.mark.parametrize('marker_name, managed_error', [('db01', True), ('db01', False), ('wrong-guest', True)])
+@pytest.mark.parametrize('marker_name, managed_error', [
+    ('db01', True), ('db01', False), ('wrong-guest', True),
+    ('db01', 'bootcmd'), ('db01', 'custom-bootcmd'), ('wrong-guest', 'bootcmd'),
+])
 def test_configure_preflight_requires_verified_bootstrap_for_historical_errors(
-        tmp_path, bootstrap_fixture, entrypoint, marker_name, managed_error):
+        tmp_path, settings, render, bootstrap_fixture, entrypoint, marker_name, managed_error):
     fixture = bootstrap_fixture
     cloud = fixture['bin'] / 'cloud-init'
     errors = (["('package-update-upgrade-install', ProcessExecutionError('old apt failure'))"]
               if managed_error else ["('users-groups', RuntimeError('unrepaired account failure'))"])
     details = {'status': 'error', 'errors': errors, 'stage': None, 'modules-final': {'errors': errors}}
+    bootcmd_failure = managed_error in ['bootcmd', 'custom-bootcmd']
+    if bootcmd_failure:
+        errors = ["('bootcmd', ProcessExecutionError('old network failure'))"]
+        details = {'status': 'error', 'errors': errors, 'stage': None,
+                   'init': {'errors': errors}, 'modules-final': {'errors': []}}
     cloud.write_text(f'''#!{sys.executable}
 import json
 import sys
@@ -352,16 +393,27 @@ sys.exit(1)
     cloud.chmod(0o755)
     marker = tmp_path / 'instance-bootstrap.json'
     marker.write_text(json.dumps({'version': 1, 'instance': marker_name}))
+    cloud_config = tmp_path / 'cloud-config.txt'
+    dhcp_script = render('roles/incus_instance/templates/dhcp-mac.sh.j2',
+                         incus_instance=settings['incus_instances'][0])
+    cloud_config.write_text(yaml.safe_dump({'bootcmd': [['sh', '-ec',
+        'custom command' if managed_error == 'custom-bootcmd' else dhcp_script]]}))
     configure = yaml.safe_load((ROOT / f'playbooks/{entrypoint}.yml').read_text())[0]
     preflight_file = next(task['ansible.builtin.import_tasks'] for task in configure['pre_tasks']
                           if task['name'] == 'Verify the provisioned Debian guest baseline')
     preflight = yaml.safe_load((ROOT / 'playbooks' / preflight_file).read_text())
     task_names = {'Wait for initial cloud-init to finish',
                   'Read the baseline verified by provisioning through Incus',
+                  'Read cloud configuration for a historical DHCP bootcmd failure',
+                  'Require historical bootcmd failure to match the managed DHCP script',
                   'Require verified guest initialization before application configuration'}
     tasks = [task for task in preflight if task['name'] in task_names]
-    assert len(tasks) == 3
+    assert len(tasks) == 5
     tasks[1]['ansible.builtin.slurp']['src'] = str(marker)
+    tasks[2]['ansible.builtin.slurp']['src'] = str(cloud_config)
+    tasks[3]['ansible.builtin.assert']['that'][0] = tasks[3]['ansible.builtin.assert']['that'][0].replace(
+        "playbook_dir ~ '/../roles/incus_instance/templates/dhcp-mac.sh.j2'",
+        repr(str(ROOT / 'roles/incus_instance/templates/dhcp-mac.sh.j2')))
     inventory = tmp_path / 'configure-inventory.yml'
     inventory.write_text(yaml.safe_dump({'all': {'hosts': {'db01': {
         'ansible_connection': 'local', 'ansible_python_interpreter': sys.executable,
@@ -370,6 +422,7 @@ sys.exit(1)
     playbook.write_text(yaml.safe_dump([{
         'name': 'Check real configure preflight', 'hosts': 'db01', 'gather_facts': False,
         'environment': {'PATH': fixture['env']['PATH']}, 'tasks': tasks,
+        'vars': {'incus_instances': settings['incus_instances']},
     }]))
     env = {**fixture['env'], 'ANSIBLE_CONFIG': str(ROOT / 'ansible.cfg'),
            'ANSIBLE_HOME': str(tmp_path / 'ansible-home'),
@@ -377,4 +430,5 @@ sys.exit(1)
            'ANSIBLE_REMOTE_TEMP': str(tmp_path / 'ansible-remote')}
     result = subprocess.run(['ansible-playbook', '-i', str(inventory), str(playbook)],
                             cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
-    assert result.returncode == (0 if managed_error and marker_name == 'db01' else 2), result.stdout + result.stderr
+    success = (managed_error is True or managed_error == 'bootcmd') and marker_name == 'db01'
+    assert result.returncode == (0 if success else 2), result.stdout + result.stderr

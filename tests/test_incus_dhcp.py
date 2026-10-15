@@ -210,8 +210,10 @@ AnsibleModule(argument_spec={}).exit_json(changed=False)
         'tasks': [{
             'name': 'Check the actual Ansible cloud-init rendering',
             'ansible.builtin.assert': {'that': [
-                "(rendered_instance.config['user.user-data'] | from_yaml).package_update",
-                "'ClientIdentifier=mac' in (rendered_instance.config['user.user-data'] | from_yaml).bootcmd[0][2]",
+                "not (rendered_instance.config['user.user-data'] | from_yaml).package_update",
+                "'bootcmd' not in (rendered_instance.config['user.user-data'] | from_yaml)",
+                "'packages' not in (rendered_instance.config['user.user-data'] | from_yaml)",
+                "'runcmd' not in (rendered_instance.config['user.user-data'] | from_yaml)",
                 "(rendered_instance.config['user.network-config'] | from_yaml).renderer == 'networkd'",
             ]},
         }, {
