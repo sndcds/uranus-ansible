@@ -21,8 +21,9 @@ object Service "https" {
   host_name = "{{ instance.name }}"
   check_command = "http"
   vars.http_ssl = true
+  vars.http_sni = true
   vars.http_port = 443
-  vars.http_vhost = "{{ hetzner_domains.dev_frontend if instance.role == 'dev' else hetzner_domains.prod_frontend if instance.role == 'prod' else hetzner_domains.icinga if instance.role == 'monitoring' else hetzner_domains.nominatim if instance.role == 'nominatim' else hetzner_domains.versatiles }}"
+  vars.http_vhost = "{{ hetzner_domains.dev_frontend if instance.role == 'dev' else hetzner_domains.prod_frontend if instance.role in ['prod', 'ingress'] else hetzner_domains.icinga if instance.role == 'monitoring' else hetzner_domains.nominatim if instance.role == 'nominatim' else hetzner_domains.versatiles }}"
   vars.http_uri = "{{ '/status' if instance.role == 'nominatim' else '/status' if instance.role == 'versatiles' else '/' }}"
   command_endpoint = "{{ instance.name }}"
 }

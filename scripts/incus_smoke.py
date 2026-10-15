@@ -83,7 +83,7 @@ def main():
         after=safety.preflight(resources,cfg['incus_images'],run=run,guard=guard)
         repeat=safety.preflight(resources,cfg['incus_images'],run=run,guard=guard)
         assert after==repeat and not after['new_instances'] and set(after['stopped_instances'])==safety.NAMES
-        print('PASS: Debian native project, pool, network, six VM/container initializations and repeated read-only preflight',flush=True)
+        print('PASS: Debian native project, pool, network, seven VM/container initializations and repeated read-only preflight',flush=True)
         if args.boot:
             for name in ['dev01','db01']:
                 run(project+['start',name])

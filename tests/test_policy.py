@@ -8,7 +8,7 @@ from conftest import ROOT
 @pytest.mark.parametrize('check_mode',[False,True])
 def test_default_gate_stops_locally_before_ssh(entrypoint,check_mode,tmp_path):
     inventory=tmp_path/'inventory.yml'
-    inventory.write_text('all:\n  vars:\n    ansible_host: 127.0.0.1\n    ansible_port: 1\n  children:\n    incus_hosts:\n      hosts:\n        blocked: {}\n    uranus_instances:\n      hosts:\n        db01: {}\n')
+    inventory.write_text('all:\n  vars:\n    ansible_host: 127.0.0.1\n    ansible_port: 1\n  children:\n    incus_hosts:\n      hosts:\n        blocked: {}\n    uranus_instances:\n      hosts:\n        db01: {}\n        nginx01: {}\n')
     env={**os.environ,'ANSIBLE_CONFIG':str(ROOT/'ansible.cfg'),'ANSIBLE_LOCAL_TEMP':str(tmp_path/'ansible')}
     args=['ansible-playbook','-i',str(inventory),str(ROOT/f'playbooks/{entrypoint}.yml')]
     if check_mode:args+=['--check']

@@ -181,6 +181,13 @@ incus_instances:
     cpu: 2
     disk: 40
     ip: 10.77.0.16
+  - name: nginx01
+    role: ingress
+    type: container
+    memory: 1024
+    cpu: 1
+    disk: 10
+    ip: 10.77.0.17
 uranus_security_review_complete: false
 uranus_pki_dir: '{{ playbook_dir }}/../environments/hetzner/pki'
 backend_ssl_mode: verify-full

@@ -1,22 +1,25 @@
+{% set ingress_ip = (incus_instances | selectattr('role', 'equalto', 'ingress') | first).ip %}
+# Incus delivers the original IPv4/IPv6 client address on container loopback.
+set_real_ip_from 127.0.0.1;
+real_ip_header proxy_protocol;
+real_ip_recursive off;
 limit_req_zone $binary_remote_addr zone=uranus_general:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=uranus_geocoder:10m rate=1r/s;
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen 127.0.0.1:80 proxy_protocol default_server;
     server_name _;
     return 444;
 }
 {% if debian13_ingress_tls_ready %}
 server {
-    listen 443 ssl default_server;
-    listen [::]:443 ssl default_server;
+    listen 127.0.0.1:443 ssl proxy_protocol default_server;
+    listen {{ ingress_ip }}:443 ssl default_server;
     ssl_reject_handshake on;
 }
 {% endif %}
 {% for site in debian13_ingress_sites %}
 server {
-    listen 80;
-    listen [::]:80;
+    listen 127.0.0.1:80 proxy_protocol;
     server_name {{ site.domain }};
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/letsencrypt;
@@ -26,8 +29,8 @@ server {
 }
 {% if debian13_ingress_tls_ready %}
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen 127.0.0.1:443 ssl proxy_protocol;
+    listen {{ ingress_ip }}:443 ssl;
     server_name {{ site.domain }};
     ssl_certificate /etc/letsencrypt/live/uranus-hetzner/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/uranus-hetzner/privkey.pem;

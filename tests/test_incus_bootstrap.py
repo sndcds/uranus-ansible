@@ -155,7 +155,7 @@ def bootstrap(render, fixture, instance):
                           env=fixture['env'], capture_output=True, text=True, timeout=30)
 
 
-@pytest.mark.parametrize('index', range(6))
+@pytest.mark.parametrize('index', range(7))
 def test_all_guests_get_the_baseline_and_repeat_preserves_keys(render, settings, bootstrap_fixture, index):
     fixture = bootstrap_fixture
     instance = settings['incus_instances'][index]

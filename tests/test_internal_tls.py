@@ -75,7 +75,7 @@ def test_generated_keys_decrypt_through_ansible_copy_and_match_certificates(prep
     pki, private, _ = prepared_pki
     destination = tmp_path / 'decrypted'
     destination.mkdir(mode=0o700)
-    names = ['hetzner', 'db01', 'dev01', 'prod01', 'mon01', 'nom01', 'vers01']
+    names = ['hetzner', 'db01', 'dev01', 'prod01', 'mon01', 'nom01', 'vers01', 'nginx01']
     result = run_ansible(tmp_path, [{
         'name': 'Consume encrypted keys with the real Ansible copy action',
         'ansible.builtin.copy': {

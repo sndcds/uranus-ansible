@@ -22,3 +22,4 @@ all:
         mon01: {}
         nom01: {}
         vers01: {}
+        nginx01: {}

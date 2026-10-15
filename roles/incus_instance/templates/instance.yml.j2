@@ -58,3 +58,14 @@ devices:
     security.mac_filtering: "true"
     security.ipv4_filtering: "true"
     security.ipv6_filtering: "true"
+{% if incus_instance.role | default('') == 'ingress' %}
+{% for name, port in [('http', 80), ('https', 443)] %}
+  {{ name }}:
+    type: proxy
+    bind: host
+    nat: "false"
+    listen: "tcp:[::]:{{ port }}"
+    connect: "tcp:127.0.0.1:{{ port }}"
+    proxy_protocol: "true"
+{% endfor %}
+{% endif %}

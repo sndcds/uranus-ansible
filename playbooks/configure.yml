@@ -70,7 +70,7 @@
     - name: Configure private guest HTTP routing
       ansible.builtin.include_role:
         name: debian13_guest_web
-      when: instance_role != 'db'
+      when: instance_role not in ['db', 'ingress']
     - name: Configure application log rotation
       ansible.builtin.include_role:
         name: logrotate

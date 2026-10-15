@@ -83,7 +83,7 @@ def run_recovery(render, fixture, instance):
                           capture_output=True, text=True, timeout=30)
 
 
-@pytest.mark.parametrize('index', range(6))
+@pytest.mark.parametrize('index', range(7))
 def test_wrong_duid_lease_is_recovered_and_repeat_preserves_network(render, settings, dhcp_fixture, index):
     instance = settings['incus_instances'][index]
     fixture = dhcp_fixture

@@ -12,14 +12,14 @@ def nginx_check(text, tmp_path):
     text=text.replace('/etc/ssl/certs/uranus-instance.pem',str(cert)).replace('/etc/ssl/private/uranus-instance.key',str(key)).replace('/etc/ssl/certs/uranus-ca.pem',str(cert))
     # nginx -t also probes listening sockets. Use temporary, unprivileged
     # loopback ports so the fixtures never bind the production interfaces.
-    ports = []
-    for _ in range(2):
-        with socket.socket() as listener:
-            listener.bind(('127.0.0.1', 0))
-            ports.append(listener.getsockname()[1])
+    ports = {}
     def local_listener(match):
         original = match.group(2)
-        port = ports[1] if original.endswith('443') else ports[0]
+        if original not in ports:
+            with socket.socket() as listener:
+                listener.bind(('127.0.0.1', 0))
+                ports[original] = listener.getsockname()[1]
+        port = ports[original]
         address = f'[::1]:{port}' if original.startswith('[') else f'127.0.0.1:{port}'
         return match.group(1) + address
     text = re.sub(r'(?m)^(\s*listen\s+)([^ ;]+)', local_listener, text)
@@ -39,7 +39,7 @@ def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp
                   backend_port=9090, versatiles_port=8080)
     text = text.replace('include fastcgi_params;', 'include /etc/nginx/fastcgi_params;')
     assert 'ssl_certificate' in text
-    assert 'set_real_ip_from 10.77.0.1;' in text
+    assert 'set_real_ip_from 10.77.0.17;' in text
     if role == 'monitoring':
         assert '/run/php/php8.4-fpm.sock' in text and 'fastcgi_param HTTPS on;' in text
     assert 'X-Forwarded-Proto https;' in text
@@ -69,6 +69,9 @@ def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tm
         assert 'proxy_pass https://10.77.0.13:443;' in text
         assert 'proxy_ssl_verify on;' in text
     assert '/.well-known/acme-challenge/' in text
+    assert 'listen 127.0.0.1:80 proxy_protocol' in text
+    assert 'real_ip_header proxy_protocol;' in text
+    assert 'set_real_ip_from 127.0.0.1;' in text
     nginx_check(text, tmp_path)
 
 

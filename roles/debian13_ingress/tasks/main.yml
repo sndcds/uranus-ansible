@@ -1,4 +1,11 @@
 ---
+- name: Require the dedicated ingress container
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'nginx01'
+      - instance_role == 'ingress'
+      - instance_type == 'container'
+
 - name: Require real public domains and private administration access
   ansible.builtin.assert:
     that:

@@ -29,9 +29,20 @@
       - --config=restricted.containers.nesting=block
       - --config=restricted.devices.disk=managed
       - --config=restricted.devices.nic=managed
+      - --config=restricted.devices.proxy=allow
       - --config=restricted.networks.access=uranusincus0
   changed_when: true
   when: not incus_instance_plan.project_exists
+
+- name: Guard filesystem before updating the managed project restriction
+  uranus_storage_guard: {}
+  when: incus_instance_plan.project_proxy_upgrade
+
+- name: Enable ingress proxy devices on an audited existing Uranus project
+  ansible.builtin.command:
+    argv: [incus, --force-local, project, set, uranus, restricted.devices.proxy=allow]
+  changed_when: true
+  when: incus_instance_plan.project_proxy_upgrade
 
 - name: Guard filesystem before creating pool
   uranus_storage_guard: {}
