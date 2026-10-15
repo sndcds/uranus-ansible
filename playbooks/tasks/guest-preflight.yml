@@ -1,0 +1,33 @@
+---
+- name: Wait for authorized SSH access
+  ansible.builtin.wait_for_connection:
+    timeout: 600
+
+- name: Gather guest facts
+  ansible.builtin.setup:
+
+- name: Require Debian 13 guests
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version == '13'
+
+- name: Wait for initial cloud-init to finish
+  ansible.builtin.command:
+    argv: [timeout, '600', cloud-init, status, --wait, --format, json]
+  changed_when: false
+  register: guest_cloud_init
+  failed_when: guest_cloud_init.rc not in [0, 1, 2]
+
+- name: Read the baseline verified by provisioning through Incus
+  ansible.builtin.slurp:
+    src: /var/lib/uranus/instance-bootstrap.json
+  register: guest_bootstrap
+
+- name: Require verified guest initialization before application configuration
+  ansible.builtin.assert:
+    that:
+      - (guest_bootstrap.content | b64decode | from_json).version == 1
+      - (guest_bootstrap.content | b64decode | from_json).instance == inventory_hostname
+      - (guest_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).allowed
+    fail_msg: Run the updated provision.yml to initialize every guest before configuring applications.

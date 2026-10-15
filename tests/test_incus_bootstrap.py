@@ -333,9 +333,10 @@ module.exit_json(changed=False)
         assert not (fixture['guest'] / 'var/lib/uranus/instance-bootstrap.json').exists()
 
 
+@pytest.mark.parametrize('entrypoint', ['configure', 'postgresql'])
 @pytest.mark.parametrize('marker_name, managed_error', [('db01', True), ('db01', False), ('wrong-guest', True)])
 def test_configure_preflight_requires_verified_bootstrap_for_historical_errors(
-        tmp_path, bootstrap_fixture, marker_name, managed_error):
+        tmp_path, bootstrap_fixture, entrypoint, marker_name, managed_error):
     fixture = bootstrap_fixture
     cloud = fixture['bin'] / 'cloud-init'
     errors = (["('package-update-upgrade-install', ProcessExecutionError('old apt failure'))"]
@@ -351,11 +352,14 @@ sys.exit(1)
     cloud.chmod(0o755)
     marker = tmp_path / 'instance-bootstrap.json'
     marker.write_text(json.dumps({'version': 1, 'instance': marker_name}))
-    configure = yaml.safe_load((ROOT / 'playbooks/configure.yml').read_text())[0]
+    configure = yaml.safe_load((ROOT / f'playbooks/{entrypoint}.yml').read_text())[0]
+    preflight_file = next(task['ansible.builtin.import_tasks'] for task in configure['pre_tasks']
+                          if task['name'] == 'Verify the provisioned Debian guest baseline')
+    preflight = yaml.safe_load((ROOT / 'playbooks' / preflight_file).read_text())
     task_names = {'Wait for initial cloud-init to finish',
                   'Read the baseline verified by provisioning through Incus',
                   'Require verified guest initialization before application configuration'}
-    tasks = [task for task in configure['pre_tasks'] if task['name'] in task_names]
+    tasks = [task for task in preflight if task['name'] in task_names]
     assert len(tasks) == 3
     tasks[1]['ansible.builtin.slurp']['src'] = str(marker)
     inventory = tmp_path / 'configure-inventory.yml'

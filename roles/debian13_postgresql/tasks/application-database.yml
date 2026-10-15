@@ -14,6 +14,7 @@
 - name: Inspect database existence before any creation
   community.postgresql.postgresql_query:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     db: postgres
     query: SELECT oid FROM pg_database WHERE datname = %(name)s
     named_args:
@@ -25,6 +26,7 @@
 - name: Create only an absent application database
   community.postgresql.postgresql_db:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     name: "{{ application_db.name }}"
     owner: "{{ application_db.user }}"
     state: present
@@ -36,6 +38,7 @@
 - name: Enable PostGIS without replacing application data
   community.postgresql.postgresql_ext:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     name: postgis
     db: "{{ application_db.name }}"
     state: present
@@ -53,6 +56,7 @@
 - name: Create the application schema without altering existing objects
   community.postgresql.postgresql_schema:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     name: uranus
     db: "{{ application_db.name }}"
     owner: "{{ application_db.user }}"
@@ -63,6 +67,7 @@
 - name: Grant access to existing application tables
   community.postgresql.postgresql_privs:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     database: "{{ application_db.name }}"
     roles: "{{ application_db.user }}"
     type: table
@@ -75,6 +80,7 @@
 - name: Grant access to existing application sequences
   community.postgresql.postgresql_privs:
     login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
     database: "{{ application_db.name }}"
     roles: "{{ application_db.user }}"
     type: sequence

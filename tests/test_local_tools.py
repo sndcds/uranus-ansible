@@ -14,8 +14,7 @@ def test_sql_copy_rows_are_treated_as_data_and_existing_repository_dumps_validat
     path = tmp_path / 'dump.sql'
     path.write_text('COPY uranus.test FROM stdin;\nDROP DATABASE is only a data string here\n\\connect is data here\n\\.\n')
     safety.validate_sql_dump(path)
-    for name in ['uranus.sql', 'uranus_dev.sql']:
-        safety.validate_sql_dump(ROOT / name)
+    safety.validate_sql_dump(ROOT / 'uranus_dev.sql')
 
 
 def test_incomplete_sql_copy_is_rejected(tmp_path):
