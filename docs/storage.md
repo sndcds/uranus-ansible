@@ -41,7 +41,7 @@ Planungsbudgets, keine harten Quotas. `true` verlangt vorhandenes `prjquota` und
 setzt Rootdiskgrößen; Ansible aktiviert keine Dateisystemfeatures. Diese Wahl
 muss vor Produktion entschieden und mit einem realen Fülltest geprüft werden.
 
-Die sechs Budgets ergeben 600 GiB; eine 960-GB-NVMe hat etwa 894 GiB rohe
+Die sieben Budgets ergeben 610 GiB; eine 960-GB-NVMe hat etwa 894 GiB rohe
 Kapazität. Der Guard fordert für neue Instanzen volle Diskbudgets plus 160 GiB
 Reserve. Images, Metadaten, Snapshots, SQL-Dumps, Exporte und restic benötigen
 zusätzlichen Platz. Ein Voll-Export aller Budgets kann neben den laufenden

@@ -1,10 +1,26 @@
 # Netzwerk, SSH und TLS
 
 Incus verwaltet die Bridge `uranusincus0`, `10.77.0.1/24`, ausgehendes IPv4-NAT
-und feste DHCP-Adressen der sechs NICs. Adressen stammen aus der zentralen
+und feste DHCP-Adressen der sieben NICs. Adressen stammen aus der zentralen
 Instanzliste. Die Bridge ist nicht an eine physische öffentliche Schnittstelle
 angebunden; IPv6 ist innerhalb der Instanzen deaktiviert. Öffentliche IPv6-
-Verbindungen enden wie IPv4 am Host-Ingress, nie direkt an Gästen.
+Verbindungen nimmt Incus am Host entgegen und reicht sie an `nginx01` weiter.
+
+Die beiden Incus-Proxygeräte `http` und `https` gehören ausschließlich zum
+Container `nginx01`. Ihre TCP-Listener auf `[::]:80` und `[::]:443` nehmen auf
+dem Debian-Host IPv4 und IPv6 entgegen. Ohne NAT verbindet Incus im Netzwerk-
+Namensraum des Containers nach `127.0.0.1:80/443` und überträgt die Client-IP
+mit dem PROXY-Protokoll. Nginx vertraut diesem Protokoll nur auf Loopback;
+öffentliche HTTP-Header können weder Client-IP noch private CIDR-Freigaben
+überschreiben. TLS und ACME enden im Container. Ein zusätzlicher HTTPS-Listener
+auf dessen privater IP dient dem Monitoring ohne PROXY-Protokoll.
+[Incus-Proxygeräte in 6.0.4](https://github.com/lxc/incus/blob/v6.0.4/doc/reference/devices_proxy.md).
+
+Das dedizierte Projekt erlaubt dafür `restricted.devices.proxy=allow`.
+Alle übrigen Projektrestriktionen bleiben gesetzt. Der Guard prüft die exakten
+Proxygeräte und lehnt zusätzliche Geräte auf anderen Instanzen ab. Bei einem
+bisherigen verwalteten Projekt wird ausschließlich diese Einstellung nach
+erfolgreichem vollständigem Preflight angepasst; fremde Projekte werden abgelehnt.
 
 Die Debian-Cloud-Images verwenden `systemd-networkd`. Dessen DHCPv4-Client
 verwendet standardmäßig eine DUID; die festen Incus-DHCP-Zuweisungen erfordern
@@ -16,8 +32,9 @@ Container als auch `enp5s0` in einer VM, selbst wenn die bisherige Cloud-init-
 Datei die VM-Karte nicht erfasst. Null oder mehrere Ethernet-Schnittstellen
 werden vor Änderungen abgelehnt. Neue Instanzen erhalten explizite Cloud-init-
 Netzwerkdaten mit Renderer `networkd` und Namensmuster `e*`; die eigene
-MAC-basierte Konfiguration wird über `bootcmd` vor
-Paketinstallationen an. Die Hostrolle konfiguriert außerdem alle laufenden
+MAC-basierte Konfiguration wird von der Hostrolle über den Incus-Kanal vor der
+Ansible-Paketinstallation eingerichtet. Cloud-init führt weder den zusätzlichen
+DHCP-Befehl noch die Paketinstallation aus. Die Hostrolle konfiguriert alle laufenden
 neuen und bestehenden Instanzen über den lokalen Incus-Kanal und wartet auf
 ihre vorgegebene IPv4-Adresse. Gestoppte Instanzen bleiben gestoppt, sofern
 kein Start angefordert wurde. Wiederholungen mit gültiger Netzwerkdatei und gültiger
@@ -30,7 +47,8 @@ der privaten Bridge sowie öffentlich SSH auf Port 22 und HTTP/HTTPS auf 80/443.
 SSH erfordert einen gültigen Schlüssel, ohne feste IPv4- oder IPv6-Quelladresse.
 Port 80 dient ACME und HTTPS-Weiterleitung. Nur der private Monitoringknoten
 kann den Host-Icinga-Agent erreichen. Forward-Regeln blockieren neue externe
-Verbindungen zur Incus-Bridge. Gastfilter erlauben SSH und Webzugriff vom Gateway,
+Verbindungen zur Incus-Bridge. Gastfilter erlauben SSH vom Gateway und HTTPS
+zu Anwendungsgästen ausschließlich von `nginx01`,
 PostgreSQL von den vier berechtigten Clients, Metriken von Development und
 Production sowie Icinga-Kommunikation zwischen Master und Agenten.
 
@@ -76,7 +94,7 @@ vor Ansible aus einem vertrauenswürdigen Incus-Konsolenkanal übernehmen. Eine
 Ausgabe von `ssh-keyscan` allein bestätigt keine Identität. Änderungen von
 SSH-Port oder Benutzer sind nicht automatisch unterstützt.
 
-Der Host-Nginx fordert ein ACME-SAN-Zertifikat für zentrale Domainvariablen an.
+Nginx in `nginx01` fordert ein ACME-SAN-Zertifikat für zentrale Domainvariablen an.
 DNS muss auf die vorgesehene IPv4 zeigen; vorhandene AAAA-Records müssen zuvor
 mit der Hostkonfiguration abgeglichen werden. Zertifikatserneuerung lädt nur
 nach erfolgreichem `nginx -t` neu. Development und Monitoring sind per CIDR
@@ -96,7 +114,9 @@ Host zusätzlich öffentliche Administrationsadresse und Bridgeadresse. Für
 Icinga sind serverAuth/clientAuth nötig. CA-Privatschlüssel nie auf Host oder
 Gäste kopieren. Das Repository enthält keine privaten Schlüssel.
 
-Host-zu-Gast-Nginx verwendet HTTPS mit CA-/Namensprüfung. PostgreSQL-ACLs verlangen
+Ingress-zu-Gast-Nginx verwendet HTTPS mit CA-/Namensprüfung. Die Anwendungsgäste
+vertrauen `X-Real-IP` ausschließlich von der privaten IP von `nginx01`.
+PostgreSQL-ACLs verlangen
 `hostssl` und SCRAM; Clients benutzen `verify-full` und die CA. `PGSSLMODE` und
 `PGSSLROOTCERT` im Backend-Service sichern auch Releases ab, welche das
 `ssl_mode`-JSON-Feld nicht selbst auswerten. InfluxDB, Grafana und die Metrikwriter

@@ -23,6 +23,7 @@ Alle Kommandos sind Beispiele für eine später autorisierte Betriebsphase.
 | VM läuft, aber Incus zeigt keine IPv4-Adresse | Über `incus exec db01 -- ip -br link` und `networkctl status --all --no-pager` im Gast prüfen. `ip -4 address` allein zeigt nicht alle vorhandenen Links. Bei `enp5s0 DOWN` und `Network File: n/a` die folgende VM-Recovery oder das korrigierte Provisionierungsplaybook verwenden. |
 | Cloud-init deaktiviert, Image-Build-Hostname oder fehlender Benutzer `debian` | Das aktualisierte `provision.yml` erneut ausführen. Es richtet Hostname, Benutzer, SSH-Zugang und gemeinsame Pakete einschließlich `htop` auf allen laufenden Instanzen direkt über Incus ein. Laufendes Cloud-init wird abgewartet. |
 | Cloud-init zeigt abgeschlossene Fehler bei `package-update-upgrade-install` und `scripts-user` nach dem behobenen Netzwerkproblem | `provision.yml` erneut ausführen. Wenn ausschließlich die verwalteten Basispakete und der SSH-Start betroffen sind, übernimmt Ansible diese Schritte und prüft den fertigen Gast. Die ursprüngliche Cloud-init-Fehlerhistorie bleibt bestehen. Andere Module oder eigene Pakete/Kommandos werden nicht als repariert gewertet. |
+| Cloud-init meldet einen alten `bootcmd`-Fehler beim DHCP-Skript | Das aktualisierte `provision.yml` erneut ausführen. Es prüft den gespeicherten Befehl gegen das exakte verwaltete DHCP-Skript und verifiziert dessen erfolgreiche Netzwerkkorrektur über Incus vor dem Bootstrap. Eigene oder zusätzliche `bootcmd`-Befehle bleiben gesperrt. Neue Instanzen führen diesen frühen Befehl nicht mehr aus. |
 | `instance-bootstrap.json` fehlt bei `configure.yml` | Zuerst das aktualisierte `provision.yml` mit den Deployment- und Vault-Argumenten ausführen. Die Bestätigung wird erst nach erfolgreich geprüftem Bootstrap geschrieben. |
 | Bootstrap meldet `kbdinteractiveauthentication`; Hauptdatei lädt kein `sshd_config.d` | Das aktualisierte `provision.yml` setzt den Include der verwalteten SSH-Datei vor die vorhandene Hauptkonfiguration. Es prüft Schlüsselanmeldung, `UsePAM yes`, deaktivierte Passwort-/interaktive Anmeldung und deaktivierten Rootlogin vor dem SSH-Reload. Vorhandene Hostschlüssel bleiben erhalten. |
 | SQL pending marker | DB und Logs prüfen, Backup sichern; unvollständige Erstinitialisierung manuell beheben. Marker nicht blind löschen. |
@@ -140,7 +141,7 @@ automatisch und erhält vorhandene Cloud-init-Dateien. Anschließend
 `cloud-init status --long` prüfen, da fehlender Netzwerkzugang zuvor auch
 Benutzer- oder Paketinitialisierung verhindert haben kann.
 
-Für die gemeinsame Recovery aller sechs bestehenden Instanzen vom Controller
+Für die gemeinsame Recovery aller sieben bestehenden Instanzen vom Controller
 im Repository aus:
 
 ```bash
@@ -153,7 +154,7 @@ ansible-playbook playbooks/provision.yml \
 ```
 
 Nach einem erfolgreichen Lauf sind Netzwerk, Hostname, `debian`, SSH und
-`incus_guest_bootstrap_packages` einschließlich `htop` auf allen sechs Gästen
+`incus_guest_bootstrap_packages` einschließlich `htop` auf allen sieben Gästen
 vorbereitet. Die Anwendungspakete und Dienste folgen weiterhin in `configure.yml`.
 Cloud-init kann bei einer vorhandenen VM deaktiviert bleiben; Ansible führt
 dort die geprüfte Grundinstallation selbst aus. Es werden keine Cloud-init-

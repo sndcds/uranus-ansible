@@ -1,7 +1,8 @@
 # Uranus Ansible – Incus auf Debian 13
 
 Ein Inventory, ein Provisionierungsweg: Incus 6.0 LTS aus Debian 13 verwaltet
-`db01` als VM und fünf unprivilegierte Systemcontainer. Die Anwendungskonfiguration
+`db01` als VM und sechs unprivilegierte Systemcontainer, darunter `nginx01` für
+öffentlichen nginx-Ingress und ACME. Die Anwendungskonfiguration
 verwendet die konsolidierten Debian-Rollen aus PR #1.
 
 **Produktives Deployment ist gesperrt. Auf `94.130.236.38` wurden keine Änderungen vorgenommen.**

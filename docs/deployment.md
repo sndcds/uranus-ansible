@@ -20,7 +20,7 @@ und CI dürfen nur Fixtures und isolierte Testumgebungen verwenden.
    bereitstellen. Image-Fingerprints verifizieren und Verfügbarkeit sichern.
    Kein automatisches Patchen inkompatibler Releases.
 6. Interne PKI unter `environments/hetzner/pki` bereitstellen: `ca.crt` und je
-   `hetzner`, `db01`, `dev01`, `prod01`, `mon01`, `nom01`, `vers01` eine `.crt` und
+   `hetzner`, `db01`, `dev01`, `prod01`, `mon01`, `nom01`, `vers01`, `nginx01` eine `.crt` und
    eine Ansible-Vault-verschlüsselte `.key`. SANs und EKUs wie in `networking.md`.
    Die CA selbst bleibt offline. Zertifikatsablauf und Rotation planen.
 7. Externes Backup, Kapazität, Restore-Nachweis, RPO/RTO und Sicherheitsbefunde
@@ -36,7 +36,7 @@ und CI dürfen nur Fixtures und isolierte Testumgebungen verwenden.
 ## Neue interne CA auf dem Controller vorbereiten
 
 Wenn noch keine interne CA vorhanden ist, erzeugt der lokale Helfer eine neue
-CA und die sieben Knotenzertifikate aus Inventory und Instanzliste:
+CA und die acht Knotenzertifikate aus Inventory und Instanzliste:
 
 ```bash
 . .venv/bin/activate
@@ -44,7 +44,7 @@ python scripts/prepare_pki.py
 ```
 
 Der Helfer benötigt OpenSSL, PyYAML und `ansible-vault`. Er erstellt
-`environments/hetzner/pki/ca.crt` sowie die `.crt`- und `.key`-Dateien aller sieben
+`environments/hetzner/pki/ca.crt` sowie die `.crt`- und `.key`-Dateien aller acht
 Knoten. Zertifikate enthalten den Knotennamen als DNS-SAN, die jeweiligen IP-SANs
 und `serverAuth`/`clientAuth`. Das Hostzertifikat enthält öffentliche IPv4/IPv6 und
 die Bridge-IP. Vor Veröffentlichung prüft OpenSSL Kette, Zwecke, Namen, IPs und
@@ -72,6 +72,20 @@ Das bisherige `--ask-vault-pass` für `vault.yml` kann zusätzlich bleiben.
 Für vorhandene externe PKI-Dateien stattdessen `uranus_pki_dir` auf deren
 Controllerverzeichnis setzen und den passenden Vault-Zugang verwenden.
 
+Für einen mit der Vault-ID `production` verschlüsselten Anwendungs-Vault den
+separaten lokalen Zugang ergänzen:
+
+```bash
+--vault-id production@.uranus-private/secrets/vault-password
+```
+
+`environments/hetzner/vault.yml` und die lokale Passwortdatei haben Modus `0600`;
+das Passwortverzeichnis hat Modus `0700`. Beide sind von Git ausgeschlossen.
+Dieser Zugang ersetzt `--ask-vault-pass` für den Anwendungs-Vault und wird
+zusätzlich zum PKI-Zugang übergeben. Vorhandene gültige Secrets bei erneuter
+Vorbereitung erhalten; eine Rotation benötigt abgestimmte Anwendungs- und
+Datenbankkonfiguration.
+
 ## Start des Ansible-Laufs nach Freigabe
 
 ```bash
@@ -89,6 +103,24 @@ ansible-playbook playbooks/configure.yml -e @environments/hetzner/deployment.yml
 ansible-playbook playbooks/ingress.yml -e @environments/hetzner/deployment.yml -e @environments/hetzner/vault.yml --ask-vault-pass
 ```
 
+Für einen separaten PostgreSQL-Rollout auf der bereits provisionierten `db01`:
+
+```bash
+ansible-playbook playbooks/postgresql.yml \
+  -e @environments/hetzner/deployment.yml \
+  --vault-id pki@.uranus-private/pki/vault-password \
+  --vault-id production@.uranus-private/secrets/vault-password
+```
+
+Dieser Einstieg prüft Freigabe, Debianversion und Bootstrapbestätigung und richtet
+die interne TLS-Identität, PostgreSQL 17 mit PostGIS, Datenbankbenutzer,
+Anwendungs- und Monitoringdatenbanken sowie tägliche lokale Datenbankbackups ein.
+Die Secrets werden wie bei `configure.yml` aus `environments/hetzner/vault.yml`
+geladen; bei verschlüsseltem Vault zusätzlich dessen Vault-Zugang angeben.
+Abschließend werden PostgreSQL-Version, privater Listener, TLS, SCRAM und die
+Syntax der Client-Zugriffsregeln geprüft. Erstimporte bleiben standardmäßig
+deaktiviert; bestehende Datenbanken werden erhalten.
+
 Bei erster Provisionierung zuerst `provision.yml`, danach die neuen Gast-
 Hostschlüssel vertrauenswürdig prüfen, dann `configure.yml` und `ingress.yml`.
 `provision.yml` bereitet Netzwerk, Hostnamen, Benutzer `debian`, Schlüsselzugang,
@@ -105,6 +137,62 @@ Initialimporte sind separate bewusste Entscheidungen:
 `hetzner_app_initial_import` und `hetzner_nominatim_initial_import` sind
 standardmäßig false. Bei vorhandenen DBs wird nicht neu importiert. Für einen
 Nominatim-Erstimport müssen URL und SHA256 des OSM-Extrakts feststehen.
+
+### Wechsel vom Host-Ingress zum Container
+
+`ingress.yml` konfiguriert ausschließlich `nginx01`; der Host betreibt danach
+Incus-Portproxies auf 80/443. Bei einer Erstinstallation müssen diese Ports frei
+sein. Für einen bereits laufenden Host-Ingress ist vor der später freigegebenen
+Umstellung ein Wartungsfenster nötig: Konfiguration und `/etc/letsencrypt` sichern,
+den bisherigen nginx sowie dessen `certbot.timer` auf dem Host stoppen und
+deaktivieren. Fremde Listener werden nicht automatisch beendet. Erst danach
+`provision.yml` für den zusätzlichen Container ausführen, dessen SSH-Hostschlüssel
+prüfen und `configure.yml` sowie `ingress.yml` ausführen. Das verursacht eine
+Unterbrechung bis zur erfolgreichen Ingress-Konfiguration.
+
+Bei vorhandener interner PKI `nginx01.crt` und dessen verschlüsselte `.key` mit
+der bestehenden CA ausstellen. `prepare_pki.py` erzeugt nur eine neue PKI und
+ergänzt bestehende Verzeichnisse nicht. Die vorhandene Vertrauenswurzel erhalten.
+Die bisherige ACME-Identität kann aus der Sicherung nach `nginx01` übertragen
+werden; andernfalls fordert die Rolle ein neues Zertifikat an. Konfiguration und
+Zertifikate auf dem Host werden durch diesen Workflow nicht gelöscht. Den alten
+Ingress erst nach erfolgreicher Prüfung des neuen Containers endgültig abbauen.
+
+### Bereits angelegte, leere Anwendungsdatenbanken befüllen
+
+`db01` verwendet für `uranus_prod` und `uranus_dev` denselben Dump `uranus.sql`.
+Dieser Produktionsdump wird lokal neben dem Repository-README bereitgestellt
+und ist von Git ausgeschlossen. Alternativ `debian13_postgresql_dump_root` auf
+das Verzeichnis mit dem freigegebenen Dump setzen. Der versionierte Beispieldump
+`uranus_dev.sql` dient den lokalen Integrationstests.
+Sind die Datenbanken bereits durch `postgresql.yml` angelegt worden, führt der
+separate Einstieg den ausdrücklich freigegebenen Import aus:
+
+```bash
+ansible-playbook playbooks/import-databases.yml \
+  -e @environments/hetzner/deployment.yml \
+  --vault-id production@.uranus-private/secrets/vault-password \
+  -e hetzner_app_initial_import=true
+```
+
+Der Lauf prüft beide Ziele vor dem ersten Import. Jede Datenbank muss bereits
+dem jeweiligen Anwendungsbenutzer gehören und PostGIS enthalten. Das Schema
+`uranus` muss fehlen oder vollständig leer sein; auch vorhandene Typen oder
+Funktionen verhindern den Import. Bestehende Abschluss- oder Unterbrechungsmarker
+führen zum Abbruch. Check-Mode ist für diesen Einstieg gesperrt.
+
+Vor jedem Import entsteht eine private Custom-Format-Sicherung unter
+`/var/lib/postgresql/<datenbank>.before-initial-import.<zufall>.dump`; der Lauf
+zeigt den Pfad an. Der Dump wird als Anwendungsbenutzer in einer Transaktion
+über Loopback-TCP mit SCRAM-Anmeldung importiert; administrative Abfragen und
+Backups verwenden den lokalen Unix-Socket. Eine erneute Prüfung innerhalb dieser
+Transaktion verhindert den Import in ein inzwischen befülltes Schema.
+Quelldateien bleiben unverändert;
+in der übertragenen Kopie werden `oklab`-Owner-Anweisungen entfernt und das leere
+Schema wiederverwendet. Bei Fehlern bleibt der Unterbrechungsmarker für eine
+manuelle Prüfung erhalten. Weder Datenbanken noch vorhandene Objekte werden
+gelöscht. Die Sicherungen dieses manuellen Imports werden nicht automatisch
+bereinigt.
 
 ## Releases und Rollback
 

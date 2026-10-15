@@ -14,6 +14,10 @@ lokale Retention. Anwendungen erhalten private TAR-Sicherungen ihrer Releases,
 Konfiguration und persistenten Bilder. Archive und Credentials bleiben restriktiv
 berechtigt; keine Passwörter werden in den DB-Backupskripttext eingebettet.
 
+Für `nginx01` zusätzlich `/etc/nginx`, `/etc/letsencrypt` einschließlich
+ACME-Kontoschlüssel und `/var/www/letsencrypt` in die externe Sicherung aufnehmen.
+Die optionale vollständige Incus-Sicherung enthält diese Dateien ebenfalls.
+
 Optional führt `incus_export_backups_enabled=true` wöchentliche native Incus-
 Exporte, ein Initialisierungsmanifest und einen globalen SQL-Metadatendump in
 `/data/incus/backups` aus. Vor dem Lauf und jedem schreibenden Schritt wird die

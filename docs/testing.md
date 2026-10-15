@@ -12,11 +12,12 @@ Profil. Tests verwenden ausschließlich lokale Fixtures und isolierte Datenbanke
 | UUID / Read-only / fehlender Mount / Symlink / Unter-Mount | Fehler-Injektion, kein Formatieren |
 | Kapazität / Netzwerküberschneidung / APIfehler / Drift | adversariale Python-Tests |
 | Init-Abbruch / fremde Geräte / Owner / verwaiste Daten | Erhaltungstests und Fail-closed-Verhalten |
-| SSH/Firewallrecovery | Timer vor SSH-Änderung, Schlüsselpflicht vor öffentlicher Freigabe, neue Verbindung, Ablauf, Apply-/Reloadfehler, konkurrierende Updates, Boot-Recovery und Konfigurationsdrift; native nftables-Parser für Host und sechs Gäste |
+| SSH/Firewallrecovery | Timer vor SSH-Änderung, Schlüsselpflicht vor öffentlicher Freigabe, neue Verbindung, Ablauf, Apply-/Reloadfehler, konkurrierende Updates, Boot-Recovery und Konfigurationsdrift; native nftables-Parser für Host und sieben Gäste |
 | Host-SSH ohne feste IP | wechselnde IPv4-/IPv6-Quellen, Root-/Passwort-/Keyboard-Interactive-Sperre, fremde SSH-Konfigurationen; `scripts/check_ssh.py` prüft mit echtem OpenSSH wirksame Einstellungen und Include-Priorität |
 | Cloud-init | native Cloud-init-Schemaprüfung für VM und Container |
 | Nginx und TLSrouting | echter Nginxparser mit isolierten Loopbackports und Testzertifikaten |
-| PostgreSQL Erstimport / Wiederholung / Pending / SQL-Escape | reale Ansible-DB-Tasks gegen temporären Unix-Socket, ohne TCP |
+| Container-Ingress | laufender lokaler Nginx mit TLS-Upstream; PROXY-Client-IP, IPv4-/IPv6-CIDRs, verworfene gefälschte HTTP-Header, ACME und privater Monitoringlistener |
+| PostgreSQL Erstimport / Wiederholung / Pending / SQL-Escape | reale Ansible-DB-Tasks gegen temporäre Unix-Sockets und Loopback-TCP mit SCRAM |
 | Native Debianpakete / Incus-CLI | isolierte Debian-13-Testumgebung; Ergebnisse im PR |
 
 Eine erfolgreiche statische Prüfung ist kein vollständiger Incus-/Anwendungs-
@@ -56,6 +57,45 @@ als `NOT RUN` ausgegeben. Auch dieser Test verwendet niemals den Zielhost.
 Ein vollständiger Anwendungspilot einschließlich Healthchecks, TLS, realen
 Importen und externem Restore ist weiterhin offen. Ein grüner CI-Lauf ersetzt
 keinen dieser ausdrücklich fehlenden Nachweise.
+
+## Eigener Ingress-Container am 15. Oktober 2026
+
+Die elf Tests in `tests/test_ingress_container.py` sind lokal erfolgreich.
+Sie prüfen die Instanzkonfiguration und die Gast-Firewall sowie einen wirklich
+gestarteten nginx mit Testzertifikaten und TLS-Upstream: PROXY-Client-Adressen
+für IPv4/IPv6, private CIDR-Freigaben, gefälschte HTTP-Header, HTTP-ACME und den
+internen HTTPS-Listener ohne PROXY-Protokoll. Dafür werden ausschließlich
+temporäre Loopbackports verwendet; die Sandbox benötigt Socketfreigaben.
+
+Die nativen nftables-Parserprüfungen für Host und alle sieben Gastrollen sind
+in einem isolierten Netzwerk-Namensraum erfolgreich. Repository-Policy,
+Syntaxprüfung aller sechs Playbooks und ansible-lint bestehen. Ein realer
+Incus-Start von `nginx01`, öffentliche IPv4-/IPv6-Verbindungen, echte ACME-
+Ausstellung und der Wechsel eines laufenden Host-Ingress sind damit weiterhin
+nicht nachgewiesen und benötigen den isolierten Pilot.
+
+Alle 204 gezielten Tests für Incus-Preflight, Bootstrap/DHCP, Ingress, interne
+PKI, Inventory-Delegation, Firewall und Deployment-Gates bestehen. Der direkte
+Pytest-Aufruf benötigt wie `make test` den `ANSIBLE_COLLECTIONS_PATH` aus dem
+Makefile; ohne ihn fehlte der virtuellen Umgebung `community.general` bei sechs
+Gate-Prüfungen. Diese Prüfungen wurden mit dem vorgesehenen Pfad erfolgreich
+wiederholt. Beim anschließenden vollständigen Lauf von `make check` bestehen
+alle 266 Tests einschließlich Datenbankintegration, Repository-Policy,
+Syntaxprüfung der sechs Playbooks und ansible-lint im Production-Profil.
+Der Importtest verwendet den versionierten Entwicklungsdump und prüft alle
+56 Tabellen samt Zeilenzahlen und Besitzern. PostgreSQL-Fixtures bevorzugen
+Version 17 und verwenden andernfalls die höchste lokal installierte Version.
+
+Für die anschließende DHCP-/Cloud-init-Korrektur bestehen 75 gezielte Tests
+für Statusauswertung, Bootstrap, DHCP und Vorlagen. Die sieben nginx-Parserfälle
+benötigten lokale Socketfreigaben und wurden außerhalb der Sandbox erfolgreich
+wiederholt. Die Tests decken den abgeschlossenen `bootcmd`-Fehler, die exakte
+Skriptprüfung, fehlgeschlagene DHCP-Reparatur, fremde Befehle, wiederholte
+Provisionierung und die Bereitschaftsprüfung bei der späteren Konfiguration ab.
+Neue Cloud-init-Vorlagen bestehen native Schema- und Netzwerk-Rendererprüfungen.
+Die vom Betreiber bereitgestellte Statusausgabe belegt inzwischen einen
+gestarteten `nginx01` mit abgeschlossenem Cloud-init und altem `bootcmd`-Fehler;
+sie belegt noch keine fertige nginx-/ACME-Konfiguration.
 
 Der native GitHub-Vertragstest benötigt `vhost_vsock`. Das erste CI-Lab
 verweigerte VM-Initialisierung wegen des fehlenden Moduls. Die CI lädt es jetzt
