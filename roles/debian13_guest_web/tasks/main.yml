@@ -39,6 +39,8 @@
 - name: Validate frontend activation over internal TLS with code rollback
   when: instance_role in ['dev', 'prod']
   block:
+    - name: Apply pending nginx reloads before checking the active frontend
+      ansible.builtin.meta: flush_handlers
     - name: Require the newly served static frontend to answer successfully
       ansible.builtin.uri:
         url: "https://{{ ansible_host }}{{ frontend_health_endpoint }}"
@@ -55,4 +57,6 @@
       when: debian13_frontend_previous.stat.exists
     - name: Report frontend activation failure and preserve release artifacts
       ansible.builtin.fail:
-        msg: Frontend healthcheck failed; previous static artifact restored when available. Review before retry.
+        msg: >-
+          Frontend healthcheck failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Previous static artifact restored when available. Review before retry.

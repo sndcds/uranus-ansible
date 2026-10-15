@@ -13,7 +13,8 @@ all:
         ansible_user: debian
         ansible_become: true
         ansible_ssh_common_args: -o ProxyJump=awendelk@94.130.236.38 -o StrictHostKeyChecking=yes
-        ansible_host: '{{ (incus_instances | selectattr(''name'', ''equalto'', inventory_hostname) | first).ip }}'
+        # Use the target guest's name when tasks are delegated between guests.
+        ansible_host: '{{ (incus_instances | selectattr(''name'', ''equalto'', inventory_hostname_short) | first).ip }}'
       hosts:
         db01: {}
         dev01: {}

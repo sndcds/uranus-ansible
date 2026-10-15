@@ -182,12 +182,23 @@
     groups: ssl-cert
     append: true
 
-- name: Configure authenticated transport encryption for private metrics
-  ansible.builtin.lineinfile:
+- name: Remove misplaced HTTP options from the legacy TLS section
+  community.general.ini_file:
     path: /etc/influxdb/influxdb.conf
-    regexp: "^\\s*{{ item.key }}\\s*="
-    line: "  {{ item.key }} = {{ item.value }}"
-    insertafter: '^\\[http\\]'
+    section: tls
+    option: "{{ item }}"
+    state: absent
+    mode: '0644'
+  loop: [bind-address, https-enabled, https-certificate, https-private-key]
+  notify: Restart Debian InfluxDB
+
+- name: Configure authenticated transport encryption for private metrics
+  community.general.ini_file:
+    path: /etc/influxdb/influxdb.conf
+    section: http
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
   loop:
     - {key: bind-address, value: '"{{ ansible_host }}:8086"'}
     - {key: https-enabled, value: 'true'}

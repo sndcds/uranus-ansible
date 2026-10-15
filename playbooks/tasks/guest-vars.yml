@@ -46,7 +46,9 @@
 
 - name: Require serialization-safe generated secrets for the existing backend templates
   ansible.builtin.assert:
-    that: item is match('^[A-Za-z0-9_-]{20,}$')
+    that:
+      - item is match('^[A-Za-z0-9_-]{20,}$')
+      - item is not match('(?i)^(REPLACE_|CHANGE_?ME|YOUR_|EXAMPLE_|DUMMY_|TEST_)')
     fail_msg: Use generated alphanumeric secrets, for example openssl rand -hex 32.
   loop:
     - "{{ vault_db_password_dev }}"

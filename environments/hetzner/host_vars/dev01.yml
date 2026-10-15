@@ -1,7 +1,8 @@
 ---
 app_env: development
-frontend_repo_version: ''
-backend_repo_version: ''
+# Pin the dev branches to concrete commits for reproducible deployments.
+frontend_repo_version: '6a1c296c700f16d05350b11d1b295f576031f8f5'
+backend_repo_version: '106ab24af97854e988f3c1b6c72b8ae2e9c1680f'
 db_host: '{{ hostvars[''db01''].ansible_host }}'
 db_name: uranus_dev
 db_user: uranus_dev

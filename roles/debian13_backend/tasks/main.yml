@@ -27,7 +27,8 @@
     state: directory
     owner: uranus
     group: uranus
-    mode: '0750'
+    # Nginx must traverse the shared parent to reach the public frontend.
+    mode: "{{ '0751' if item == '/opt/uranus' else '0750' }}"
   loop:
     - /opt/uranus
     - /opt/uranus/backend
