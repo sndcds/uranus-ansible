@@ -136,8 +136,9 @@ incus_guest_bootstrap_packages:
   - acl
   - htop
 incus_images:
-  container: ebdc531119fec1563bd0cafcd3efc01560daccd0ae61bff1f736768e211faa83
-  virtual-machine: cb356a9e2b8f35924c539fef0ee44f2996b9ac22a932ec02c69c1eabcb45f9c8
+  # Debian Trixie amd64 cloud, official image index 20261015_05:24.
+  container: f920c5bf3798e35171d3a02e1e4fb65e0ab043b61be2b789b6551b436cb5ad80
+  virtual-machine: d75f26da4c1a903cc9218e22ca62ad66265661fabecc400d99f59a3f613a2a23
 incus_instances:
   - name: db01
     role: db

@@ -12,11 +12,58 @@
     that: incus_instance.name in incus_instance_current.new_instances
     fail_msg: Concurrent provisioning detected; stop and inspect rather than overwrite.
 
+- name: Read the project image store before contacting the remote server
+  ansible.builtin.command:
+    argv: [incus, --force-local, --project, "{{ incus_project }}", image, list, --format=json]
+  register: incus_instance_images
+  changed_when: false
+
+- name: Preserve the pinned image in the project before initialization
+  when: >-
+    incus_images[incus_instance.type] not in
+    (incus_instance_images.stdout | from_json | default([], true) | map(attribute='fingerprint') | list)
+  block:
+    - name: Guard filesystem before copying the pinned image
+      uranus_storage_guard: {}
+
+    - name: Copy the exact remote fingerprint into the project image store
+      ansible.builtin.command:
+        argv: >-
+          {{ ['incus', '--force-local', '--project', incus_project, 'image', 'copy',
+              'images:' ~ incus_images[incus_instance.type], 'local:', '--target-project', incus_project] +
+             (['--vm'] if incus_instance.type == 'virtual-machine' else []) }}
+      changed_when: true
+  rescue:
+    - name: Report image acquisition failure before creating an instance
+      ansible.builtin.fail:
+        msg: >-
+          Cannot acquire pinned {{ incus_instance.type }} image {{ incus_images[incus_instance.type] }}.
+          No instance was initialized. The remote may have removed the image; verify a current
+          Debian 13 cloud fingerprint in incus_images or import the pinned image into project {{ incus_project }}.
+          Source error: {{ ansible_failed_result.stderr | default(ansible_failed_result.msg, true) }}
+
+- name: Read the selected local image identity before initialization
+  ansible.builtin.command:
+    argv: [incus, --force-local, query, --raw, "/1.0/images/{{ incus_images[incus_instance.type] }}?project={{ incus_project }}"]
+  register: incus_instance_image
+  changed_when: false
+
+- name: Require the exact local image fingerprint and instance type
+  ansible.builtin.assert:
+    that:
+      - (incus_instance_image.stdout | from_json).type == 'sync'
+      - (incus_instance_image.stdout | from_json).status_code == 200
+      - (incus_instance_image.stdout | from_json).metadata.fingerprint == incus_images[incus_instance.type]
+      - (incus_instance_image.stdout | from_json).metadata.type == incus_instance.type
+
+- name: Guard filesystem immediately before initializing the instance
+  uranus_storage_guard: {}
+
 - name: Initialize with full configuration atomically before the first start
   ansible.builtin.command:
     argv: >-
       {{ ['incus', '--force-local', '--project', incus_project, 'init',
-          'images:' ~ incus_images[incus_instance.type], incus_instance.name, '--no-profiles'] +
+          incus_images[incus_instance.type], incus_instance.name, '--no-profiles'] +
          (['--vm'] if incus_instance.type == 'virtual-machine' else []) }}
     stdin: "{{ lookup('template', 'instance.yml.j2') }}"
   changed_when: true
