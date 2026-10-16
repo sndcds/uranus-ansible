@@ -4,7 +4,7 @@ app_databases:
   - name: uranus_dev
     user: uranus_dev
     password: '{{ vault_db_password_dev }}'
-    dump_file: uranus_dev.sql
+    dump_file: uranus.sql
   - name: uranus_prod
     user: uranus_prod
     password: '{{ vault_db_password_prod }}'

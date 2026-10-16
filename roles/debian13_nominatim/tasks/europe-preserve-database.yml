@@ -1,0 +1,22 @@
+---
+- name: Finish remaining connections to the regional database after stopping its API
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: postgres
+    query: SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %(name)s
+    named_args: {name: "{{ nominatim_db_name }}"}
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+
+- name: Retain the regional database under its reserved name
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: postgres
+    query: 'ALTER DATABASE "{{ nominatim_db_name }}" RENAME TO "{{ debian13_nominatim_europe_previous_database }}"'
+    autocommit: true
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres

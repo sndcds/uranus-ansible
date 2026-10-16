@@ -4,8 +4,23 @@
     that:
       - hetzner_versatiles_archive_url is match('^https://')
       - hetzner_versatiles_archive_sha256 is match('^[0-9a-f]{64}$')
+      - hetzner_versatiles_frontend_url is match('^https://')
       - hetzner_versatiles_frontend_sha256 is match('^[0-9a-f]{64}$')
+      - versatiles_tiles_url is match('^https://')
+      - versatiles_tileset_name is match('^[a-zA-Z0-9_-]+\.versatiles$')
     fail_msg: Provide verified release assets and checksums; remote installer scripts are not executed.
+
+- name: Validate the map extent before any download
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import sys;
+        west,south,east,north=map(float,sys.argv[1].split(','));
+        assert -180 <= west < east <= 180 and -85.051129 <= south < north <= 85.051129
+      - "{{ versatiles_bbox }}"
+  changed_when: false
 
 - name: Create VersaTiles service user
   ansible.builtin.user:
@@ -46,15 +61,29 @@
     mode: '0644'
   register: debian13_versatiles_archive
 
-- name: Extract only the verified VersaTiles executable
+- name: Create the immutable executable release directory
+  ansible.builtin.file:
+    path: "{{ debian13_versatiles_release_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Unpack the verified executable into its immutable release directory
   ansible.builtin.unarchive:
     src: "/var/cache/uranus/versatiles-{{ hetzner_versatiles_archive_sha256[:16] }}.tar.gz"
-    dest: /usr/local/bin
+    dest: "{{ debian13_versatiles_release_dir }}"
     remote_src: true
     include: [versatiles]
     owner: root
     group: root
     mode: '0755'
+
+- name: Activate the pinned executable
+  ansible.builtin.file:
+    src: "{{ debian13_versatiles_release_dir }}/versatiles"
+    dest: /usr/local/bin/versatiles
+    state: link
   notify: Restart Debian VersaTiles
 
 - name: Download map frontend bundle
@@ -66,21 +95,27 @@
     mode: '0640'
     force: false
     checksum: "sha256:{{ hetzner_versatiles_frontend_sha256 }}"
+  notify: Restart Debian VersaTiles
 
-- name: Download the tile subset only when no tileset exists
+- name: Inspect the existing completed tileset
+  ansible.builtin.stat:
+    path: "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
+    get_checksum: false
+  register: debian13_versatiles_tileset
+
+- name: Import a new tileset without exposing a partial download
+  ansible.builtin.include_tasks: import.yml
+  when: not debian13_versatiles_tileset.stat.exists
+
+- name: Verify that the completed tileset can be opened
   ansible.builtin.command:
     argv:
       - /usr/local/bin/versatiles
-      - convert
-      - --bbox-border
-      - "{{ versatiles_bbox_border | string }}"
-      - --bbox
-      - "{{ versatiles_bbox }}"
-      - "{{ versatiles_tiles_url }}"
+      - probe
       - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
-    creates: "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
   become: true
   become_user: "{{ versatiles_system_user }}"
+  changed_when: false
 
 - name: Install private VersaTiles service
   ansible.builtin.template:
@@ -95,3 +130,22 @@
     daemon_reload: true
     state: started
     enabled: true
+
+- name: Apply updated VersaTiles configuration before checking health
+  ansible.builtin.meta: flush_handlers
+
+- name: Check the running tile metadata endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ versatiles_port }}/tiles/osm/tiles.json"
+    return_content: true
+    status_code: 200
+  register: debian13_versatiles_health
+  retries: 10
+  delay: 2
+  until: debian13_versatiles_health.status == 200
+
+- name: Require a usable vector tileset
+  ansible.builtin.assert:
+    that:
+      - debian13_versatiles_health.json.tiles | length > 0
+      - debian13_versatiles_health.json.maxzoom | int == 14

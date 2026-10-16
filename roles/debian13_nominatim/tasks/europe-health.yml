@@ -1,0 +1,25 @@
+---
+- name: Require the Europe API to report a working database
+  ansible.builtin.uri:
+    url: http://localhost/status?format=json
+    unix_socket: /run/nominatim.sock
+    return_content: true
+    status_code: 200
+  register: debian13_nominatim_europe_health
+  failed_when: debian13_nominatim_europe_health.json.status | int != 0
+
+- name: Verify coverage beyond the previous Schleswig-Holstein extract
+  ansible.builtin.uri:
+    url: "http://localhost/search?city={{ item.city }}&countrycodes={{ item.country }}&format=jsonv2&limit=1"
+    unix_socket: /run/nominatim.sock
+    return_content: true
+    status_code: 200
+  loop:
+    - {city: Paris, country: fr}
+    - {city: Madrid, country: es}
+    - {city: Berlin, country: de}
+    - {city: Flensburg, country: de}
+  loop_control:
+    label: "{{ item.city }}"
+  register: debian13_nominatim_europe_search
+  failed_when: debian13_nominatim_europe_search.json | length == 0

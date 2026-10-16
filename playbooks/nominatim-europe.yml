@@ -1,0 +1,40 @@
+---
+- name: Replace the regional geocoder with a verified Europe import
+  hosts: 'uranus_instances:&nom01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Require a real run or the explicit read-only preflight
+      ansible.builtin.assert:
+        that: not ansible_check_mode
+        fail_msg: Use scripts/import_nominatim_europe.sh --preflight instead of --check.
+    - name: Authenticate the shared SSH jump connection before contacting guests
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -F
+          - "{{ lookup('env', 'URANUS_NOMINATIM_SSH_CONFIG') }}"
+          - -T
+          - awendelk@94.130.236.38
+          - 'true'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      when: lookup('env', 'URANUS_NOMINATIM_SSH_CONFIG') | length > 0
+    - name: Load dedicated geocoding settings and secrets
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Wait for database SSH access after a possible VM restart
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+        connect_timeout: 60
+        sleep: 5
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Prepare and perform the guarded Europe replacement
+      ansible.builtin.include_role:
+        name: debian13_nominatim
+        tasks_from: europe

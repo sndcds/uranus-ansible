@@ -1,0 +1,41 @@
+---
+- name: Ensure NodeSource keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Install NodeSource signing key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/uranus-nodesource.asc
+    mode: '0644'
+
+- name: Configure maintained Node.js release for Debian guests
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/uranus-nodesource.asc]
+      https://deb.nodesource.com/node_{{ hetzner_nodejs_major }}.x nodistro main
+    filename: uranus-nodesource
+    state: present
+
+- name: Install Node.js with its npm client
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+
+- name: Ensure application build user exists
+  ansible.builtin.user:
+    name: uranus
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create the frontend runtime configuration directory
+  ansible.builtin.file:
+    path: /etc/uranus
+    state: directory
+    owner: root
+    group: uranus
+    # Other service users consume the public CA and their own TLS identities.
+    mode: '0751'

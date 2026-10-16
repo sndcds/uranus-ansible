@@ -1,0 +1,16 @@
+---
+# For migration, preserve values from the active /etc/plausible/plausible.env.
+# Fill locally, protect with mode 0600, then encrypt once with Vault ID production.
+vault_plausible_environment:
+  SECRET_KEY_BASE: ''
+  DISABLE_REGISTRATION: 'true'
+  MAILER_ADAPTER: Bamboo.SMTPAdapter
+  MAILER_EMAIL: analytics@example.invalid
+  SMTP_HOST_ADDR: smtp.example.invalid
+  SMTP_HOST_PORT: '587'
+  SMTP_HOST_SSL_ENABLED: 'false'
+  SMTP_USER_NAME: ''
+  SMTP_USER_PWD: ''
+# Generate each independently with: openssl rand -hex 32
+vault_plausible_postgres_password: ''
+vault_plausible_clickhouse_password: ''

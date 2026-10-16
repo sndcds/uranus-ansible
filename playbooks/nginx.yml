@@ -1,0 +1,21 @@
+---
+- name: Configure private nginx on the provisioned application guests
+  hosts: 'uranus_instances:!db01:!nginx01'
+  order: sorted
+  serial: 1
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated guest variables and secrets
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  roles:
+    - role: internal_tls
+    - role: debian13_guest
+    - role: debian13_guest_web
+
+- name: Configure the public nginx container after its upstreams
+  ansible.builtin.import_playbook: ingress.yml

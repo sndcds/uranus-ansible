@@ -9,12 +9,15 @@ table inet uranus_guest {
         ip saddr {{ incus_gateway }} udp sport 67 udp dport 68 accept
         ip saddr {{ incus_gateway }} tcp dport 22 accept
 {% if instance_role == 'monitoring' %}
-        ip saddr { {{ incus_gateway }}, 10.77.0.11, 10.77.0.12, 10.77.0.13, 10.77.0.15, 10.77.0.16 } tcp dport 5665 accept
+        ip saddr { {{ incus_gateway }}, {{ incus_instances | rejectattr('role', 'equalto', 'monitoring') | map(attribute='ip') | join(', ') }} } tcp dport 5665 accept
 {% else %}
         ip saddr 10.77.0.14 tcp dport 5665 accept
 {% endif %}
-{% if instance_role != 'db' %}
-        ip saddr {{ incus_gateway }} tcp dport 443 accept
+{% if instance_role == 'ingress' %}
+        # Public HTTP(S) arrives on loopback through Incus PROXY devices.
+        ip saddr 10.77.0.14 tcp dport 443 accept
+{% elif instance_role != 'db' %}
+        ip saddr {{ (incus_instances | selectattr('role', 'equalto', 'ingress') | first).ip }} tcp dport 443 accept
 {% endif %}
 {% if instance_role == 'db' %}
         ip saddr { 10.77.0.12, 10.77.0.13, 10.77.0.14, 10.77.0.15 } tcp dport 5432 accept

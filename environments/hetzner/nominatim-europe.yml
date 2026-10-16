@@ -1,0 +1,23 @@
+---
+# Passed LAST by scripts/import_nominatim_europe.sh, after deployment.yml.
+# These settings are also required for subsequent ordinary Nominatim deployments.
+nominatim_data_url: https://download.geofabrik.de/europe-261015.osm.pbf
+nominatim_data_file: /srv/nominatim/data/europe-261015.osm.pbf
+nominatim_data_sha256: "{{ debian13_nominatim_europe_verified_sha256 | default('') }}"
+nominatim_project_dir: /srv/nominatim/europe-project
+nominatim_flatnode_file: /srv/nominatim/data/europe.flatnode
+nominatim_import_style: address
+nominatim_languages: []
+hetzner_nominatim_initial_import: "{{ debian13_nominatim_europe_import_authorized | default(false) }}"
+debian13_nominatim_import_threads: 4
+debian13_nominatim_import_timeout: 604800
+debian13_nominatim_db_min_free_gib: 400
+debian13_nominatim_europe_nom_min_free_gib: 160
+debian13_nominatim_europe_nom_storage_path: /srv/nominatim
+debian13_nominatim_europe_host_reserve_gib: 160
+debian13_nominatim_europe_host: hetzner
+debian13_nominatim_europe_host_storage_path: /data
+debian13_nominatim_europe_previous_database: nominatim_sh_20261016
+debian13_nominatim_europe_previous_project_dir: /srv/nominatim/nominatim-project
+debian13_nominatim_europe_state_dir: /var/lib/uranus/nominatim-europe
+debian13_nominatim_europe_backup_dir: /var/backups/nominatim-before-europe-261015

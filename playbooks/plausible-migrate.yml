@@ -1,0 +1,88 @@
+---
+- name: Migrate the existing native analytics installation without concurrent writers
+  hosts: 'uranus_instances:&plausible01'
+  gather_facts: false
+  become: true
+  vars:
+    plausible_migration_arguments:
+      - --control-path
+      - "{{ plausible_migration_control_path | default(lookup('env', 'HOME') + '/.ansible/cp/%C') }}"
+      - --target
+      - "debian@{{ ansible_host }}"
+      - --jump
+      - "awendelk@{{ hetzner_public_ipv4 }}"
+      - --ssh-config
+      - "{{ plausible_migration_ssh_config | default(lookup('env', 'HOME') + '/.ssh/config') }}"
+      - --clickhouse-database
+      - "{{ debian13_plausible_clickhouse_database | default('plausible_events_live') }}"
+      - --postgres-database
+      - "{{ debian13_plausible_database | default('plausible_live') }}"
+      - --domain
+      - "{{ hetzner_domains.plausible }}"
+      - --ingress-ipv4
+      - "{{ hetzner_public_ipv4 }}"
+    debian13_plausible_build_release: false
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated guest settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Inspect completed migration before touching either writer
+      ansible.builtin.stat:
+        path: /etc/plausible/migration-cutover.json
+      register: plausible_migration_completed
+    - name: Transfer the existing writer after a verified logical import
+      when: not plausible_migration_completed.stat.exists
+      block:
+        - name: Prepare the protected configuration and empty dedicated target databases before pausing the writer
+          ansible.builtin.include_role:
+            name: debian13_plausible
+          vars:
+            debian13_plausible_prepare_only: true
+        - name: Stop the old writer and verify both copied databases
+          ansible.builtin.command:
+            argv: >-
+              {{ [ansible_playbook_python, playbook_dir + '/../scripts/plausible_migrate.py', 'import'] +
+                  plausible_migration_arguments }}
+          delegate_to: localhost
+          become: false
+          changed_when: true
+        - name: Activate the imported native release and private TLS endpoint
+          ansible.builtin.include_role:
+            name: debian13_plausible
+          vars:
+            debian13_plausible_prepare_only: false
+        - name: Apply private TLS routing before checking the public endpoint
+          ansible.builtin.meta: flush_handlers
+        - name: Route the old public endpoint to the verified new writer
+          ansible.builtin.command:
+            argv: >-
+              {{ [ansible_playbook_python, playbook_dir + '/../scripts/plausible_migrate.py', 'cutover'] +
+                  plausible_migration_arguments }}
+          delegate_to: localhost
+          become: false
+          changed_when: true
+      rescue:
+        - name: Stop the failed target application while preserving its data
+          ansible.builtin.systemd_service:
+            name: plausible
+            state: stopped
+            enabled: false
+        - name: Restore the previous public writer
+          ansible.builtin.command:
+            argv: >-
+              {{ [ansible_playbook_python, playbook_dir + '/../scripts/plausible_migrate.py', 'rollback'] +
+                  plausible_migration_arguments }}
+          delegate_to: localhost
+          become: false
+          changed_when: true
+        - name: Require inspection of the retained databases and protected migration log
+          ansible.builtin.fail:
+            msg: Migration failed; the old writer was restored and target data retained. Inspect before retrying.
+    - name: Require a healthy migrated analytics service
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8200/api/health
+        status_code: 200

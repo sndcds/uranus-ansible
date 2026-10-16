@@ -1,0 +1,8 @@
+---
+debian13_ingress_prepare_only: false
+debian13_ingress_ip_testing: false
+debian13_ingress_ip_tiles: false
+debian13_ingress_tls_site_keys: >-
+  {{ ['dev_frontend', 'dev_backend', 'prod_frontend', 'prod_backend', 'icinga', 'nominatim', 'versatiles']
+     + (['dev_dashboard'] if hostvars['dev01'].dashboard_enabled | default(false) | bool else [])
+     + (['plausible'] if plausible_enabled | bool else []) }}

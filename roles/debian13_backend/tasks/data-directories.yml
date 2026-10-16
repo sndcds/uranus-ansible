@@ -1,0 +1,34 @@
+---
+- name: Install rsync for application data transfers
+  ansible.builtin.apt:
+    name: rsync
+    state: present
+
+- name: Protect the configuration parent directory
+  ansible.builtin.file:
+    path: /etc/uranus
+    state: directory
+    owner: root
+    group: uranus
+    # Shared TLS identities below this directory must remain traversable.
+    mode: '0751'
+
+- name: Preserve root ownership of the verified bootstrap state directory
+  ansible.builtin.file:
+    path: /var/lib/uranus
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create private persistent image and disposable cache directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: '0750'
+  loop:
+    - "{{ debian13_backend_avatar_dir }}"
+    - "{{ debian13_backend_image_dir }}"
+    - "{{ debian13_backend_cache_dir }}"

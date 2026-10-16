@@ -1,0 +1,86 @@
+---
+- name: Issue a fresh analytics certificate while DNS still serves the previous writer
+  hosts: 'uranus_instances:&nginx01'
+  gather_facts: false
+  become: true
+  vars:
+    plausible_enabled: true
+    debian13_ingress_prepare_only: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated ingress settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Prepare the public ACME webroot while preserving active HTTPS sites
+      ansible.builtin.include_role:
+        name: debian13_ingress
+    - name: Forward only the previous server's public ACME challenge path
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/../scripts/plausible_challenge_proxy.py"
+          - --domain
+          - "{{ hetzner_domains.plausible }}"
+          - --ingress-ipv4
+          - "{{ hetzner_public_ipv4 }}"
+          - --control-path
+          - "{{ plausible_migration_control_path | default(lookup('env', 'HOME') + '/.ansible/cp/%C') }}"
+      delegate_to: localhost
+      become: false
+      register: plausible_challenge_proxy
+      changed_when: (plausible_challenge_proxy.stdout | from_json).changed
+    - name: Choose a unique public challenge probe
+      ansible.builtin.set_fact:
+        plausible_challenge_token: "{{ lookup('password', '/dev/null', length=32, chars=['ascii_lowercase', 'digits']) }}"
+    - name: Create the challenge directory
+      ansible.builtin.file:
+        path: /var/www/letsencrypt/.well-known/acme-challenge
+        state: directory
+        mode: '0755'
+    - name: Prove HTTP challenge delivery before requesting a new independent certificate
+      block:
+        - name: Publish the temporary public probe
+          ansible.builtin.copy:
+            content: "{{ plausible_challenge_token }}"
+            dest: "/var/www/letsencrypt/.well-known/acme-challenge/{{ plausible_challenge_token }}"
+            mode: '0644'
+        - name: Follow public DNS through the previous server to the new challenge directory
+          ansible.builtin.uri:
+            url: "http://{{ hetzner_domains.plausible }}/.well-known/acme-challenge/{{ plausible_challenge_token }}"
+            return_content: true
+            status_code: 200
+          register: plausible_challenge_response
+        - name: Require the exact public challenge response
+          ansible.builtin.assert:
+            that:
+              - plausible_challenge_response.content == plausible_challenge_token
+        - name: Generate the new TLS identity on the new ingress
+          ansible.builtin.command:
+            argv:
+              - certbot
+              - certonly
+              - --webroot
+              - --webroot-path
+              - /var/www/letsencrypt
+              - --non-interactive
+              - --agree-tos
+              - --email
+              - "{{ hetzner_acme_email }}"
+              - --cert-name
+              - "{{ hetzner_domains.plausible }}"
+              - --domain
+              - "{{ hetzner_domains.plausible }}"
+              - --keep-until-expiring
+          register: plausible_certificate
+          changed_when: "'no action taken' not in plausible_certificate.stdout"
+      always:
+        - name: Remove the public challenge probe
+          ansible.builtin.file:
+            path: "/var/www/letsencrypt/.well-known/acme-challenge/{{ plausible_challenge_token }}"
+            state: absent
+    - name: Activate the independently issued analytics certificate
+      ansible.builtin.include_role:
+        name: debian13_ingress

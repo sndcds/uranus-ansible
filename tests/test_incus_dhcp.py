@@ -83,7 +83,7 @@ def run_recovery(render, fixture, instance):
                           capture_output=True, text=True, timeout=30)
 
 
-@pytest.mark.parametrize('index', range(6))
+@pytest.mark.parametrize('index', range(7))
 def test_wrong_duid_lease_is_recovered_and_repeat_preserves_network(render, settings, dhcp_fixture, index):
     instance = settings['incus_instances'][index]
     fixture = dhcp_fixture
@@ -210,8 +210,10 @@ AnsibleModule(argument_spec={}).exit_json(changed=False)
         'tasks': [{
             'name': 'Check the actual Ansible cloud-init rendering',
             'ansible.builtin.assert': {'that': [
-                "(rendered_instance.config['user.user-data'] | from_yaml).package_update",
-                "'ClientIdentifier=mac' in (rendered_instance.config['user.user-data'] | from_yaml).bootcmd[0][2]",
+                "not (rendered_instance.config['user.user-data'] | from_yaml).package_update",
+                "'bootcmd' not in (rendered_instance.config['user.user-data'] | from_yaml)",
+                "'packages' not in (rendered_instance.config['user.user-data'] | from_yaml)",
+                "'runcmd' not in (rendered_instance.config['user.user-data'] | from_yaml)",
                 "(rendered_instance.config['user.network-config'] | from_yaml).renderer == 'networkd'",
             ]},
         }, {

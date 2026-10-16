@@ -1,7 +1,11 @@
-# Only the NAT gateway may reach port 443 (enforced by the guest firewall).
-set_real_ip_from {{ incus_gateway }};
+# Only the ingress container may reach port 443 (enforced by the guest firewall).
+set_real_ip_from {{ (incus_instances | selectattr('role', 'equalto', 'ingress') | first).ip }};
 real_ip_header X-Real-IP;
 real_ip_recursive off;
+{% if instance_role in ['dev', 'prod'] %}
+# Match the backend file limit and allow 1 MiB for multipart metadata/framing.
+client_max_body_size {{ (backend_pluto_image_max_file_size | int + 1) * 1048576 }};
+{% endif %}
 ssl_certificate /etc/ssl/certs/uranus-instance.pem;
 ssl_certificate_key /etc/ssl/private/uranus-instance.key;
 ssl_protocols TLSv1.2 TLSv1.3;
@@ -14,10 +18,40 @@ server {
 server {
     listen {{ ansible_host }}:443 ssl;
     server_name {{ frontend_domain }};
+{% if frontend_runtime | default('static') == 'node' %}
+    location / {
+        proxy_pass http://127.0.0.1:{{ frontend_port }};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+{% else %}
     root /opt/uranus/frontend/current;
     index index.html;
     location / { try_files $uri $uri/ /index.html; }
+{% endif %}
 }
+{% if dashboard_enabled | default(false) | bool %}
+server {
+    listen {{ ansible_host }}:443 ssl;
+    server_name {{ dashboard_domain }};
+    root /opt/uranus/dashboard/current;
+    index index.html;
+    location /api/ {
+        proxy_pass http://127.0.0.1:{{ backend_port }};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+    location /assets/ { try_files $uri =404; }
+    location = /index.html { add_header Cache-Control no-cache; }
+    location / { try_files $uri $uri/ /index.html; }
+}
+{% endif %}
 server {
     listen {{ ansible_host }}:443 ssl;
     server_name {{ backend_domain }};
@@ -27,6 +61,26 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $http_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+    }
+}
+{% elif instance_role == 'analytics' %}
+map $http_upgrade $uranus_plausible_connection {
+    default upgrade;
+    '' close;
+}
+server {
+    listen {{ ansible_host }}:443 ssl;
+    server_name {{ hetzner_domains.plausible }};
+    location / {
+        proxy_pass http://127.0.0.1:{{ debian13_plausible_port | default(8200) }};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $uranus_plausible_connection;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 3600s;
     }
 }
 {% elif instance_role == 'monitoring' %}

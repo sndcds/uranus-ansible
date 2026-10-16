@@ -1,0 +1,48 @@
+---
+- name: Provision only the additional Plausible container after auditing the complete host
+  hosts: incus_hosts
+  gather_facts: false
+  become: true
+  environment:
+    INCUS_DIR: /data/incus
+  vars:
+    incus_instance_targets: [plausible01]
+    incus_manage_host_agents: false
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Read host capacity
+      ansible.builtin.setup:
+    - name: Require capacity for all existing and additional guests
+      ansible.builtin.assert:
+        that:
+          - incus_instances | map(attribute='memory') | sum + incus_host_reserve_mb | int <= ansible_facts.memtotal_mb
+    - name: Audit existing resources before adding the analytics container
+      uranus_incus_guard:
+        instances: "{{ incus_instances }}"
+        images: "{{ incus_images }}"
+        reserve_gib: "{{ incus_storage_reserve_gib }}"
+        quotas: "{{ incus_container_quotas }}"
+      register: plausible_provision_plan
+    - name: Require existing guests and infrastructure to be intact
+      ansible.builtin.assert:
+        that:
+          - plausible_provision_plan.project_exists
+          - plausible_provision_plan.pool_exists
+          - plausible_provision_plan.network_exists
+          - plausible_provision_plan.new_instances | difference(['plausible01']) | length == 0
+  roles:
+    - role: incus_instance
+  post_tasks:
+    - name: Read the new SSH host identity through the trusted Incus socket
+      ansible.builtin.command:
+        argv: [incus, --force-local, --project, uranus, exec, plausible01, --, cat, /etc/ssh/ssh_host_ed25519_key.pub]
+      changed_when: false
+      register: plausible_ssh_host_key
+    - name: Trust only the SSH host key obtained through Incus
+      ansible.builtin.known_hosts:
+        path: "{{ playbook_dir }}/../.uranus-private/known_hosts"
+        name: 10.77.0.18
+        key: "10.77.0.18 {{ plausible_ssh_host_key.stdout | trim }}"
+      delegate_to: localhost
+      become: false

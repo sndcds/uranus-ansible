@@ -21,7 +21,11 @@
   ansible.builtin.assert:
     that:
       - (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).allowed
-    fail_msg: Inspect unfinished cloud-init or failures outside the managed package and SSH bootstrap.
+    fail_msg: >-
+      Cloud-init baseline rejected for {{ incus_instance.name }}.
+      Inspect unfinished cloud-init or failures outside the managed DHCP, package and SSH bootstrap.
+      Classified modules: {{ (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).modules | to_json }}.
+      Cloud-init status: {{ incus_instance_cloud_init.stdout }}
 
 - name: Read the existing cloud configuration before recovering its failed steps
   ansible.builtin.command:
@@ -41,10 +45,22 @@
   no_log: true
   when: (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).recover
 
+- name: Require a failed bootcmd to be exactly the historical managed DHCP script
+  ansible.builtin.assert:
+    that:
+      - incus_instance_failed_cloud_config.stdout | from_yaml | uranus_cloud_init_managed_bootcmd(lookup('template', 'dhcp-mac.sh.j2'))
+    fail_msg: Failed cloud-init bootcmd does not match the managed DHCP script; inspect it before proceeding.
+  no_log: true
+  when: "'bootcmd' in (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).modules"
+
+- name: Verify successful DHCP recovery before accepting its historical cloud-init failure
+  ansible.builtin.include_tasks: network.yml
+  when: "'bootcmd' in (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).modules"
+
 - name: Report the initial package and SSH failures being repaired by Ansible
   ansible.builtin.debug:
     msg: >-
-      Repairing completed cloud-init package/SSH failures through the guest bootstrap.
+      Repairing completed managed cloud-init failures through DHCP recovery and the guest bootstrap.
       The original cloud-init error history is retained; readiness requires the checks below to pass.
   when: (incus_instance_cloud_init.stdout | from_json | uranus_cloud_init_bootstrap_status).recover
 

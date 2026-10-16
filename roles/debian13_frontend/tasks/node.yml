@@ -1,0 +1,225 @@
+---
+- name: Require a pinned Nuxt revision on an application guest
+  ansible.builtin.assert:
+    that:
+      - instance_role in ['dev', 'prod']
+      - frontend_repo_version is match('^[0-9a-f]{40}$')
+      - frontend_repo_url is match('^https://')
+
+- name: Prepare the frontend build runtime
+  ansible.builtin.include_tasks: runtime.yml
+
+- name: Install the pinned Corepack package manager launcher
+  community.general.npm:
+    name: corepack
+    version: "{{ debian13_frontend_corepack_version }}"
+    global: true
+
+- name: Verify the installed Node.js runtime
+  ansible.builtin.command:
+    argv: [node, -e, "if(process.versions.node.split('.')[0] !== '{{ hetzner_nodejs_major }}') process.exit(1)"]
+  changed_when: false
+
+- name: Identify the Nuxt release configuration
+  ansible.builtin.set_fact:
+    debian13_frontend_input_hash: >-
+      {{ (lookup('template', 'frontend.nuxt.env.j2') ~ lookup('template', 'nuxt.config.ts.j2')
+          ~ ':node:' ~ hetzner_nodejs_major) | hash('sha256') }}
+
+- name: Set immutable Nuxt release and deployment layer paths
+  ansible.builtin.set_fact:
+    debian13_frontend_path: "/opt/uranus/frontend/releases/{{ frontend_repo_version }}-{{ debian13_frontend_input_hash }}"
+    debian13_frontend_layer: "/opt/uranus/frontend/layers/{{ debian13_frontend_input_hash }}"
+
+- name: Create frontend release and layer directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: '0755'
+  loop:
+    - "{{ debian13_frontend_path }}"
+    - "{{ debian13_frontend_layer }}"
+
+- name: Check out the pinned client without overwriting tracked changes
+  ansible.builtin.git:
+    repo: "{{ frontend_repo_url }}"
+    version: "{{ frontend_repo_version }}"
+    dest: "{{ debian13_frontend_path }}"
+    force: false
+    update: true
+  become: true
+  become_user: uranus
+
+- name: Install the deployment-only Nuxt layer
+  ansible.builtin.template:
+    src: nuxt.config.ts.j2
+    dest: "{{ debian13_frontend_layer }}/nuxt.config.ts"
+    owner: uranus
+    group: uranus
+    mode: '0644'
+
+- name: Install build and runtime configuration for the candidate
+  ansible.builtin.template:
+    src: frontend.nuxt.env.j2
+    dest: "{{ debian13_frontend_path }}/.env.local"
+    owner: uranus
+    group: uranus
+    mode: '0644'
+
+- name: Read the declared package manager
+  ansible.builtin.slurp:
+    src: "{{ debian13_frontend_path }}/package.json"
+  register: debian13_frontend_package
+
+- name: Require an exact pnpm version with an optional Corepack integrity pin
+  ansible.builtin.assert:
+    that:
+      - (debian13_frontend_package.content | b64decode | from_json).packageManager is match('^pnpm@[0-9]+\.[0-9]+\.[0-9]+(?:\+sha512\.[0-9a-f]{128})?$')
+
+- name: Inspect the built server artifact
+  ansible.builtin.stat:
+    path: "{{ debian13_frontend_path }}/.output/server/index.mjs"
+  register: debian13_frontend_server
+
+- name: Inspect the successful build marker
+  ansible.builtin.stat:
+    path: "{{ debian13_frontend_path }}/.uranus-build-revision"
+  register: debian13_frontend_build_marker
+
+- name: Install locked dependencies and build the immutable server
+  when: not debian13_frontend_server.stat.exists or not debian13_frontend_build_marker.stat.exists
+  block:
+    - name: Install pnpm dependencies using the repository version and integrity pin
+      ansible.builtin.command:
+        argv: [corepack, pnpm, install, --frozen-lockfile]
+        chdir: "{{ debian13_frontend_path }}"
+      become: true
+      become_user: uranus
+      environment:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      async: "{{ debian13_frontend_build_timeout }}"
+      poll: 5
+      changed_when: true
+
+    - name: Build the Nuxt server with the deployment-only API proxy layer
+      ansible.builtin.command:
+        argv: [corepack, pnpm, run, build, --extends, "{{ debian13_frontend_layer }}", --dotenv, .env.local]
+        chdir: "{{ debian13_frontend_path }}"
+      become: true
+      become_user: uranus
+      environment:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        NODE_OPTIONS: --max-old-space-size=2048
+      async: "{{ debian13_frontend_build_timeout }}"
+      poll: 5
+      changed_when: true
+
+    - name: Validate the completed server build
+      ansible.builtin.command:
+        argv: [node, --check, "{{ debian13_frontend_path }}/.output/server/index.mjs"]
+      changed_when: false
+
+    - name: Record only a successfully completed build
+      ansible.builtin.copy:
+        dest: "{{ debian13_frontend_path }}/.uranus-build-revision"
+        content: "{{ frontend_repo_version }}:{{ debian13_frontend_input_hash }}\n"
+        owner: uranus
+        group: uranus
+        mode: '0644'
+
+- name: Check the generated production server entrypoint
+  ansible.builtin.command:
+    argv: [node, --check, "{{ debian13_frontend_path }}/.output/server/index.mjs"]
+  changed_when: false
+
+- name: Snapshot the current frontend link and service files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /opt/uranus/frontend/current
+    - /etc/systemd/system/uranus-frontend.service
+    - /etc/uranus/frontend.env
+    - /etc/nginx/sites-available/uranus-debian13.conf
+  register: debian13_frontend_before
+
+- name: Retain the previous frontend activation
+  ansible.builtin.set_fact:
+    debian13_frontend_previous: "{{ debian13_frontend_before.results[0] }}"
+
+- name: Require an existing managed frontend link
+  ansible.builtin.assert:
+    that:
+      - not debian13_frontend_previous.stat.exists or debian13_frontend_previous.stat.islnk
+      - >-
+        not debian13_frontend_previous.stat.exists or
+        debian13_frontend_previous.stat.lnk_source is match('^/opt/uranus/frontend/releases/[0-9a-f]{40}-[0-9a-f]{64}/(dist|\.output(?:/public)?)$')
+
+- name: Save existing frontend service and nginx configuration for rollback
+  ansible.builtin.slurp:
+    src: "{{ item.item }}"
+  loop: "{{ debian13_frontend_before.results[1:] }}"
+  when: item.stat.exists
+  register: debian13_frontend_saved_files
+  no_log: true
+
+- name: Activate and validate the Nuxt frontend with rollback
+  block:
+    - name: Activate the complete Nuxt output
+      ansible.builtin.file:
+        src: "{{ debian13_frontend_path }}/.output"
+        dest: /opt/uranus/frontend/current
+        state: link
+        owner: uranus
+        group: uranus
+      register: debian13_frontend_activation
+    - name: Install the frontend runtime environment
+      ansible.builtin.template:
+        src: frontend.nuxt.env.j2
+        dest: /etc/uranus/frontend.env
+        owner: root
+        group: uranus
+        mode: '0640'
+      register: debian13_frontend_runtime_environment
+    - name: Install the private frontend systemd service
+      ansible.builtin.template:
+        src: frontend.service.j2
+        dest: /etc/systemd/system/uranus-frontend.service
+        mode: '0644'
+      register: debian13_frontend_unit
+    - name: Start the verified Nuxt frontend
+      ansible.builtin.systemd_service:
+        name: uranus-frontend
+        daemon_reload: true
+        enabled: true
+        state: >-
+          {{ 'restarted' if debian13_frontend_activation.changed or
+             debian13_frontend_runtime_environment.changed or debian13_frontend_unit.changed else 'started' }}
+    - name: Wait for the server-rendered frontend
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ frontend_port }}{{ debian13_frontend_health_path }}"
+        status_code: 200
+        return_content: true
+      register: debian13_frontend_health
+      retries: 15
+      delay: 2
+      until: debian13_frontend_health.status == 200
+    - name: Check the frontend API proxy against its local backend
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ frontend_port }}/api/events"
+        status_code: 200
+    - name: Activate the private nginx frontend route
+      ansible.builtin.include_role:
+        name: debian13_guest_web
+      vars:
+        debian13_guest_web_health_endpoint: "{{ debian13_frontend_health_path }}"
+  rescue:
+    - name: Restore the previous frontend service after failed activation
+      ansible.builtin.include_tasks: rollback.yml
+    - name: Report the rejected frontend release
+      ansible.builtin.fail:
+        msg: >-
+          Nuxt frontend activation failed; the previous release and service configuration were restored.
+          {{ ansible_failed_result.msg | default('Inspect the service log.') }}

@@ -1,0 +1,198 @@
+---
+- name: Require an enabled dashboard with immutable source and a real domain
+  ansible.builtin.assert:
+    that:
+      - dashboard_enabled | bool
+      - instance_role == 'dev'
+      - dashboard_repo_version is match('^[0-9a-f]{40}$')
+      - debian13_dashboard_repo_url is match('^https://')
+      - dashboard_domain is match('^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$')
+      - dashboard_domain not in [frontend_domain, backend_domain]
+
+- name: Prepare the established application build runtime
+  ansible.builtin.include_role:
+    name: debian13_frontend
+    tasks_from: runtime.yml
+
+- name: Install git and nginx for the standalone static dashboard
+  ansible.builtin.apt:
+    name: [git, nginx]
+    state: present
+    policy_rc_d: 101
+
+- name: Install the pinned package manager launcher
+  community.general.npm:
+    name: corepack
+    version: "{{ debian13_dashboard_corepack_version }}"
+    global: true
+
+- name: Identify the immutable dashboard build configuration
+  ansible.builtin.set_fact:
+    debian13_dashboard_input_hash: >-
+      {{ (lookup('template', 'dashboard.env.j2') ~ ':node:' ~ hetzner_nodejs_major) | hash('sha256') }}
+
+- name: Select the separate dashboard release path
+  ansible.builtin.set_fact:
+    debian13_dashboard_path: "/opt/uranus/dashboard/releases/{{ dashboard_repo_version }}-{{ debian13_dashboard_input_hash }}"
+
+- name: Create public dashboard release directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: uranus
+    group: uranus
+    mode: '0755'
+  loop:
+    - /opt/uranus/dashboard
+    - /opt/uranus/dashboard/releases
+    - "{{ debian13_dashboard_path }}"
+
+- name: Check out the pinned dashboard without overwriting tracked changes
+  ansible.builtin.git:
+    repo: "{{ debian13_dashboard_repo_url }}"
+    version: "{{ dashboard_repo_version }}"
+    dest: "{{ debian13_dashboard_path }}"
+    force: false
+  become: true
+  become_user: uranus
+
+- name: Configure the dashboard API on its own HTTPS origin
+  ansible.builtin.template:
+    src: dashboard.env.j2
+    dest: "{{ debian13_dashboard_path }}/.env.local"
+    owner: uranus
+    group: uranus
+    mode: '0644'
+
+- name: Read the pinned dashboard package manager
+  ansible.builtin.slurp:
+    src: "{{ debian13_dashboard_path }}/package.json"
+  register: debian13_dashboard_package
+
+- name: Require an exact pnpm version
+  ansible.builtin.assert:
+    that:
+      - (debian13_dashboard_package.content | b64decode | from_json).packageManager is match('^pnpm@[0-9]+\.[0-9]+\.[0-9]+(?:\+sha512\.[0-9a-f]{128})?$')
+
+- name: Inspect dashboard build completion and its entrypoint
+  ansible.builtin.stat:
+    path: "{{ debian13_dashboard_path }}/{{ item }}"
+  loop: [.uranus-build-revision, dist/index.html]
+  register: debian13_dashboard_artifacts
+
+- name: Build only absent or unfinished dashboard releases
+  when: debian13_dashboard_artifacts.results | rejectattr('stat.exists') | list | length > 0
+  block:
+    - name: Install locked dashboard dependencies with its declared pnpm version
+      ansible.builtin.command:
+        argv: [corepack, pnpm, install, --frozen-lockfile]
+        chdir: "{{ debian13_dashboard_path }}"
+      become: true
+      become_user: uranus
+      environment:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      async: "{{ debian13_dashboard_build_timeout }}"
+      poll: 5
+      changed_when: true
+    - name: Build the standalone Vue dashboard
+      ansible.builtin.command:
+        argv: [corepack, pnpm, run, build]
+        chdir: "{{ debian13_dashboard_path }}"
+      become: true
+      become_user: uranus
+      environment:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        NODE_OPTIONS: --max-old-space-size=2048
+      async: "{{ debian13_dashboard_build_timeout }}"
+      poll: 5
+      changed_when: true
+    - name: Require a nonempty static entrypoint before activation
+      ansible.builtin.command:
+        argv: [test, -s, "{{ debian13_dashboard_path }}/dist/index.html"]
+      changed_when: false
+    - name: Record only the successfully completed build
+      ansible.builtin.copy:
+        dest: "{{ debian13_dashboard_path }}/.uranus-build-revision"
+        content: "{{ dashboard_repo_version }}:{{ debian13_dashboard_input_hash }}\n"
+        owner: uranus
+        group: uranus
+        mode: '0644'
+
+- name: Snapshot the dashboard activation
+  ansible.builtin.stat:
+    path: /opt/uranus/dashboard/current
+    follow: false
+  register: debian13_dashboard_previous
+
+- name: Require a managed dashboard activation link
+  ansible.builtin.assert:
+    that:
+      - not debian13_dashboard_previous.stat.exists or debian13_dashboard_previous.stat.islnk
+      - >-
+        not debian13_dashboard_previous.stat.exists or
+        debian13_dashboard_previous.stat.lnk_source is match('^/opt/uranus/dashboard/releases/[0-9a-f]{40}-[0-9a-f]{64}/dist$')
+
+- name: Save the current guest nginx configuration
+  ansible.builtin.slurp:
+    src: /etc/nginx/sites-available/uranus-debian13.conf
+  register: debian13_dashboard_nginx_before
+
+- name: Activate and verify the separate dashboard with recovery
+  block:
+    - name: Activate the built dashboard
+      ansible.builtin.file:
+        src: "{{ debian13_dashboard_path }}/dist"
+        dest: /opt/uranus/dashboard/current
+        state: link
+        owner: uranus
+        group: uranus
+    - name: Configure private TLS routing without replacing the Kulturbytes client
+      ansible.builtin.include_role:
+        name: debian13_guest_web
+    - name: Require the dashboard login page over internal TLS
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/app/login"
+        headers:
+          Host: "{{ dashboard_domain }}"
+        ca_path: /etc/ssl/certs/uranus-ca.pem
+        status_code: 200
+        return_content: true
+      register: debian13_dashboard_health
+    - name: Require the Vue application entrypoint
+      ansible.builtin.assert:
+        that: "'id=\"app\"' in debian13_dashboard_health.content"
+    - name: Require the dashboard API route to reach the development backend
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/api/events?limit=1"
+        headers:
+          Host: "{{ dashboard_domain }}"
+        ca_path: /etc/ssl/certs/uranus-ca.pem
+        status_code: 200
+  rescue:
+    - name: Restore the previous dashboard release when available
+      ansible.builtin.file:
+        src: "{{ debian13_dashboard_previous.stat.lnk_source }}"
+        dest: /opt/uranus/dashboard/current
+        state: link
+      when: debian13_dashboard_previous.stat.exists
+    - name: Remove a rejected first dashboard activation
+      ansible.builtin.file:
+        path: /opt/uranus/dashboard/current
+        state: absent
+      when: not debian13_dashboard_previous.stat.exists
+    - name: Restore the previous guest nginx configuration
+      ansible.builtin.copy:
+        content: "{{ debian13_dashboard_nginx_before.content | b64decode }}"
+        dest: /etc/nginx/sites-available/uranus-debian13.conf
+        mode: '0644'
+    - name: Validate the recovered nginx configuration
+      ansible.builtin.command:
+        argv: [nginx, -t]
+      changed_when: false
+    - name: Reload the recovered nginx configuration
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: reloaded
+    - name: Report dashboard activation failure
+      ansible.builtin.fail:
+        msg: Dashboard activation failed; the previous dashboard and guest nginx configuration were restored.

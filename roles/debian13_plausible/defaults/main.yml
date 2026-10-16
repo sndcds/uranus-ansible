@@ -1,0 +1,14 @@
+---
+debian13_plausible_version: '3.2.1'
+debian13_plausible_revision: e4f5a87a5570bd61605217e7ceb376636db8eddb
+debian13_plausible_build_path: >-
+  /opt/plausible/releases/{{ debian13_plausible_revision }}-node{{ hetzner_nodejs_major }}-hex{{ debian13_plausible_hex_version }}
+debian13_plausible_clickhouse_version: '26.9.10.4'
+debian13_plausible_prepare_only: true
+debian13_plausible_build_release: true
+debian13_plausible_port: 8200
+debian13_plausible_build_timeout: 3600
+debian13_plausible_hex_version: '2.5.3'
+debian13_plausible_hex_sha512: bbaa68a4e2321eb1f930854ee8a4c5d4058e6bf4e1c9f4cc54083a456a325e36319fac423e93528ccc23341db0e86e9c3102c3ec6b78e7d6251805b5203c9033
+debian13_plausible_database: plausible_live
+debian13_plausible_clickhouse_database: plausible_events_live

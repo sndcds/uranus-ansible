@@ -1,0 +1,52 @@
+---
+- name: Require explicit import authorization and valid application identifiers
+  ansible.builtin.assert:
+    that:
+      - hetzner_app_initial_import | bool
+      - not ansible_check_mode
+      - application_db.name is match('^[a-z][a-z0-9_]*$')
+      - application_db.user == application_db.name
+      - application_db.dump_file is defined
+
+- name: Validate the source dump on the controller before making changes
+  uranus_sql_dump_guard:
+    path: "{{ debian13_postgresql_dump_root }}/{{ application_db.dump_file }}"
+  delegate_to: localhost
+  become: false
+
+- name: Check existing import markers
+  ansible.builtin.stat:
+    path: "{{ debian13_postgresql_state_dir }}/.{{ application_db.name }}_initial_import_{{ item }}"
+  loop: [pending, complete]
+  register: debian13_postgresql_import_markers
+
+- name: Reject completed or interrupted imports
+  ansible.builtin.assert:
+    that: debian13_postgresql_import_markers.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: An import marker exists. Preserve the database and review it manually before another import.
+
+- name: Inspect the existing target database and empty application schema
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
+    db: "{{ application_db.name }}"
+    query: >-
+      SELECT pg_get_userbyid(datdba) AS database_owner,
+             (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'uranus') AS schema_owner,
+             (SELECT count(*) FROM pg_depend d JOIN pg_namespace n
+                ON d.refclassid = 'pg_namespace'::regclass AND d.refobjid = n.oid
+                WHERE n.nspname = 'uranus') AS schema_objects,
+             EXISTS (SELECT FROM pg_extension WHERE extname = 'postgis') AS postgis
+      FROM pg_database WHERE datname = current_database()
+  become: true
+  become_user: postgres
+  register: debian13_postgresql_empty_target
+
+- name: Require an empty schema owned by the expected application user
+  ansible.builtin.assert:
+    that:
+      - debian13_postgresql_empty_target.query_result[0].database_owner == application_db.user
+      - debian13_postgresql_empty_target.query_result[0].schema_owner in [none, application_db.user]
+      - debian13_postgresql_empty_target.query_result[0].schema_objects | int == 0
+      - debian13_postgresql_empty_target.query_result[0].postgis or not debian13_postgresql_postgis_enabled | bool
+    fail_msg: The target must already exist with PostGIS and an absent or empty uranus schema owned by its application user.

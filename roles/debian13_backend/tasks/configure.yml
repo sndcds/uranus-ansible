@@ -1,0 +1,26 @@
+---
+- name: Require an existing pinned backend before changing its runtime paths
+  ansible.builtin.stat:
+    path: "/opt/uranus/backend/releases/{{ backend_repo_version }}/bin/uranus-api"
+  register: debian13_backend_binary
+
+- name: Require the provisioned application release
+  ansible.builtin.assert:
+    that:
+      - instance_role in ['dev', 'prod']
+      - backend_repo_version is match('^[0-9a-f]{40}$')
+      - backend_pluto_image_max_file_size | string is match('^[1-9][0-9]*$')
+      - debian13_backend_binary.stat.exists
+      - debian13_backend_binary.stat.executable
+    fail_msg: Deploy the pinned backend release before configuring its data paths.
+
+- name: Prepare persistent backend directories
+  ansible.builtin.include_tasks: data-directories.yml
+
+- name: Activate backend configuration after data transfer
+  ansible.builtin.include_tasks: activate.yml
+  when: not debian13_backend_prepare_only | bool
+
+- name: Update image metrics for the active data directory
+  ansible.builtin.include_tasks: metrics.yml
+  when: not debian13_backend_prepare_only | bool

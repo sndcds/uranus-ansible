@@ -32,15 +32,9 @@ config:
         lock_passwd: true
         ssh_authorized_keys:
           - {{ lookup('file', hetzner_ssh_public_key_file) | to_json }}
-    bootcmd:
-      - - sh
-        - -ec
-        - |
-{% filter indent(width=10, first=true) %}{% include 'dhcp-mac.sh.j2' %}{{ '\n' }}{% endfilter %}
-    package_update: true
-    packages: {{ incus_guest_bootstrap_packages | to_json }}
-    runcmd:
-      - [systemctl, enable, --now, ssh]
+    # Incus configures MAC-based DHCP and installs the shared baseline after boot.
+    package_update: false
+    package_upgrade: false
 profiles: []
 devices:
   root:
@@ -58,3 +52,14 @@ devices:
     security.mac_filtering: "true"
     security.ipv4_filtering: "true"
     security.ipv6_filtering: "true"
+{% if incus_instance.role | default('') == 'ingress' %}
+{% for name, port in [('http', 80), ('https', 443)] %}
+  {{ name }}:
+    type: proxy
+    bind: host
+    nat: "false"
+    listen: "tcp:[::]:{{ port }}"
+    connect: "tcp:127.0.0.1:{{ port }}"
+    proxy_protocol: "true"
+{% endfor %}
+{% endif %}

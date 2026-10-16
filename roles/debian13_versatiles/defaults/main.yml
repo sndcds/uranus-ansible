@@ -1,0 +1,4 @@
+---
+debian13_versatiles_min_free_gib: 30
+debian13_versatiles_import_timeout: 21600
+debian13_versatiles_release_dir: /opt/versatiles/{{ hetzner_versatiles_archive_sha256[:16] }}

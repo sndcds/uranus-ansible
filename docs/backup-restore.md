@@ -14,6 +14,17 @@ lokale Retention. Anwendungen erhalten private TAR-Sicherungen ihrer Releases,
 Konfiguration und persistenten Bilder. Archive und Credentials bleiben restriktiv
 berechtigt; keine Passwörter werden in den DB-Backupskripttext eingebettet.
 
+Für `nginx01` zusätzlich `/etc/nginx`, `/etc/letsencrypt` einschließlich
+ACME-Kontoschlüssel und `/var/www/letsencrypt` in die externe Sicherung aufnehmen.
+Die optionale vollständige Incus-Sicherung enthält diese Dateien ebenfalls.
+
+`plausible01` besitzt eigene lokale PostgreSQL-/ClickHouse-Datenbanken.
+`plausible-backup.timer` sichert diese täglich mit vierzehn abgeschlossenen
+Sicherungen Retention unter `/var/backups/plausible/`; Konfiguration und
+benutzerdefinierte ClickHouse-Funktionen gehören dazu. Diese geschützten
+Verzeichnisse ebenfalls extern sichern. Ablauf, Datenbanknamen und Restore-
+Grenzen stehen in [Natives Plausible](plausible.md).
+
 Optional führt `incus_export_backups_enabled=true` wöchentliche native Incus-
 Exporte, ein Initialisierungsmanifest und einen globalen SQL-Metadatendump in
 `/data/incus/backups` aus. Vor dem Lauf und jedem schreibenden Schritt wird die
@@ -56,3 +67,12 @@ Mount/UUID überprüfen, Incus-Zustand nur nach Offline-Prüfung übernehmen ode
 leeres Testprojekt restaurieren. Die automatische Erstinstallation lehnt
 unverwaltete vorhandene Daten absichtlich ab. Der ursprüngliche Owner-Marker
 allein ist kein Beweis für einen konsistenten Restore.
+
+Die aktive Backend-Konfiguration liegt auf Anwendungscontainern unter
+`/etc/uranus/config.json` (`uranus:uranus`, `0600`). Originalbilder und Avatare
+liegen unter `/var/lib/uranus/image` und `/var/lib/uranus/avatar`. Die tägliche
+Anwendungssicherung enthält deshalb `opt/uranus`, `etc/nginx`, `etc/uranus` und
+`var/lib/uranus`. `/var/cache/uranus` ist regenerierbar und wird nicht täglich
+archiviert. Beim Restore zunächst Benutzer, Verzeichnisse und Konfiguration
+mit Ansible anlegen, Originaldateien mit Eigentümer `uranus:uranus` und
+restriktiven Rechten wiederherstellen und danach den Backend-Dienst starten.

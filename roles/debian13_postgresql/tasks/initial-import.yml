@@ -22,20 +22,52 @@
     regexp: '^ALTER (SCHEMA|TYPE|FUNCTION|TABLE|SEQUENCE) .* OWNER TO oklab;$'
     replace: '-- stripped source owner statement'
 
+- name: Reuse a verified empty application schema
+  ansible.builtin.replace:
+    path: "{{ debian13_postgresql_state_dir }}/{{ application_db.name }}.initial.sql"
+    regexp: '^CREATE SCHEMA uranus;'
+    replace: 'CREATE SCHEMA IF NOT EXISTS uranus;'
+
 - name: Reject psql commands that can escape the selected database
   uranus_sql_dump_guard:
     path: "{{ debian13_postgresql_state_dir }}/{{ application_db.name }}.initial.sql"
 
-- name: Import the new database atomically without dropping it
+- name: Prepare a schema check inside the import transaction
+  ansible.builtin.copy:
+    dest: "{{ debian13_postgresql_state_dir }}/{{ application_db.name }}.initial-guard.sql"
+    content: |
+      SELECT pg_advisory_xact_lock(hashtextextended(current_database() || ':uranus.initial-import', 0));
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT FROM pg_namespace WHERE nspname = 'uranus'
+                   AND pg_get_userbyid(nspowner) <> current_user) THEN
+          RAISE EXCEPTION 'Initial import requires the application schema owner';
+        END IF;
+        IF EXISTS (
+          SELECT FROM pg_depend d JOIN pg_namespace n
+            ON d.refclassid = 'pg_namespace'::regclass AND d.refobjid = n.oid
+            WHERE n.nspname = 'uranus'
+        ) THEN
+          RAISE EXCEPTION 'Initial import requires an empty uranus schema';
+        END IF;
+      END;
+      $$;
+    owner: "{{ debian13_postgresql_owner }}"
+    group: "{{ debian13_postgresql_group }}"
+    mode: '0600'
+
+- name: Import application data atomically without dropping the database
   ansible.builtin.command:
     argv:
       - psql
       - --no-psqlrc
       - --single-transaction
       - --set=ON_ERROR_STOP=1
-      - "--host={{ debian13_postgresql_socket }}"
+      - "--host={{ debian13_postgresql_import_host }}"
+      - "--port={{ debian13_postgresql_port }}"
       - "--username={{ application_db.user }}"
       - "--dbname={{ application_db.name }}"
+      - "--file={{ debian13_postgresql_state_dir }}/{{ application_db.name }}.initial-guard.sql"
       - "--file={{ debian13_postgresql_state_dir }}/{{ application_db.name }}.initial.sql"
   become: true
   become_user: postgres

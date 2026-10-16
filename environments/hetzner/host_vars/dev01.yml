@@ -1,7 +1,12 @@
 ---
 app_env: development
-frontend_repo_version: ''
-backend_repo_version: ''
+dashboard_enabled: true
+dashboard_domain: '{{ hetzner_domains.dev_dashboard }}'
+dashboard_repo_version: '6a1c296c700f16d05350b11d1b295f576031f8f5'
+backend_auth_reset_password_url: 'https://{{ dashboard_domain }}/app/reset-password'
+# Pin the dev branches to concrete commits for reproducible deployments.
+frontend_repo_version: '359a6cd84afdead4212ae8040e41d969e050b5b9'
+backend_repo_version: 'd06a615b4b4c8454f5298902fabcddd1d7985834'
 db_host: '{{ hostvars[''db01''].ansible_host }}'
 db_name: uranus_dev
 db_user: uranus_dev

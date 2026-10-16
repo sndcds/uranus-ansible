@@ -53,8 +53,8 @@ sind transaktional und nur für gerade erstellte Datenbanken möglich.
 | Firewallrollback scheitert | Schlüsselpflicht bleibt bestehen; Pending-Zustand erhalten, Recovery über Konsole/Rescue |
 | Backend startet nicht / Healthcheck scheitert | alte Codeversion und, wenn verfügbar, Konfigurationskopie zurück; keine automatische DB-Migration |
 | vorhandene DB oder fehlender Importmarker | DB-Existenz entscheidet; kein Reimport; Pending-Marker verlangt manuelle Recovery |
-| Nominatim-Import unterbrochen | vorhandene unvollständige DB stoppt Wiederholung; temporäre Superuserrechte werden im Ansible-`always`-Block widerrufen |
-| harter Abbruch während Nominatim-Superuserphase | `always` kann nicht laufen; Rechte auf db01 sofort prüfen und manuell widerrufen; nie automatisch den Import wiederholen |
+| Nominatim-Import unterbrochen | vorhandene unvollständige DB stoppt Wiederholung; temporäre Superuserrechte gelten nur während der Datenbankvorbereitung und werden im Ansible-`always`-Block vor dem eigentlichen Import widerrufen |
+| harter Abbruch während Nominatim-Datenbankvorbereitung | `always` kann nicht laufen; Rechte auf db01 sofort prüfen und manuell widerrufen; nie automatisch den Import wiederholen |
 | Disk läuft durch Container/Snapshots/Backups voll | Budgets, Reserveprüfung und Warnungen; ohne bestehende ext4-Quotas keine harte Containerbegrenzung |
 | TLS-Zertifikat falsch/abgelaufen | Chain-/Identitätsprüfung oder Dienstvalidierung schlägt fehl; sichere Zertifikatrotation und Ablaufmonitoring bleiben Betreiberaufgabe |
 

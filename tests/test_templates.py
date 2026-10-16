@@ -12,14 +12,14 @@ def nginx_check(text, tmp_path):
     text=text.replace('/etc/ssl/certs/uranus-instance.pem',str(cert)).replace('/etc/ssl/private/uranus-instance.key',str(key)).replace('/etc/ssl/certs/uranus-ca.pem',str(cert))
     # nginx -t also probes listening sockets. Use temporary, unprivileged
     # loopback ports so the fixtures never bind the production interfaces.
-    ports = []
-    for _ in range(2):
-        with socket.socket() as listener:
-            listener.bind(('127.0.0.1', 0))
-            ports.append(listener.getsockname()[1])
+    ports = {}
     def local_listener(match):
         original = match.group(2)
-        port = ports[1] if original.endswith('443') else ports[0]
+        if original not in ports:
+            with socket.socket() as listener:
+                listener.bind(('127.0.0.1', 0))
+                ports[original] = listener.getsockname()[1]
+        port = ports[original]
         address = f'[::1]:{port}' if original.startswith('[') else f'127.0.0.1:{port}'
         return match.group(1) + address
     text = re.sub(r'(?m)^(\s*listen\s+)([^ ;]+)', local_listener, text)
@@ -30,7 +30,7 @@ def nginx_check(text, tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.mark.parametrize('role', ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles'])
+@pytest.mark.parametrize('role', ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles', 'analytics'])
 def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp_path):
     text = render('roles/debian13_guest_web/templates/guest.conf.j2',
                   instance_role=role, ansible_host='10.77.0.12', frontend_domain='app.example.test',
@@ -39,10 +39,27 @@ def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp
                   backend_port=9090, versatiles_port=8080)
     text = text.replace('include fastcgi_params;', 'include /etc/nginx/fastcgi_params;')
     assert 'ssl_certificate' in text
-    assert 'set_real_ip_from 10.77.0.1;' in text
+    assert 'set_real_ip_from 10.77.0.17;' in text
     if role == 'monitoring':
         assert '/run/php/php8.4-fpm.sock' in text and 'fastcgi_param HTTPS on;' in text
     assert 'X-Forwarded-Proto https;' in text
+    nginx_check(text, tmp_path)
+
+
+def test_plausible_ingress_has_websockets_and_trusts_only_explicit_legacy_proxies(render, tmp_path):
+    domain = 'plausible.example.test'
+    text = render('roles/debian13_ingress/templates/ingress.conf.j2',
+                  debian13_ingress_sites=[dict(instance='plausible01', key='plausible', domain=domain, upstream='10.77.0.18')],
+                  debian13_ingress_tls_ready=True, plausible_legacy_proxy_addresses=['192.0.2.8', '2001:db8::8'])
+    assert '192.0.2.8 $http_x_real_ip;' in text
+    assert '2001:db8::8 $http_x_real_ip;' in text
+    assert 'default $remote_addr;' in text
+    assert 'proxy_set_header Upgrade $http_upgrade;' in text
+    assert 'proxy_set_header Connection $uranus_connection_upgrade;' in text
+    assert 'proxy_set_header X-Real-IP $uranus_plausible_client_ip;' in text
+    assert 'proxy_ssl_name plausible01;' in text
+    text = text.replace(f'/etc/letsencrypt/live/{domain}/fullchain.pem', str(tmp_path / 'guest-cert.pem'))
+    text = text.replace(f'/etc/letsencrypt/live/{domain}/privkey.pem', str(tmp_path / 'guest-key.pem'))
     nginx_check(text, tmp_path)
 
 
@@ -60,8 +77,9 @@ def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tm
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=example.test'],
                        check=True, capture_output=True)
-        text = text.replace('/etc/letsencrypt/live/uranus-hetzner/fullchain.pem', str(cert))
-        text = text.replace('/etc/letsencrypt/live/uranus-hetzner/privkey.pem', str(key))
+        for site in sites:
+            text = text.replace(f'/etc/letsencrypt/live/{site["domain"]}/fullchain.pem', str(cert))
+            text = text.replace(f'/etc/letsencrypt/live/{site["domain"]}/privkey.pem', str(key))
         assert 'TLSv1.2 TLSv1.3' in text and 'ssl_reject_handshake on;' in text
         assert text.count('deny all;') == 2
         assert 'proxy_set_header X-Forwarded-For $remote_addr;' in text
@@ -69,6 +87,9 @@ def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tm
         assert 'proxy_pass https://10.77.0.13:443;' in text
         assert 'proxy_ssl_verify on;' in text
     assert '/.well-known/acme-challenge/' in text
+    assert 'listen 127.0.0.1:80 proxy_protocol' in text
+    assert 'real_ip_header proxy_protocol;' in text
+    assert 'set_real_ip_from 127.0.0.1;' in text
     nginx_check(text, tmp_path)
 
 
