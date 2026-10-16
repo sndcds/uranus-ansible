@@ -55,6 +55,10 @@
         apply:
           no_log: true
       when: instance_role in ['dev', 'prod']
+    - name: Configure the separately enabled Uranus dashboard
+      ansible.builtin.include_role:
+        name: debian13_dashboard
+      when: dashboard_enabled | default(false) | bool
     - name: Configure native Debian monitoring
       ansible.builtin.include_role:
         name: debian13_monitoring

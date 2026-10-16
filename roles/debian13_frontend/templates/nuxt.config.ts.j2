@@ -1,0 +1,7 @@
+export default defineNuxtConfig({
+  nitro: { preset: 'node-server' },
+  routeRules: {
+    '/api/**': { proxy: 'http://127.0.0.1:{{ backend_port }}/api/**' },
+    '/pluto/**': { proxy: 'http://127.0.0.1:{{ backend_port }}/pluto/**' }
+  }
+})

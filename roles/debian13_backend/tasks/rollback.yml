@@ -1,0 +1,65 @@
+---
+- name: Stop the rejected backend before restoring its configuration
+  ansible.builtin.systemd_service:
+    name: uranus-backend
+    state: stopped
+    enabled: "{{ omit if debian13_backend_before.results[1].stat.exists else false }}"
+  failed_when: false
+
+- name: Restore the protected configuration backup when one was created
+  ansible.builtin.copy:
+    src: "{{ debian13_backend_config.backup_file }}"
+    dest: "{{ debian13_backend_config_path }}"
+    remote_src: true
+    owner: uranus
+    group: uranus
+    mode: '0600'
+  when: debian13_backend_config.backup_file is defined
+  no_log: true
+
+- name: Remove the new central configuration after a failed first activation
+  ansible.builtin.file:
+    path: "{{ debian13_backend_config_path }}"
+    state: absent
+  when: not debian13_backend_before.results[0].stat.exists
+
+- name: Restore the previous service definition
+  ansible.builtin.copy:
+    src: "{{ debian13_backend_unit.backup_file }}"
+    dest: /etc/systemd/system/uranus-backend.service
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  when: debian13_backend_unit.backup_file is defined
+
+- name: Remove a service definition created during a rejected first installation
+  ansible.builtin.file:
+    path: /etc/systemd/system/uranus-backend.service
+    state: absent
+  when: not debian13_backend_before.results[1].stat.exists
+
+- name: Restore the previous backend release link
+  ansible.builtin.file:
+    src: "{{ debian13_backend_previous.stat.lnk_source }}"
+    dest: /opt/uranus/backend/current
+    state: link
+  when: debian13_backend_previous.stat.exists
+
+- name: Remove the rejected first release activation
+  ansible.builtin.file:
+    path: /opt/uranus/backend/current
+    state: absent
+  when: not debian13_backend_previous.stat.exists
+
+- name: Reload the restored service configuration
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart the previous backend when its unit and release existed
+  ansible.builtin.systemd_service:
+    name: uranus-backend
+    state: restarted
+  when:
+    - debian13_backend_previous.stat.exists
+    - debian13_backend_before.results[1].stat.exists

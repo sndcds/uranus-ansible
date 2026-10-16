@@ -1,0 +1,65 @@
+---
+- name: Stop the rejected frontend before restoring its release
+  ansible.builtin.systemd_service:
+    name: uranus-frontend
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Restore the previous frontend symlink
+  ansible.builtin.file:
+    src: "{{ debian13_frontend_previous.stat.lnk_source }}"
+    dest: /opt/uranus/frontend/current
+    state: link
+  when: debian13_frontend_previous.stat.exists
+
+- name: Remove the rejected first activation when no previous release existed
+  ansible.builtin.file:
+    path: /opt/uranus/frontend/current
+    state: absent
+  when: not debian13_frontend_previous.stat.exists
+
+- name: Restore previous service and runtime files
+  ansible.builtin.copy:
+    content: "{{ item.content | b64decode }}"
+    dest: "{{ item.source }}"
+    owner: root
+    group: "{{ 'uranus' if item.source.endswith('.env') else 'root' }}"
+    mode: "{{ '0640' if item.source.endswith('.env') else '0644' }}"
+  loop: "{{ debian13_frontend_saved_files.results }}"
+  when: not item.skipped | default(false)
+  no_log: true
+
+- name: Remove service files created during a failed first deployment
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: absent
+  loop: "{{ debian13_frontend_before.results[1:] }}"
+  when: not item.stat.exists
+
+- name: Reload systemd after restoring the frontend configuration
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Remove the new nginx site link when no previous site existed
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/uranus-debian13.conf
+    state: absent
+  when: not debian13_frontend_before.results[3].stat.exists
+
+- name: Restart the previous Nuxt frontend when one existed
+  ansible.builtin.systemd_service:
+    name: uranus-frontend
+    enabled: true
+    state: started
+  when: debian13_frontend_before.results[1].stat.exists
+
+- name: Validate restored nginx configuration
+  ansible.builtin.command:
+    argv: [nginx, -t]
+  changed_when: false
+
+- name: Reload restored nginx routing
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded

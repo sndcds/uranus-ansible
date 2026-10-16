@@ -2,7 +2,10 @@
 postgresql_version: 17
 ssl_email: noreply@oklabflensburg.de
 backend_port: 9090
-frontend_repo_url: https://github.com/sndcds/uranus-dashboard.git
+frontend_repo_url: https://github.com/sndcds/kulturbytes-client.git
+frontend_runtime: node
+frontend_port: 3000
+dashboard_enabled: false
 backend_repo_url: https://github.com/sndcds/uranus.git
 backend_go_version: 1.25.8
 backend_go_archive_sha256: ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6
@@ -12,6 +15,7 @@ backend_supported_languages:
   - en
   - da
 backend_profile_image_quality: 75
+# File size in MiB; rendered JSON uses bytes for both backend and Pluto.
 backend_pluto_image_max_file_size: 20
 backend_pluto_image_max_px: 1920
 backend_auth_token_expiration_time: 600
@@ -69,7 +73,7 @@ monitoring_influx_icinga_service_measurement: icinga2_service_perfdata
 monitoring_influx_icinga_host_measurement: icinga2_host_perfdata
 pluto_metrics_enabled: true
 pluto_metrics_measurement: pluto_image_files
-pluto_metrics_directory: /opt/uranus/backend/pluto/images
+pluto_metrics_directory: '{{ debian13_backend_image_dir }}'
 pluto_metrics_push_schedule: hourly
 monitoring_grafana_apt_key_url: https://apt.grafana.com/gpg-full.key
 monitoring_grafana_domain: '{{ uranus_domains.icinga }}'
@@ -94,6 +98,7 @@ hetzner_storage_uuid: 7f882d89-a2cf-46d2-9db8-5333be51a300
 hetzner_domains:
   dev_frontend: dev.example.invalid
   dev_backend: api.dev.example.invalid
+  dev_dashboard: app.dev.example.invalid
   prod_frontend: example.invalid
   prod_backend: api.example.invalid
   icinga: monitoring.example.invalid
@@ -102,6 +107,7 @@ hetzner_domains:
   mail_mx: mail.example.invalid
 hetzner_acme_email: ''
 hetzner_private_sites:
+  - dev_dashboard
   - dev_frontend
   - dev_backend
   - icinga

@@ -1,4 +1,9 @@
 ---
+- name: Require a positive whole MiB application upload limit
+  ansible.builtin.assert:
+    that: backend_pluto_image_max_file_size | string is match('^[1-9][0-9]*$')
+  when: instance_role in ['dev', 'prod']
+
 - name: Install private guest nginx without starting the default site
   ansible.builtin.apt:
     name: nginx
@@ -41,9 +46,9 @@
   block:
     - name: Apply pending nginx reloads before checking the active frontend
       ansible.builtin.meta: flush_handlers
-    - name: Require the newly served static frontend to answer successfully
+    - name: Require the newly served frontend to answer successfully
       ansible.builtin.uri:
-        url: "https://{{ ansible_host }}{{ frontend_health_endpoint }}"
+        url: "https://{{ ansible_host }}{{ debian13_guest_web_health_endpoint | default(frontend_health_endpoint) }}"
         headers:
           Host: "{{ frontend_domain }}"
         ca_path: /etc/ssl/certs/uranus-ca.pem
@@ -54,7 +59,9 @@
         src: "{{ debian13_frontend_previous.stat.lnk_source }}"
         dest: /opt/uranus/frontend/current
         state: link
-      when: debian13_frontend_previous.stat.exists
+      when:
+        - debian13_frontend_previous is defined
+        - debian13_frontend_previous.stat.exists | default(false)
     - name: Report frontend activation failure and preserve release artifacts
       ansible.builtin.fail:
         msg: >-

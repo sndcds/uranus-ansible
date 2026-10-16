@@ -1,0 +1,4 @@
+---
+debian13_frontend_health_path: /de
+debian13_frontend_build_timeout: 1800
+debian13_frontend_corepack_version: '0.36.0'

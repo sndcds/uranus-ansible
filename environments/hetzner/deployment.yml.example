@@ -10,6 +10,7 @@ hetzner_acme_email: admin@example.com
 hetzner_domains:
   dev_frontend: dev.example.com
   dev_backend: api.dev.example.com
+  dev_dashboard: app.dev.example.com
   prod_frontend: example.com
   prod_backend: api.example.com
   icinga: monitoring.example.com
