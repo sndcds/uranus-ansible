@@ -50,9 +50,9 @@ nominatim_db_password: '{{ vault_nominatim_db_password }}'
 versatiles_port: 8080
 versatiles_system_user: versatiles
 versatiles_data_dir: /srv/versatiles
-versatiles_tiles_url: https://download.versatiles.org/osm.versatiles
-versatiles_tileset_name: schleswig-holstein.versatiles
-versatiles_bbox: 8.35,53.25,11.40,55.10
+versatiles_tiles_url: https://download.versatiles.org/osm.20260608.versatiles
+versatiles_tileset_name: europe.versatiles
+versatiles_bbox: -32,34,45,72
 versatiles_bbox_border: 3
 monitoring_db_delegate_host: db01
 monitoring_web_db_name: icingaweb2
@@ -114,8 +114,8 @@ hetzner_private_sites:
 hetzner_private_web_networks: []
 hetzner_nominatim_initial_import: false
 hetzner_app_initial_import: false
-hetzner_versatiles_archive_url: https://github.com/versatiles-org/versatiles-rs/releases/download/v5.0.0/versatiles-linux-gnu-x86_64.tar.gz
-hetzner_versatiles_archive_sha256: 0023972d18df71b509ece6b46c4c6f4b0537af9c904a1cddba2cfa9de9c336fe
+hetzner_versatiles_archive_url: https://github.com/versatiles-org/versatiles-rs/releases/download/v5.2.0/versatiles-linux-gnu-x86_64.tar.gz
+hetzner_versatiles_archive_sha256: 39df5fab18ef38aa107cea8adb2461ef17692b41f62bb27d4b774d0a2f00ad7d
 hetzner_versatiles_frontend_url: https://github.com/versatiles-org/versatiles-frontend/releases/download/v3.16.0/frontend.br.tar.gz
 hetzner_versatiles_frontend_sha256: ac5f5ae18107cd7c7c804c21107813e182ca65024b70b71dd23df7d1887b2ec3
 hetzner_nodejs_major: '24'

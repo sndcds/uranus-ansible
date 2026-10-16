@@ -1,0 +1,53 @@
+---
+- name: Check available tile storage before importing
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import shutil,sys;
+        free=shutil.disk_usage(sys.argv[1]).free;
+        assert free >= int(sys.argv[2])*1024**3, f'Insufficient free tile storage: {free} bytes'
+      - "{{ versatiles_data_dir }}/tiles"
+      - "{{ debian13_versatiles_min_free_gib | string }}"
+  changed_when: false
+
+- name: Download the selected region into a staging tileset
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/versatiles
+      - convert
+      - --bbox-border
+      - "{{ versatiles_bbox_border | string }}"
+      - "--bbox={{ versatiles_bbox }}"
+      - --min-zoom=0
+      - --max-zoom=14
+      - "{{ versatiles_tiles_url }}"
+      - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}.building.versatiles"
+  become: true
+  become_user: "{{ versatiles_system_user }}"
+  async: "{{ debian13_versatiles_import_timeout }}"
+  poll: 10
+  environment:
+    RAYON_NUM_THREADS: '2'
+  changed_when: true
+
+- name: Validate the new tileset before publishing it
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/versatiles
+      - probe
+      - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}.building.versatiles"
+  become: true
+  become_user: "{{ versatiles_system_user }}"
+  changed_when: false
+
+- name: Publish the completed tileset atomically
+  ansible.builtin.command:
+    argv:
+      - mv
+      - --no-clobber
+      - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}.building.versatiles"
+      - "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
+    creates: "{{ versatiles_data_dir }}/tiles/{{ versatiles_tileset_name }}"
+  notify: Restart Debian VersaTiles
