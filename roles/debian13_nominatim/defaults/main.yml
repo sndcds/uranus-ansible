@@ -1,0 +1,10 @@
+---
+debian13_nominatim_db_socket: /var/run/postgresql
+debian13_nominatim_db_port: 5432
+debian13_nominatim_venv: "/opt/nominatim/{{ hetzner_nominatim_version }}/venv"
+debian13_nominatim_gunicorn_version: '26.2.0'
+debian13_nominatim_falcon_version: '4.4.0'
+debian13_nominatim_import_threads: 4
+debian13_nominatim_import_timeout: 7200
+debian13_nominatim_db_storage_path: /var/lib/postgresql
+debian13_nominatim_db_min_free_gib: 10

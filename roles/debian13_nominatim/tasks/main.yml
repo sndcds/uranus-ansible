@@ -1,48 +1,13 @@
 ---
-- name: Require a pinned OSM extract for an authorized first import
-  ansible.builtin.assert:
-    that:
-      - nominatim_data_url is match('^https://')
-      - nominatim_data_sha256 is match('^[0-9a-f]{64}$')
-  when: hetzner_nominatim_initial_import | bool
-
-- name: Inspect Nominatim database existence without modifying it
-  community.postgresql.postgresql_query:
-    db: postgres
-    query: SELECT oid FROM pg_database WHERE datname = %(name)s
-    named_args: {name: "{{ nominatim_db_name }}"}
-  delegate_to: db01
-  become: true
-  become_user: postgres
-  register: debian13_nominatim_database
-
-- name: Require explicit first import if no Nominatim database exists
-  ansible.builtin.assert:
-    that: debian13_nominatim_database.rowcount > 0 or hetzner_nominatim_initial_import | bool
-    fail_msg: >-
-      Nominatim has no database. Authorize an initial import explicitly or restore
-      an existing database. The role never drops or replaces a database.
-
-- name: Inspect existing Nominatim schema independently of local marker files
-  community.postgresql.postgresql_query:
-    db: "{{ nominatim_db_name }}"
-    query: SELECT to_regclass('public.placex')::text AS sentinel
-  delegate_to: db01
-  become: true
-  become_user: postgres
-  register: debian13_nominatim_schema
-  when: debian13_nominatim_database.rowcount > 0
-
-- name: Stop on an incomplete existing Nominatim database
-  ansible.builtin.assert:
-    that: debian13_nominatim_schema.query_result[0].sentinel is not none
-    fail_msg: Incomplete Nominatim database found; preserve it and recover manually.
-  when: debian13_nominatim_database.rowcount > 0
+- name: Verify Nominatim database and import prerequisites
+  ansible.builtin.import_tasks: preflight.yml
 
 - name: Install Nominatim prerequisites
   ansible.builtin.apt:
-    name: [osm2pgsql, postgresql-client-17, pkg-config, libicu-dev, python3-venv, python3-pip, curl]
+    name: [osm2pgsql, postgresql-client-17, build-essential, python3-dev, pkg-config, libicu-dev, libpq-dev, python3-venv, python3-pip, curl]
     state: present
+    update_cache: true
+    cache_valid_time: 3600
 
 - name: Create Nominatim service user
   ansible.builtin.user:
@@ -64,21 +29,28 @@
     - "{{ nominatim_project_dir }}"
     - /var/log/nominatim
 
+- name: Create the immutable release parent outside the service home
+  ansible.builtin.file:
+    path: "/opt/nominatim/{{ hetzner_nominatim_version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Install pinned Nominatim into an isolated Python environment
   ansible.builtin.pip:
     name:
       - "nominatim-db=={{ hetzner_nominatim_version }}"
       - "nominatim-api=={{ hetzner_nominatim_version }}"
       - psycopg[binary]
-      - gunicorn
-      - uvicorn
-      - falcon
-    virtualenv: /srv/nominatim/nominatim-venv
+      - "gunicorn=={{ debian13_nominatim_gunicorn_version }}"
+      - "falcon=={{ debian13_nominatim_falcon_version }}"
+    virtualenv: "{{ debian13_nominatim_venv }}"
     virtualenv_command: python3 -m venv
 
 - name: Allow service access to the isolated Python environment
   ansible.builtin.file:
-    path: /srv/nominatim/nominatim-venv
+    path: "{{ debian13_nominatim_venv }}"
     state: directory
     mode: '0755'
 
@@ -103,38 +75,32 @@
         owner: nominatim
         group: www-data
         mode: '0640'
-    - name: Grant temporary privileges required by the first Nominatim import
-      community.postgresql.postgresql_user:
-        name: "{{ nominatim_db_user }}"
-        role_attr_flags: SUPERUSER
-      delegate_to: db01
-      become: true
-      become_user: postgres
-    - name: Create the absent database through the initial Nominatim import
+    - name: Prepare the absent database with bounded temporary privileges
+      ansible.builtin.include_tasks: prepare-database.yml
+    - name: Import and index the verified extract without superuser privileges
       ansible.builtin.command:
         argv:
-          - /srv/nominatim/nominatim-venv/bin/nominatim
+          - "{{ debian13_nominatim_venv }}/bin/nominatim"
           - import
           - --project-dir
           - "{{ nominatim_project_dir }}"
+          - --continue
+          - import-from-file
           - --osm-file
           - "{{ nominatim_data_file }}"
+          - --threads
+          - "{{ debian13_nominatim_import_threads | string }}"
           - --no-updates
       become: true
       become_user: nominatim
+      async: "{{ debian13_nominatim_import_timeout }}"
+      poll: 10
+      no_log: true
       changed_when: true
-  always:
-    - name: Revoke temporary import privileges even if the import failed
-      community.postgresql.postgresql_user:
-        name: "{{ nominatim_db_user }}"
-        role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
-      delegate_to: db01
-      become: true
-      become_user: postgres
 
 - name: Check Nominatim integrity before serving requests
   ansible.builtin.command:
-    argv: [/srv/nominatim/nominatim-venv/bin/nominatim, admin, --project-dir, "{{ nominatim_project_dir }}", --check-database]
+    argv: ["{{ debian13_nominatim_venv }}/bin/nominatim", admin, --project-dir, "{{ nominatim_project_dir }}", --check-database]
   become: true
   become_user: nominatim
   changed_when: false
@@ -155,28 +121,27 @@
       WantedBy=sockets.target
   notify: Restart Debian Nominatim socket
 
+- name: Validate the native ASGI application before installing its service
+  ansible.builtin.command:
+    argv:
+      - "{{ debian13_nominatim_venv }}/bin/gunicorn"
+      - --worker-class
+      - asgi
+      - --protocol
+      - http
+      - --check-config
+      - "nominatim_api.server.falcon.server:run_wsgi()"
+    chdir: "{{ nominatim_project_dir }}"
+  become: true
+  become_user: nominatim
+  changed_when: false
+  no_log: true
+
 - name: Install Nominatim service
-  ansible.builtin.copy:
+  ansible.builtin.template:
+    src: nominatim.service.j2
     dest: /etc/systemd/system/nominatim.service
     mode: '0644'
-    content: |
-      [Unit]
-      Description=Nominatim API
-      After=network-online.target
-      Requires=nominatim.socket
-      [Service]
-      User=nominatim
-      Group=www-data
-      WorkingDirectory={{ nominatim_project_dir }}
-      ExecStart=/srv/nominatim/nominatim-venv/bin/gunicorn --bind unix:/run/nominatim.sock \
-        --workers 2 --worker-class uvicorn.workers.UvicornWorker \
-        "nominatim_api.server.falcon.server:run_wsgi()"
-      Restart=on-failure
-      NoNewPrivileges=true
-      PrivateTmp=true
-      ProtectSystem=full
-      [Install]
-      WantedBy=multi-user.target
   notify: Restart Debian Nominatim
 
 - name: Enable Nominatim socket and service
@@ -186,3 +151,21 @@
     enabled: true
     state: started
   loop: [nominatim.socket, nominatim.service]
+
+- name: Activate pending Nominatim configuration before health verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Require a healthy Nominatim API over its private HTTP socket
+  ansible.builtin.uri:
+    url: http://localhost/status?format=json
+    unix_socket: /run/nominatim.sock
+    return_content: true
+    status_code: 200
+  register: debian13_nominatim_health
+  retries: 12
+  delay: 5
+  until: debian13_nominatim_health.status == 200
+
+- name: Require Nominatim to report a working database
+  ansible.builtin.assert:
+    that: debian13_nominatim_health.json.status | int == 0
