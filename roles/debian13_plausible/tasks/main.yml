@@ -1,0 +1,24 @@
+---
+- name: Require the dedicated unprivileged analytics container and immutable release
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == 'plausible01'
+      - instance_role == 'analytics'
+      - instance_type == 'container'
+      - debian13_plausible_revision is match('^[0-9a-f]{40}$')
+      - debian13_plausible_clickhouse_version is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+
+- name: Install native application and database prerequisites
+  ansible.builtin.include_tasks: packages.yml
+  when: debian13_plausible_build_release | bool
+
+- name: Build the pinned native Community Edition release
+  ansible.builtin.include_tasks: build.yml
+  when: debian13_plausible_build_release | bool
+
+- name: Configure private native databases and application secrets
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Activate only after verified data import
+  ansible.builtin.include_tasks: activate.yml
+  when: not debian13_plausible_prepare_only | bool

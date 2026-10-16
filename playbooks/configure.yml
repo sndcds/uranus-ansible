@@ -63,6 +63,10 @@
       ansible.builtin.include_role:
         name: debian13_monitoring
       when: instance_role == 'monitoring'
+    - name: Configure native Plausible analytics
+      ansible.builtin.include_role:
+        name: debian13_plausible
+      when: instance_role == 'analytics'
     - name: Configure guarded Nominatim import
       ansible.builtin.include_role:
         name: debian13_nominatim

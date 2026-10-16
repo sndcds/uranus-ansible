@@ -23,3 +23,4 @@ all:
         nom01: {}
         vers01: {}
         nginx01: {}
+        plausible01: {}

@@ -1,4 +1,5 @@
 environments/hetzner/vault.yml
+environments/hetzner/plausible.vault.yml
 environments/hetzner/deployment.yml
 environments/hetzner/pki/
 # Supply the approved production import dump locally.

@@ -6,6 +6,8 @@ frontend_repo_url: https://github.com/sndcds/kulturbytes-client.git
 frontend_runtime: node
 frontend_port: 3000
 dashboard_enabled: false
+plausible_enabled: false
+plausible_legacy_proxy_addresses: []
 backend_repo_url: https://github.com/sndcds/uranus.git
 backend_go_version: 1.25.8
 backend_go_archive_sha256: ceb5e041bbc3893846bd1614d76cb4681c91dadee579426cf21a63f2d7e03be6
@@ -104,6 +106,7 @@ hetzner_domains:
   icinga: monitoring.example.invalid
   nominatim: nominatim.example.invalid
   versatiles: tiles.example.invalid
+  plausible: plausible.example.invalid
   mail_mx: mail.example.invalid
 hetzner_acme_email: ''
 hetzner_private_sites:
@@ -188,6 +191,13 @@ incus_instances:
     cpu: 2
     disk: 40
     ip: 10.77.0.16
+  - name: plausible01
+    role: analytics
+    type: container
+    memory: 8192
+    cpu: 4
+    disk: 80
+    ip: 10.77.0.18
   - name: nginx01
     role: ingress
     type: container

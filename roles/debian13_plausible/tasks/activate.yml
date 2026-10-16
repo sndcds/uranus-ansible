@@ -1,0 +1,102 @@
+---
+- name: Inspect the root-owned verified import marker
+  ansible.builtin.stat:
+    path: /etc/plausible/import-complete.json
+  register: debian13_plausible_import
+
+- name: Require verified imported data before first activation
+  ansible.builtin.assert:
+    that:
+      - debian13_plausible_import.stat.exists
+      - debian13_plausible_import.stat.uid == 0
+      - debian13_plausible_import.stat.mode == '0600'
+    fail_msg: Import and verify the existing PostgreSQL and ClickHouse data before activating Plausible.
+
+- name: Inspect the previous native release
+  ansible.builtin.stat:
+    path: /opt/plausible/current
+    follow: false
+  register: debian13_plausible_previous
+
+- name: Require a managed release link
+  ansible.builtin.assert:
+    that:
+      - not debian13_plausible_previous.stat.exists or debian13_plausible_previous.stat.islnk
+      - >-
+        not debian13_plausible_previous.stat.exists or
+        debian13_plausible_previous.stat.lnk_source is match('^/opt/plausible/releases/[0-9a-f]{40}-node[0-9]+-hex[0-9.]+/_build/ce/rel/plausible$')
+
+- name: Activate and check the native release
+  block:
+    - name: Activate the completely built native release
+      ansible.builtin.file:
+        src: "{{ debian13_plausible_build_path }}/_build/ce/rel/plausible"
+        dest: /opt/plausible/current
+        state: link
+        owner: plausible
+        group: plausible
+      register: debian13_plausible_activation
+    - name: Apply only upstream migrations to the copied target data # noqa: no-handler
+      ansible.builtin.systemd_service:
+        name: plausible-migrate
+        state: started
+      when: debian13_plausible_activation.changed
+    - name: Start the native analytics service
+      ansible.builtin.systemd_service:
+        name: plausible
+        enabled: true
+        state: >-
+          {{ 'restarted' if debian13_plausible_activation.changed or
+             debian13_plausible_environment.changed or debian13_plausible_unit.changed else 'started' }}
+    - name: Require the native application to respond
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ debian13_plausible_port }}/api/health"
+        status_code: 200
+      register: debian13_plausible_health
+      retries: 30
+      delay: 3
+      until: debian13_plausible_health.status | default(0) == 200
+    - name: Configure private nginx TLS routing
+      ansible.builtin.include_role:
+        name: debian13_guest_web
+    - name: Configure native database backups
+      ansible.builtin.include_tasks: backup.yml
+  rescue:
+    - name: Stop a failed application activation
+      ansible.builtin.systemd_service:
+        name: plausible
+        state: stopped
+        enabled: "{{ debian13_plausible_previous.stat.exists }}"
+      failed_when: false
+    - name: Restore the previous protected environment when replaced
+      ansible.builtin.copy:
+        src: "{{ debian13_plausible_environment.backup_file }}"
+        dest: /etc/plausible/plausible.env
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0600'
+      when: debian13_plausible_environment.backup_file is defined
+      no_log: true
+    - name: Restore the previous service definition when replaced
+      ansible.builtin.copy:
+        src: "{{ debian13_plausible_unit.backup_file }}"
+        dest: /etc/systemd/system/plausible.service
+        remote_src: true
+        mode: '0644'
+      when: debian13_plausible_unit.backup_file is defined
+    - name: Restore the previous native release link
+      ansible.builtin.file:
+        src: "{{ debian13_plausible_previous.stat.lnk_source }}"
+        dest: /opt/plausible/current
+        state: link
+      when: debian13_plausible_previous.stat.exists
+    - name: Restart the previous service when available
+      ansible.builtin.systemd_service:
+        name: plausible
+        daemon_reload: true
+        state: started
+      when: debian13_plausible_previous.stat.exists
+    - name: Report the failed activation without deleting copied data
+      ansible.builtin.fail:
+        msg: Plausible activation failed. The source installation and target databases are preserved; inspect before retry.

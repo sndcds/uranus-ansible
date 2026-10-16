@@ -39,10 +39,19 @@ def layout(settings,tmp_path,monkeypatch):
 def plan(api,layout,**kwargs):
     return incus.preflight(*layout,run=api.run,guard=lambda run:{'options':'rw'},**kwargs)
 
-def test_first_installation_plans_all_seven_without_mutation(layout):
+def test_first_installation_plans_all_eight_without_mutation(layout):
     api=API(); result=plan(api,layout)
     assert set(result['new_instances'])==incus.NAMES
     assert not result['project_exists']
+
+
+def test_existing_seven_guests_only_plan_the_new_analytics_container(layout):
+    api = API()
+    api.managed([i for i in layout[0] if i['name'] != 'plausible01'])
+    before = copy.deepcopy(api.data)
+    result = plan(api, layout)
+    assert result['new_instances'] == ['plausible01']
+    assert api.data == before
 
 
 @pytest.mark.parametrize('proxy_setting', [None, 'block'])

@@ -98,7 +98,9 @@
   loop_control:
     loop_var: incus_instance
     label: "{{ incus_instance.name }}"
-  when: incus_instance.name not in incus_instance_verified.stopped_instances
+  when:
+    - incus_instance.name not in incus_instance_verified.stopped_instances
+    - incus_instance.name in (incus_instance_targets | default(incus_instances | map(attribute='name') | list))
 
 - name: Prepare the baseline on every running VM and container through Incus
   ansible.builtin.include_tasks: bootstrap.yml
@@ -106,15 +108,19 @@
   loop_control:
     loop_var: incus_instance
     label: "{{ incus_instance.name }}"
-  when: incus_instance.name not in incus_instance_verified.stopped_instances
+  when:
+    - incus_instance.name not in incus_instance_verified.stopped_instances
+    - incus_instance.name in (incus_instance_targets | default(incus_instances | map(attribute='name') | list))
 
 - name: Install host monitoring certificate
   ansible.builtin.include_role:
     name: internal_tls
+  when: incus_manage_host_agents | default(true) | bool
 
 - name: Monitor host resources and data NVMe through the same private agent
   ansible.builtin.include_role:
     name: icinga_agent
+  when: incus_manage_host_agents | default(true) | bool
 
 - name: Install optional external Incus export schedule
   ansible.builtin.include_role:

@@ -23,7 +23,7 @@ object Service "https" {
   vars.http_ssl = true
   vars.http_sni = true
   vars.http_port = 443
-  vars.http_vhost = "{{ hetzner_domains.dev_frontend if instance.role == 'dev' else hetzner_domains.prod_frontend if instance.role in ['prod', 'ingress'] else hetzner_domains.icinga if instance.role == 'monitoring' else hetzner_domains.nominatim if instance.role == 'nominatim' else hetzner_domains.versatiles }}"
+  vars.http_vhost = "{{ hetzner_domains.dev_frontend if instance.role == 'dev' else hetzner_domains.prod_frontend if instance.role in ['prod', 'ingress'] else hetzner_domains.icinga if instance.role == 'monitoring' else hetzner_domains.nominatim if instance.role == 'nominatim' else hetzner_domains.plausible if instance.role == 'analytics' else hetzner_domains.versatiles }}"
   vars.http_uri = "{{ '/status' if instance.role == 'nominatim' else '/status' if instance.role == 'versatiles' else '/' }}"
   command_endpoint = "{{ instance.name }}"
 }
@@ -37,6 +37,28 @@ object Service "backend-health" {
   vars.http_address = "127.0.0.1"
   vars.http_port = {{ backend_port }}
   vars.http_uri = "{{ api_health_endpoint }}"
+  command_endpoint = "{{ instance.name }}"
+}
+{% endif %}
+{% if instance.role == 'analytics' %}
+object Service "plausible-health" {
+  import "generic-service"
+  zone = "master"
+  host_name = "{{ instance.name }}"
+  check_command = "http"
+  vars.http_address = "127.0.0.1"
+  vars.http_port = 8200
+  vars.http_uri = "/api/health"
+  command_endpoint = "{{ instance.name }}"
+}
+object Service "clickhouse-health" {
+  import "generic-service"
+  zone = "master"
+  host_name = "{{ instance.name }}"
+  check_command = "http"
+  vars.http_address = "127.0.0.1"
+  vars.http_port = 8123
+  vars.http_uri = "/ping"
   command_endpoint = "{{ instance.name }}"
 }
 {% endif %}

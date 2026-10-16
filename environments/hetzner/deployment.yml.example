@@ -1,4 +1,7 @@
 ---
+## Enable analytics routing and activation only after the verified existing-data import.
+plausible_enabled: false
+debian13_plausible_prepare_only: true
 # These are documentation-only examples. Replace addresses/domains before use.
 # Keep approval false until the owner explicitly authorizes production deployment.
 hetzner_deployment_approved: false
@@ -16,6 +19,7 @@ hetzner_domains:
   icinga: monitoring.example.com
   nominatim: nominatim.example.com
   versatiles: tiles.example.com
+  plausible: plausible.example.com
   mail_mx: mail.example.com
 # Set only for an explicitly authorized FIRST initialization of absent databases.
 hetzner_app_initial_import: false

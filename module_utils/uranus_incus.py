@@ -18,7 +18,7 @@ PROJECT = 'uranus'
 POOL = 'uranus'
 NETWORK = 'uranusincus0'
 POOL_PATH = DATA / 'storage-pools' / 'uranus'
-NAMES = {'db01','dev01','prod01','mon01','nom01','vers01','nginx01'}
+NAMES = {'db01','dev01','prod01','mon01','nom01','vers01','nginx01','plausible01'}
 PROJECT_CONFIG = {'features.images':'true','features.profiles':'true',
                   'features.storage.volumes':'true','features.networks':'false',
                   'restricted':'true','restricted.containers.privilege':'unprivileged',
@@ -59,12 +59,15 @@ def desired_devices(instance, quotas=False):
 
 def validate_layout(instances, images):
     if len(instances) != len(NAMES) or {i['name'] for i in instances} != NAMES:
-        raise SafetyError('Require the seven unique Uranus instance names')
+        raise SafetyError('Require the eight unique Uranus instance names')
     addresses=set()
     for instance in instances:
         if ((instance['name'] == 'nginx01') != (instance['role'] == 'ingress')
                 or (instance['role'] == 'ingress' and instance['type'] != 'container')):
             raise SafetyError('Require nginx01 as the dedicated ingress container')
+        if ((instance['name'] == 'plausible01') != (instance['role'] == 'analytics')
+                or (instance['role'] == 'analytics' and instance['type'] != 'container')):
+            raise SafetyError('Require plausible01 as the dedicated analytics container')
         if instance['type'] not in ('container','virtual-machine'):
             raise SafetyError('Use container or virtual-machine')
         for key in ('memory','cpu','disk'):
