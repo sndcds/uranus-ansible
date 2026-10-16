@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uranus · Nginx-Test</title>
+  <style>
+    :root { color-scheme: light; font: 17px/1.6 system-ui, sans-serif; color: #172b3a; background: #edf3f6; }
+    body { max-width: 680px; margin: 8vh auto; padding: 24px; }
+    main { background: white; padding: clamp(24px, 6vw, 48px); border-radius: 20px; box-shadow: 0 12px 50px #172b3a10; }
+    h1 { line-height: 1.2; margin: 12px 0 20px; font-size: 2rem; }
+    h2 { margin-top: 32px; font-size: 1.3rem; }
+    .status { color: #146345; font-weight: 650; }
+    p { color: #475b69; }
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+    .search { display: flex; flex-wrap: wrap; gap: 10px; }
+    input, button { font: inherit; padding: 11px 14px; border-radius: 8px; }
+    input[type=search] { flex: 1; min-width: 140px; border: 1px solid #b7c6ce; }
+    button { background: #145e83; color: white; border: 0; cursor: pointer; }
+    a { color: #145e83; text-underline-offset: 3px; }
+    li { margin: 10px 0; }
+    footer { margin-top: 28px; font-size: .85rem; color: #607581; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="status">● Nginx ist erreichbar</div>
+    <h1>Willkommen bei Uranus</h1>
+    <p>Diese Testseite ist direkt über die Server-IP erreichbar.
+      Hier kannst du Nominatim im Browser ausprobieren.</p>
+    <h2>Ort oder Adresse suchen</h2>
+    <form action="/nominatim/search" method="get">
+      <label for="query">Suchbegriff</label>
+      <div class="search">
+        <input id="query" type="search" name="q" value="Flensburg" required>
+        <button type="submit">Suchen</button>
+      </div>
+      <input type="hidden" name="format" value="jsonv2">
+      <input type="hidden" name="limit" value="5">
+      <input type="hidden" name="addressdetails" value="1">
+    </form>
+    <p>Die Ergebnisse werden als JSON angezeigt.</p>
+{% if debian13_ingress_ip_tiles | default(false) | bool %}
+    <h2>Europa-Karte</h2>
+    <p><a href="/map/">Interaktive Karte öffnen</a></p>
+{% endif %}
+    <ul>
+      <li><a href="/nominatim/status?format=json">Nominatim-Status prüfen</a></li>
+      <li><a href="/nominatim/reverse?lat=54.7833&amp;lon=9.4333&amp;format=jsonv2">Adresse einer Beispielkoordinate nachschlagen</a></li>
+    </ul>
+    <footer>Geodaten © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a></footer>
+  </main>
+</body>
+</html>

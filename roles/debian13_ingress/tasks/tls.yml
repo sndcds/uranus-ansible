@@ -1,0 +1,97 @@
+---
+- name: Require known service keys for the selected TLS rollout
+  ansible.builtin.assert:
+    that:
+      - debian13_ingress_tls_site_keys | length > 0
+      - debian13_ingress_tls_site_keys | difference(debian13_ingress_sites | map(attribute='key') | list) | length == 0
+
+- name: Select the domains to certify in this rollout
+  ansible.builtin.set_fact:
+    debian13_ingress_requested_sites: "{{ debian13_ingress_sites | selectattr('key', 'in', debian13_ingress_tls_site_keys) | list }}"
+
+- name: Verify public DNS before requesting certificates
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import ipaddress,socket,sys;
+        addresses={ipaddress.ip_address(r[4][0]) for r in socket.getaddrinfo(sys.argv[1],443,type=socket.SOCK_STREAM)};
+        v4,v6=map(ipaddress.ip_address,sys.argv[2:4]);
+        assert v4.version==4 and v6.version==6;
+        sys.exit(0 if v4 in addresses and addresses <= {v4,v6} else 1)
+      - "{{ item.domain }}"
+      - "{{ hetzner_public_ipv4 }}"
+      - "{{ hetzner_public_ipv6 }}"
+  loop: "{{ debian13_ingress_requested_sites }}"
+  changed_when: false
+
+- name: Obtain an independent trusted certificate for each selected domain
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --webroot
+      - --webroot-path
+      - /var/www/letsencrypt
+      - --non-interactive
+      - --agree-tos
+      - --email
+      - "{{ hetzner_acme_email }}"
+      - --cert-name
+      - "{{ item.domain }}"
+      - --domain
+      - "{{ item.domain }}"
+      - --keep-until-expiring
+  loop: "{{ debian13_ingress_requested_sites }}"
+  when: item.domain not in debian13_ingress_tls_domains
+  changed_when: true
+
+- name: Validate issued certificates before activating HTTPS
+  ansible.builtin.include_tasks: certificates.yml
+
+- name: Require valid certificates for every requested domain
+  ansible.builtin.assert:
+    that:
+      - debian13_ingress_requested_sites | map(attribute='domain') | difference(debian13_ingress_tls_domains) | length == 0
+
+- name: Install validated TLS proxy configuration
+  ansible.builtin.template:
+    src: ingress.conf.j2
+    dest: /etc/nginx/sites-available/uranus-hetzner.conf
+    mode: '0644'
+  notify: Reload Debian public nginx
+
+- name: Ensure dedicated TLS site is enabled
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/uranus-hetzner.conf
+    dest: /etc/nginx/sites-enabled/uranus-hetzner.conf
+    state: link
+  notify: Reload Debian public nginx
+
+- name: Validate final ingress configuration before reload
+  ansible.builtin.command:
+    argv: [nginx, -t]
+  changed_when: false
+
+- name: Enable public nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Install certificate renewal reload hook
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/uranus-nginx
+    mode: '0750'
+    content: |
+      #!/bin/sh
+      set -eu
+      /usr/sbin/nginx -t
+      /usr/bin/systemctl reload nginx
+
+- name: Enable automatic ACME certificate renewal
+  ansible.builtin.systemd_service:
+    name: certbot.timer
+    enabled: true
+    state: started

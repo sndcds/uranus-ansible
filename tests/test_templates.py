@@ -30,7 +30,7 @@ def nginx_check(text, tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.mark.parametrize('role', ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles'])
+@pytest.mark.parametrize('role', ['dev', 'prod', 'monitoring', 'nominatim', 'versatiles', 'analytics'])
 def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp_path):
     text = render('roles/debian13_guest_web/templates/guest.conf.j2',
                   instance_role=role, ansible_host='10.77.0.12', frontend_domain='app.example.test',
@@ -43,6 +43,23 @@ def test_guest_nginx_is_parseable_and_preserves_tls_forwarding(role, render, tmp
     if role == 'monitoring':
         assert '/run/php/php8.4-fpm.sock' in text and 'fastcgi_param HTTPS on;' in text
     assert 'X-Forwarded-Proto https;' in text
+    nginx_check(text, tmp_path)
+
+
+def test_plausible_ingress_has_websockets_and_trusts_only_explicit_legacy_proxies(render, tmp_path):
+    domain = 'plausible.example.test'
+    text = render('roles/debian13_ingress/templates/ingress.conf.j2',
+                  debian13_ingress_sites=[dict(instance='plausible01', key='plausible', domain=domain, upstream='10.77.0.18')],
+                  debian13_ingress_tls_ready=True, plausible_legacy_proxy_addresses=['192.0.2.8', '2001:db8::8'])
+    assert '192.0.2.8 $http_x_real_ip;' in text
+    assert '2001:db8::8 $http_x_real_ip;' in text
+    assert 'default $remote_addr;' in text
+    assert 'proxy_set_header Upgrade $http_upgrade;' in text
+    assert 'proxy_set_header Connection $uranus_connection_upgrade;' in text
+    assert 'proxy_set_header X-Real-IP $uranus_plausible_client_ip;' in text
+    assert 'proxy_ssl_name plausible01;' in text
+    text = text.replace(f'/etc/letsencrypt/live/{domain}/fullchain.pem', str(tmp_path / 'guest-cert.pem'))
+    text = text.replace(f'/etc/letsencrypt/live/{domain}/privkey.pem', str(tmp_path / 'guest-key.pem'))
     nginx_check(text, tmp_path)
 
 
@@ -60,8 +77,9 @@ def test_public_ingress_is_parseable_and_enforces_trust_boundary(tls, render, tm
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=example.test'],
                        check=True, capture_output=True)
-        text = text.replace('/etc/letsencrypt/live/uranus-hetzner/fullchain.pem', str(cert))
-        text = text.replace('/etc/letsencrypt/live/uranus-hetzner/privkey.pem', str(key))
+        for site in sites:
+            text = text.replace(f'/etc/letsencrypt/live/{site["domain"]}/fullchain.pem', str(cert))
+            text = text.replace(f'/etc/letsencrypt/live/{site["domain"]}/privkey.pem', str(key))
         assert 'TLSv1.2 TLSv1.3' in text and 'ssl_reject_handshake on;' in text
         assert text.count('deny all;') == 2
         assert 'proxy_set_header X-Forwarded-For $remote_addr;' in text

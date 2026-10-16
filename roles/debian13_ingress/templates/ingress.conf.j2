@@ -3,13 +3,99 @@
 set_real_ip_from 127.0.0.1;
 real_ip_header proxy_protocol;
 real_ip_recursive off;
+map $http_upgrade $uranus_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+map $remote_addr $uranus_plausible_client_ip {
+    default $remote_addr;
+{% for address in plausible_legacy_proxy_addresses %}
+    {{ address }} $http_x_real_ip;
+{% endfor %}
+}
 limit_req_zone $binary_remote_addr zone=uranus_general:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=uranus_geocoder:10m rate=1r/s;
+limit_req_zone $binary_remote_addr zone=uranus_tiles:10m rate=100r/s;
+# Application documents/API calls and parallel application/media downloads have
+# independent budgets. Media must not exhaust the next page/API request.
+map $uri $uranus_application_key {
+    default $binary_remote_addr;
+    ~^/(_nuxt/|assets/|fonts/|api/image/|pluto/) "";
+}
+map $uri $uranus_media_key {
+    default "";
+    ~^/(_nuxt/|assets/|fonts/|api/image/|pluto/) $binary_remote_addr;
+}
+limit_req_zone $uranus_application_key zone=uranus_application:10m rate=20r/s;
+limit_req_zone $uranus_application_key zone=uranus_dashboard:10m rate=20r/s;
+limit_req_zone $uranus_media_key zone=uranus_media:10m rate=100r/s;
 server {
     listen 127.0.0.1:80 proxy_protocol default_server;
     server_name _;
     return 444;
 }
+{% if debian13_ingress_ip_testing | default(false) | bool %}
+{% set nominatim = debian13_ingress_sites | selectattr('key', 'equalto', 'nominatim') | first %}
+server {
+    listen 127.0.0.1:80 proxy_protocol;
+    server_name {{ hetzner_public_ipv4 }} [{{ hetzner_public_ipv6 }}];
+    server_tokens off;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Cache-Control no-store always;
+    location = / {
+        root /var/www/uranus-ip-test;
+        default_type text/html;
+        try_files /index.html =404;
+    }
+    location = /nominatim { return 302 /nominatim/status?format=json; }
+    location = /nominatim/ { return 302 /nominatim/status?format=json; }
+    location /nominatim/ {
+        limit_req zone=uranus_geocoder burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass https://{{ nominatim.upstream }}:443/;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/uranus-ca.pem;
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ nominatim.instance }};
+        proxy_http_version 1.1;
+        proxy_set_header Host {{ nominatim.domain }};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+{% if debian13_ingress_ip_tiles | default(false) | bool %}
+{% set tiles = debian13_ingress_sites | selectattr('key', 'equalto', 'versatiles') | first %}
+    location = /map { return 302 /map/; }
+    location = /map/ {
+        root /var/www/uranus-ip-test;
+        default_type text/html;
+        try_files /map.html =404;
+    }
+{% for prefix in ['assets', 'tiles'] %}
+    location /{{ prefix }}/ {
+        limit_req zone=uranus_tiles burst=200 nodelay;
+        limit_req_status 429;
+        proxy_pass https://{{ tiles.upstream }}:443;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/uranus-ca.pem;
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ tiles.instance }};
+        proxy_http_version 1.1;
+        proxy_set_header Host {{ tiles.domain }};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+    }
+{% endfor %}
+{% endif %}
+    location / { return 404; }
+}
+{% endif %}
 {% if debian13_ingress_tls_ready %}
 server {
     listen 127.0.0.1:443 ssl proxy_protocol default_server;
@@ -27,13 +113,13 @@ server {
     }
     location / { return 301 https://{{ site.domain }}$request_uri; }
 }
-{% if debian13_ingress_tls_ready %}
+{% if debian13_ingress_tls_ready and site.domain in (debian13_ingress_tls_domains | default(debian13_ingress_sites | map(attribute='domain') | list)) %}
 server {
     listen 127.0.0.1:443 ssl proxy_protocol;
     listen {{ ingress_ip }}:443 ssl;
     server_name {{ site.domain }};
-    ssl_certificate /etc/letsencrypt/live/uranus-hetzner/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/uranus-hetzner/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/{{ site.domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ site.domain }}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:uranus_tls:10m;
     ssl_session_tickets off;
@@ -41,7 +127,12 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
+{% if site.key in ['dev_frontend', 'prod_frontend', 'dev_backend', 'prod_backend', 'dev_dashboard'] %}
+    # Same file limit as this upstream's config.json plus multipart framing.
+    client_max_body_size {{ site.max_body_size | default((backend_pluto_image_max_file_size | int + 1) * 1048576) }};
+{% else %}
     client_max_body_size 20m;
+{% endif %}
 {% if site.key in hetzner_private_sites %}
 {% for network in hetzner_private_web_networks %}
     allow {{ network }};
@@ -49,7 +140,12 @@ server {
     deny all;
 {% endif %}
     location / {
-        limit_req zone={{ 'uranus_geocoder' if site.key == 'nominatim' else 'uranus_general' }} burst=10 nodelay;
+{% if site.key in ['dev_frontend', 'prod_frontend', 'dev_backend', 'prod_backend', 'dev_dashboard'] %}
+        limit_req zone={{ 'uranus_dashboard burst=40' if site.key == 'dev_dashboard' else 'uranus_application burst=10' }} nodelay;
+        limit_req zone=uranus_media burst=200 nodelay;
+{% else %}
+        limit_req zone={{ 'uranus_geocoder' if site.key == 'nominatim' else 'uranus_tiles' if site.key == 'versatiles' else 'uranus_general' }} burst={{ 200 if site.key == 'versatiles' else 10 }} nodelay;
+{% endif %}
         limit_req_status 429;
         proxy_pass https://{{ site.upstream }}:443;
         proxy_ssl_verify on;
@@ -57,12 +153,21 @@ server {
         proxy_ssl_server_name on;
         proxy_ssl_name {{ site.instance }};
         proxy_http_version 1.1;
+{% if site.key == 'plausible' %}
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $uranus_connection_upgrade;
+{% endif %}
         proxy_set_header Host {{ site.domain }};
+{% if site.key == 'plausible' %}
+        proxy_set_header X-Real-IP $uranus_plausible_client_ip;
+        proxy_set_header X-Forwarded-For $uranus_plausible_client_ip;
+{% else %}
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
+{% endif %}
         proxy_set_header X-Forwarded-Proto https;
         proxy_connect_timeout 5s;
-        proxy_read_timeout 60s;
+        proxy_read_timeout {{ 3600 if site.key == 'plausible' else 60 }}s;
     }
 }
 {% endif %}
