@@ -1,11 +1,13 @@
 # Uranus Ansible – Incus auf Debian 13
 
 Ein Inventory, ein Provisionierungsweg: Incus 6.0 LTS aus Debian 13 verwaltet
-`db01` als VM und sechs unprivilegierte Systemcontainer, darunter `nginx01` für
-öffentlichen nginx-Ingress und ACME. Die Anwendungskonfiguration
+`db01` als VM und sieben unprivilegierte Systemcontainer, darunter `nginx01` für
+öffentlichen nginx-Ingress und ACME sowie `plausible01` für natives Plausible.
+Die Anwendungskonfiguration
 verwendet die konsolidierten Debian-Rollen aus PR #1.
 
-**Produktives Deployment ist gesperrt. Auf `94.130.236.38` wurden keine Änderungen vorgenommen.**
+**Produktives Deployment ist standardmäßig gesperrt.** Freigegebene Ausführungen
+und ihre Nachweisgrenzen sind in [Tests und Nachweise](docs/testing.md) dokumentiert.
 
 ## Lokale Prüfung
 
@@ -22,7 +24,7 @@ Die Tests benötigen lokal `cloud-init`, `nginx`, PostgreSQL samt PostGIS und
 keine produktiven Ziele. Installation dieser Werkzeuge nur auf der eigenen
 Testmaschine. CI prüft zusätzlich natives Debian 13.
 
-## Workflow nach späterer ausdrücklicher Freigabe
+## Workflow nach ausdrücklicher Freigabe
 
 Zuerst [Vorbereitung und Sperren](docs/deployment.md) lesen. Inventar, Domains,
 SSH-Hostschlüssel, Vault, interne PKI, Release-Commits und Backups müssen geprüft
@@ -55,6 +57,7 @@ Private Development- und Monitoring-Websites besitzen eine separate Netzfreigabe
 - [Sicherheitsbefunde und Selbstreview](docs/security.md)
 - [Backup und Wiederherstellung](docs/backup-restore.md)
 - [Deployment](docs/deployment.md)
+- [Natives Plausible und Datenübernahme](docs/plausible.md)
 - [Fehlersuche und Upgrades](docs/troubleshooting.md)
 - [Testnachweise und Grenzen](docs/testing.md)
 

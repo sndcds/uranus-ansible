@@ -4,11 +4,11 @@ import yaml
 import pytest
 from conftest import ROOT
 
-@pytest.mark.parametrize('entrypoint',['provision','configure','ingress','postgresql','import-databases'])
+@pytest.mark.parametrize('entrypoint',['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','versatiles','postgresql','import-databases'])
 @pytest.mark.parametrize('check_mode',[False,True])
 def test_default_gate_stops_locally_before_ssh(entrypoint,check_mode,tmp_path):
     inventory=tmp_path/'inventory.yml'
-    inventory.write_text('all:\n  vars:\n    ansible_host: 127.0.0.1\n    ansible_port: 1\n  children:\n    incus_hosts:\n      hosts:\n        blocked: {}\n    uranus_instances:\n      hosts:\n        db01: {}\n        nginx01: {}\n')
+    inventory.write_text('all:\n  vars:\n    ansible_host: 127.0.0.1\n    ansible_port: 1\n  children:\n    incus_hosts:\n      hosts:\n        blocked: {}\n    uranus_instances:\n      hosts:\n        db01: {}\n        dev01: {}\n        prod01: {}\n        mon01: {}\n        nom01: {}\n        vers01: {}\n        nginx01: {}\n        plausible01: {}\n')
     env={**os.environ,'ANSIBLE_CONFIG':str(ROOT/'ansible.cfg'),'ANSIBLE_LOCAL_TEMP':str(tmp_path/'ansible')}
     args=['ansible-playbook','-i',str(inventory),str(ROOT/f'playbooks/{entrypoint}.yml')]
     if check_mode:args+=['--check']
@@ -23,8 +23,10 @@ def test_every_supported_entrypoint_gates_before_connections(settings):
     assert settings['uranus_security_review_complete'] is False
     assert settings['hetzner_app_initial_import'] is False
     assert settings['hetzner_nominatim_initial_import'] is False
-    for name in ['provision','configure','ingress','postgresql','import-databases']:
+    for name in ['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','versatiles','postgresql','import-databases']:
         for play in yaml.safe_load((ROOT/f'playbooks/{name}.yml').read_text()):
+            if 'ansible.builtin.import_playbook' in play:
+                continue
             assert play['gather_facts'] is False
             assert play['pre_tasks'][0]['ansible.builtin.import_tasks']=='tasks/gate.yml'
 

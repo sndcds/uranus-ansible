@@ -1,7 +1,7 @@
 # Netzwerk, SSH und TLS
 
 Incus verwaltet die Bridge `uranusincus0`, `10.77.0.1/24`, ausgehendes IPv4-NAT
-und feste DHCP-Adressen der sieben NICs. Adressen stammen aus der zentralen
+und feste DHCP-Adressen der acht NICs. Adressen stammen aus der zentralen
 Instanzliste. Die Bridge ist nicht an eine physische öffentliche Schnittstelle
 angebunden; IPv6 ist innerhalb der Instanzen deaktiviert. Öffentliche IPv6-
 Verbindungen nimmt Incus am Host entgegen und reicht sie an `nginx01` weiter.
@@ -21,6 +21,14 @@ Alle übrigen Projektrestriktionen bleiben gesetzt. Der Guard prüft die exakten
 Proxygeräte und lehnt zusätzliche Geräte auf anderen Instanzen ab. Bei einem
 bisherigen verwalteten Projekt wird ausschließlich diese Einstellung nach
 erfolgreichem vollständigem Preflight angepasst; fremde Projekte werden abgelehnt.
+
+Analytics läuft privat auf `plausible01` (`10.77.0.18`). Nur dessen nginx ist
+vom zentralen Ingress über TLS erreichbar; Plausible, PostgreSQL und ClickHouse
+lauschen auf Loopback. Während des DNS-Wechsels leitet der bisherige Webserver
+seine dedizierte Plausible-Route an den neuen Ingress weiter. Ausschließlich die
+expliziten alten Serveradressen in `plausible_legacy_proxy_addresses` dürfen
+dabei für Plausible die Besucher-IP weiterreichen. Die Ausnahme nach Ende der
+Übergangszeit entfernen. ACME erhält eine eigene neue TLS-Identität auf nginx01.
 
 Die Debian-Cloud-Images verwenden `systemd-networkd`. Dessen DHCPv4-Client
 verwendet standardmäßig eine DUID; die festen Incus-DHCP-Zuweisungen erfordern
@@ -94,12 +102,16 @@ vor Ansible aus einem vertrauenswürdigen Incus-Konsolenkanal übernehmen. Eine
 Ausgabe von `ssh-keyscan` allein bestätigt keine Identität. Änderungen von
 SSH-Port oder Benutzer sind nicht automatisch unterstützt.
 
-Nginx in `nginx01` fordert ein ACME-SAN-Zertifikat für zentrale Domainvariablen an.
+Nginx in `nginx01` fordert eigene ACME-Zertifikate pro Domain an.
+`debian13_ingress_tls_site_keys` wählt die Dienste eines schrittweisen TLS-Rollouts;
+bereits zertifizierte Domains bleiben aktiv. Unzertifizierte Domains behalten
+ihre HTTP-Challenge-Routen, erhalten aber noch keinen HTTPS-Vhost.
 DNS muss auf die vorgesehene IPv4 zeigen; vorhandene AAAA-Records müssen zuvor
 mit der Hostkonfiguration abgeglichen werden. Zertifikatserneuerung lädt nur
-nach erfolgreichem `nginx -t` neu. Development und Monitoring sind per CIDR
-beschränkt; diese drei privaten Sites dürfen nicht aus der privaten Liste
-entfernt werden. PostgreSQL, InfluxDB und Incus haben keine öffentliche Freigabe.
+nach erfolgreichem `nginx -t` neu. Development und Monitoring sind standardmäßig
+per CIDR beschränkt; eine ausdrücklich freigegebene öffentliche Konfiguration
+ist in `deployment.md` beschrieben. PostgreSQL, InfluxDB und Incus haben keine
+öffentliche Freigabe.
 
 `hetzner_private_web_networks` ist unabhängig von der SSH-Anmeldung. Development
 und Monitoring bleiben auf die dort ausdrücklich erlaubten Netze beschränkt.

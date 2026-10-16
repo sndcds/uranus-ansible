@@ -15,6 +15,7 @@ flowchart TD
   Nginx -->|TLS| Mon[mon01: Icinga / InfluxDB / Grafana]
   Nginx -->|TLS| Nom[nom01: Nominatim]
   Nginx -->|TLS| Vers[vers01: VersaTiles]
+  Nginx -->|TLS| Analytics[plausible01: Plausible / PostgreSQL / ClickHouse]
   App -->|PostgreSQL TLS| DB[db01: Incus VM / PostgreSQL 17]
   Nom -->|PostgreSQL TLS| DB
   Mon -->|PostgreSQL TLS| DB
@@ -30,15 +31,17 @@ flowchart TD
 | nom01 | Container | 12 GiB | 6 | 200 GiB | 10.77.0.15 |
 | vers01 | Container | 2 GiB | 2 | 40 GiB | 10.77.0.16 |
 | nginx01 | Container | 1 GiB | 1 | 10 GiB | 10.77.0.17 |
+| plausible01 | Container | 8 GiB | 4 | 80 GiB | 10.77.0.18 |
 
-Die Konfiguration verwendet GiB/MiB, keine dezimalen GB. Insgesamt 43 GiB RAM,
-21 CPU-Zuweisungen und 610 GiB Diskbudget. Auf 12 Hardwarethreads besteht eine
-CPU-Überbuchung von 1,75; CPU-Anzahlen reservieren keine dedizierten Kerne.
+Die Konfiguration verwendet GiB/MiB, keine dezimalen GB. Insgesamt 51 GiB RAM,
+25 CPU-Zuweisungen und 690 GiB Diskbudget. Auf 12 Hardwarethreads besteht eine
+CPU-Überbuchung von rund 2,08; CPU-Anzahlen reservieren keine dedizierten Kerne.
 8 GiB Hostreserve sind zusätzlich eingeplant. Angaben zur Hardware stammen vom
 Betreiber; der reale Hostzustand wurde hier nicht inventarisiert.
 
-`type` kann außer für `nginx01` für jede Instanz `container` oder `virtual-machine` sein.
-Der Ingress benötigt einen Container für die Incus-Portproxies ohne NAT. Diese Wahl
+`type` kann außer für `nginx01` und `plausible01` für jede Instanz `container` oder `virtual-machine` sein.
+Der Ingress benötigt einen Container für die Incus-Portproxies ohne NAT; Analytics
+verwendet einen eigenen unprivilegierten Systemcontainer. Diese Wahl
 gilt bei der ersten Erstellung. Ein späterer Typwechsel ist eine Datenmigration,
 keine automatische Neuerstellung. Anwendungsrollen kennen nur ihre Dienstrolle;
 nur die Gastbasis berücksichtigt fehlende Hardware- und Zeitdienste im Container.

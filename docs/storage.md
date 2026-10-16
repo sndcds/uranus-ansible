@@ -41,8 +41,13 @@ Planungsbudgets, keine harten Quotas. `true` verlangt vorhandenes `prjquota` und
 setzt Rootdiskgrößen; Ansible aktiviert keine Dateisystemfeatures. Diese Wahl
 muss vor Produktion entschieden und mit einem realen Fülltest geprüft werden.
 
-Die sieben Budgets ergeben 610 GiB; eine 960-GB-NVMe hat etwa 894 GiB rohe
-Kapazität. Der Guard fordert für neue Instanzen volle Diskbudgets plus 160 GiB
+Mit der für Europa vorgesehenen 600-GiB-Disk von `db01` ergeben die acht Budgets
+1140 GiB; eine 960-GB-NVMe hat etwa 894 GiB rohe Kapazität. Diese Budgets sind
+damit überbucht; die Gäste dürfen sie nicht gleichzeitig ausschöpfen. Der
+[Europa-Einstieg](nominatim-europe.md) prüft deshalb zusätzlich den gemeinsamen
+freien physischen Importplatz. Die Änderung im Inventory allein erweitert keine
+bestehende Disk; dafür ist `scripts/resize_db01.py` vorbereitet.
+Der Guard fordert für neue Instanzen volle Diskbudgets plus 160 GiB
 Reserve. Images, Metadaten, Snapshots, SQL-Dumps, Exporte und restic benötigen
 zusätzlichen Platz. Ein Voll-Export aller Budgets kann neben den laufenden
 Instanzen nicht garantiert auf dieselbe NVMe passen. Der optionale Exportjob
