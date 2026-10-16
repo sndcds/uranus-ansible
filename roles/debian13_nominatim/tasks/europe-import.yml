@@ -1,0 +1,210 @@
+---
+- name: Inspect the previous project and service before starting an attempt
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ debian13_nominatim_europe_previous_project_dir }}/.env"
+    - /etc/systemd/system/nominatim.service
+  register: debian13_nominatim_europe_previous_files
+
+- name: Require a recoverable existing installation
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_europe_previous_files.results[0].stat.exists
+      - debian13_nominatim_europe_previous_files.results[1].stat.exists
+
+- name: Reserve the attempt directory exclusively against concurrent imports
+  ansible.builtin.command:
+    argv: [mkdir, --mode=0700, "{{ debian13_nominatim_europe_state_dir }}"]
+  changed_when: true
+
+- name: Record the original database identity and recovery locations
+  ansible.builtin.set_fact:
+    debian13_nominatim_europe_state:
+      completed: false
+      phase: preparing
+      database: "{{ nominatim_db_name }}"
+      previous_database: "{{ debian13_nominatim_europe_previous_database }}"
+      previous_oid: "{{ debian13_nominatim_database.query_result[0].oid }}"
+      previous_project: "{{ debian13_nominatim_europe_previous_project_dir }}"
+      backup: "{{ debian13_nominatim_europe_backup_dir }}/nominatim.dump"
+      project: "{{ nominatim_project_dir }}"
+      url: "{{ nominatim_data_url }}"
+
+- name: Persist the attempt before downloading or changing the database
+  ansible.builtin.copy:
+    dest: "{{ debian13_nominatim_europe_state_dir }}/manifest.json"
+    content: "{{ debian13_nominatim_europe_state | to_nice_json }}\n"
+    mode: '0600'
+
+- name: Prepare and replace the geocoder while preserving all recovery evidence
+  block:
+    - name: Fetch the provider checksum for the dated Europe extract
+      ansible.builtin.uri:
+        url: "{{ nominatim_data_url }}.md5"
+        return_content: true
+        status_code: 200
+      register: debian13_nominatim_europe_provider_checksum
+
+    - name: Validate the provider checksum response
+      ansible.builtin.assert:
+        that:
+          - debian13_nominatim_europe_provider_checksum.content.split() | length == 2
+          - debian13_nominatim_europe_provider_checksum.content.split()[0] is match('^[0-9a-f]{32}$')
+          - debian13_nominatim_europe_provider_checksum.content.split()[1] == nominatim_data_file | basename
+
+    - name: Download and verify Europe before pausing the existing search
+      ansible.builtin.get_url:
+        url: "{{ nominatim_data_url }}"
+        checksum: "md5:{{ debian13_nominatim_europe_provider_checksum.content.split()[0] }}"
+        dest: "{{ nominatim_data_file }}"
+        owner: nominatim
+        group: www-data
+        mode: '0640'
+        timeout: 120
+      async: 86400
+      poll: 10
+
+    - name: Compute SHA256 for the existing guarded import role
+      ansible.builtin.command:
+        argv: [sha256sum, "{{ nominatim_data_file }}"]
+      changed_when: false
+      async: 3600
+      poll: 10
+      register: debian13_nominatim_europe_sha256
+
+    - name: Retain the verified SHA256 and original database identity
+      ansible.builtin.set_fact:
+        debian13_nominatim_europe_verified_sha256: "{{ debian13_nominatim_europe_sha256.stdout.split()[0] }}"
+        debian13_nominatim_europe_state: >-
+          {{ debian13_nominatim_europe_state | combine({'sha256': debian13_nominatim_europe_sha256.stdout.split()[0]}) }}
+
+    - name: Inspect the dedicated database backup directory
+      ansible.builtin.stat:
+        path: "{{ debian13_nominatim_europe_backup_dir }}"
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+      register: debian13_nominatim_europe_backup
+
+    - name: Preserve any earlier backup rather than overwriting it
+      ansible.builtin.assert:
+        that: not debian13_nominatim_europe_backup.stat.exists
+        fail_msg: The Europe backup directory already exists; inspect it before retrying.
+
+    - name: Create a private directory for the pre-import database dump
+      ansible.builtin.file:
+        path: "{{ debian13_nominatim_europe_backup_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0700'
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+
+    - name: Back up the regional database before the maintenance window
+      ansible.builtin.command:
+        argv:
+          - pg_dump
+          - --host
+          - "{{ debian13_nominatim_db_socket }}"
+          - --port
+          - "{{ debian13_nominatim_db_port | string }}"
+          - --format=custom
+          - "--file={{ debian13_nominatim_europe_backup_dir }}/nominatim.dump.partial"
+          - "{{ nominatim_db_name }}"
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+      become: true
+      become_user: postgres
+      changed_when: true
+      async: 7200
+      poll: 10
+
+    - name: Check the dump archive directory before accepting the backup
+      ansible.builtin.command:
+        argv: [pg_restore, --list, "{{ debian13_nominatim_europe_backup_dir }}/nominatim.dump.partial"]
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+      become: true
+      become_user: postgres
+      changed_when: false
+      no_log: true
+
+    - name: Publish the successfully created database dump
+      ansible.builtin.command:
+        argv:
+          - mv
+          - --no-clobber
+          - "{{ debian13_nominatim_europe_backup_dir }}/nominatim.dump.partial"
+          - "{{ debian13_nominatim_europe_backup_dir }}/nominatim.dump"
+      delegate_to: "{{ nominatim_db_delegate_host }}"
+      become: true
+      become_user: postgres
+      changed_when: true
+
+    - name: Back up the original project including its private database environment
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ debian13_nominatim_europe_previous_project_dir }}/"
+        dest: "{{ debian13_nominatim_europe_state_dir }}/previous-project/"
+        mode: preserve
+        directory_mode: '0700'
+      no_log: true
+
+    - name: Back up the original service unit for recovery
+      ansible.builtin.copy:
+        remote_src: true
+        src: /etc/systemd/system/nominatim.service
+        dest: "{{ debian13_nominatim_europe_state_dir }}/previous.service"
+        mode: '0600'
+
+    - name: Recheck the database after the download and backup
+      ansible.builtin.include_tasks: preflight.yml
+
+    - name: Require the original database identity to be unchanged
+      ansible.builtin.assert:
+        that: debian13_nominatim_database.query_result[0].oid == debian13_nominatim_europe_state.previous_oid
+        fail_msg: The source database changed during preparation; preserve the backup and inspect.
+
+    - name: Recheck available capacity and the preservation name before stopping the API
+      ansible.builtin.include_tasks: europe-preflight.yml
+
+    - name: Record the start of the maintenance window
+      ansible.builtin.copy:
+        dest: "{{ debian13_nominatim_europe_state_dir }}/manifest.json"
+        content: "{{ debian13_nominatim_europe_state | combine({'phase': 'replacing'}) | to_nice_json }}\n"
+        mode: '0600'
+
+    - name: Stop both socket activation and the existing geocoder
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+      loop: [nominatim.socket, nominatim.service]
+
+    - name: Preserve the existing database and make its original name available
+      ansible.builtin.include_tasks: europe-preserve-database.yml
+
+    - name: Authorize exactly this initial import after preserving the regional database
+      ansible.builtin.set_fact:
+        debian13_nominatim_europe_import_authorized: true
+
+    - name: Install import and activate Europe using the normal guarded role
+      ansible.builtin.include_tasks: main.yml
+
+    - name: Verify Europe coverage before marking the replacement complete
+      ansible.builtin.include_tasks: europe-health.yml
+
+    - name: Close the first-import authorization and record completion
+      ansible.builtin.set_fact:
+        debian13_nominatim_europe_import_authorized: false
+        debian13_nominatim_europe_state: "{{ debian13_nominatim_europe_state | combine({'completed': true, 'phase': 'complete'}) }}"
+
+    - name: Persist the completed Europe import and its verified checksum
+      ansible.builtin.copy:
+        dest: "{{ debian13_nominatim_europe_state_dir }}/manifest.json"
+        content: "{{ debian13_nominatim_europe_state | to_nice_json }}\n"
+        mode: '0600'
+  rescue:
+    - name: Require inspection while preserving the old database backup and failed import
+      ansible.builtin.fail:
+        msg: >-
+          Europe preparation or import failed. All existing databases, backup files,
+          and the attempt manifest were retained. The original API remains available
+          if the maintenance window had not started. Otherwise inspect the manifest
+          and follow docs/nominatim-europe.md before resuming or restoring service.

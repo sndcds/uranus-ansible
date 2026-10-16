@@ -154,7 +154,7 @@ incus_instances:
     type: virtual-machine
     memory: 12288
     cpu: 4
-    disk: 150
+    disk: 600
     ip: 10.77.0.11
   - name: dev01
     role: dev

@@ -1,0 +1,65 @@
+---
+- name: Validate the dedicated Europe settings before any changes
+  ansible.builtin.assert:
+    that:
+      - nominatim_data_url is match('^https://download[.]geofabrik[.]de/europe-[0-9]{6}[.]osm[.]pbf$')
+      - nominatim_db_name is match('^[a-z][a-z0-9_]{0,62}$')
+      - debian13_nominatim_europe_previous_database is match('^[a-z][a-z0-9_]{0,62}$')
+      - debian13_nominatim_europe_previous_database != nominatim_db_name
+      - nominatim_project_dir != debian13_nominatim_europe_previous_project_dir
+      - nominatim_flatnode_file | length > 0
+      - not (hetzner_nominatim_initial_import | bool)
+    fail_msg: Use scripts/import_nominatim_europe.sh with its dedicated Europe profile.
+
+- name: Inspect a previous Europe attempt without overwriting its evidence
+  ansible.builtin.stat:
+    path: "{{ debian13_nominatim_europe_state_dir }}"
+  register: debian13_nominatim_europe_attempt
+
+- name: Inspect the Europe completion manifest
+  ansible.builtin.stat:
+    path: "{{ debian13_nominatim_europe_state_dir }}/manifest.json"
+  register: debian13_nominatim_europe_manifest
+
+- name: Read the protected Europe manifest
+  ansible.builtin.slurp:
+    src: "{{ debian13_nominatim_europe_state_dir }}/manifest.json"
+  register: debian13_nominatim_europe_manifest_data
+  when: debian13_nominatim_europe_manifest.stat.exists
+
+- name: Decode the previous Europe result
+  ansible.builtin.set_fact:
+    debian13_nominatim_europe_state: >-
+      {{ (debian13_nominatim_europe_manifest_data.content | b64decode | from_json)
+         if debian13_nominatim_europe_manifest.stat.exists else {} }}
+
+- name: Preserve interrupted attempts and reject a different extract
+  ansible.builtin.assert:
+    that:
+      - not debian13_nominatim_europe_attempt.stat.exists or (debian13_nominatim_europe_state.completed | default(false) | bool)
+      - not debian13_nominatim_europe_attempt.stat.exists or debian13_nominatim_europe_state.url | default('') == nominatim_data_url
+      - not debian13_nominatim_europe_attempt.stat.exists or debian13_nominatim_europe_state.project | default('') == nominatim_project_dir
+      - not debian13_nominatim_europe_attempt.stat.exists or debian13_nominatim_europe_state.database | default('') == nominatim_db_name
+    fail_msg: >-
+      A previous Europe attempt needs inspection. Data and backups are preserved.
+      Read {{ debian13_nominatim_europe_state_dir }}/manifest.json and docs/nominatim-europe.md;
+      do not delete or retry an unfinished import automatically.
+
+- name: Verify the current database before planning its replacement
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Verify space and the unused preservation name before a new import
+  ansible.builtin.include_tasks: europe-preflight.yml
+  when: not debian13_nominatim_europe_attempt.stat.exists
+
+- name: Finish the explicitly requested read-only preflight
+  ansible.builtin.meta: end_host
+  when: debian13_nominatim_europe_preflight_only | default(false) | bool
+
+- name: Import Europe once while retaining the previous installation
+  ansible.builtin.include_tasks: europe-import.yml
+  when: not debian13_nominatim_europe_attempt.stat.exists
+
+- name: Verify the completed Europe API also on repeated runs
+  ansible.builtin.include_tasks: europe-health.yml
+  when: debian13_nominatim_europe_attempt.stat.exists

@@ -10,7 +10,7 @@ import yaml
 from conftest import ROOT
 
 
-@pytest.mark.parametrize('source,target', [('mon01', 'db01'), ('dev01', 'mon01')])
+@pytest.mark.parametrize('source,target', [('mon01', 'db01'), ('dev01', 'mon01'), ('nom01', 'db01')])
 def test_delegated_guest_uses_its_own_address(tmp_path, source, target):
     inventory = yaml.safe_load((ROOT / 'environments/hetzner/inventory.yml').read_text())
     inventory['all']['children'].pop('incus_hosts')

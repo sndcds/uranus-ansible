@@ -1,0 +1,59 @@
+---
+- name: Inspect the reserved name for the old regional database
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: postgres
+    query: SELECT oid FROM pg_database WHERE datname = %(name)s
+    named_args: {name: "{{ debian13_nominatim_europe_previous_database }}"}
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_europe_previous_db
+
+- name: Require an unused preservation name
+  ansible.builtin.assert:
+    that: debian13_nominatim_europe_previous_db.rowcount == 0
+    fail_msg: The preservation database already exists; inspect it before proceeding.
+
+- name: Inspect available database guest geocoder and physical host space
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os,sys; s=os.statvfs(sys.argv[1]); print(s.f_bavail*s.f_frsize)"
+      - "{{ item.path }}"
+  delegate_to: "{{ item.host }}"
+  become: "{{ item.label != 'physical_host' }}"
+  changed_when: false
+  loop:
+    - {label: database, host: "{{ nominatim_db_delegate_host }}", path: "{{ debian13_nominatim_db_storage_path }}"}
+    - {label: geocoder, host: "{{ inventory_hostname }}", path: "{{ debian13_nominatim_europe_nom_storage_path }}"}
+    - {label: physical_host, host: "{{ debian13_nominatim_europe_host }}", path: "{{ debian13_nominatim_europe_host_storage_path }}"}
+  loop_control:
+    label: "{{ item.label }}"
+  register: debian13_nominatim_europe_capacity
+
+- name: Show the actual available storage before applying the import budgets
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.label }}: {{ (item.stdout | int / 1073741824) | round(1) }} GiB free
+  loop: "{{ debian13_nominatim_europe_capacity.results }}"
+  loop_control:
+    label: "{{ item.item.label }}"
+
+- name: Require guest space and a combined physical host budget before downloading or stopping services
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_europe_capacity.results[0].stdout | int >= (debian13_nominatim_db_min_free_gib | int) * 1073741824
+      - debian13_nominatim_europe_capacity.results[1].stdout | int >= (debian13_nominatim_europe_nom_min_free_gib | int) * 1073741824
+      - >-
+        debian13_nominatim_europe_capacity.results[2].stdout | int >=
+        ((debian13_nominatim_db_min_free_gib | int) + (debian13_nominatim_europe_nom_min_free_gib | int)
+         + (debian13_nominatim_europe_host_reserve_gib | int)) * 1073741824
+    fail_msg: >-
+      Insufficient Europe import capacity. The database filesystem needs
+      {{ debian13_nominatim_db_min_free_gib }} GiB free, nom01 needs
+      {{ debian13_nominatim_europe_nom_min_free_gib }} GiB free, and the physical host needs
+      their combined budget plus {{ debian13_nominatim_europe_host_reserve_gib }} GiB reserve.
+      No download, database rename or service stop has been performed.
