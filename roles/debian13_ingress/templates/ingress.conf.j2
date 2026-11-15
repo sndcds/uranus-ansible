@@ -14,7 +14,21 @@ map $remote_addr $uranus_plausible_client_ip {
 {% endfor %}
 }
 limit_req_zone $binary_remote_addr zone=uranus_general:10m rate=20r/s;
-limit_req_zone $binary_remote_addr zone=uranus_geocoder:10m rate=1r/s;
+# High Nominatim request volume is allowed. Limit only confirmed abusive sources,
+# using the trusted PROXY-protocol client address, never a client-supplied header.
+geo $remote_addr $uranus_nominatim_abusive_source {
+    default 0;
+{% for network in debian13_ingress_nominatim_abusive_networks | default([]) %}
+    {{ network }} 1;
+{% endfor %}
+}
+map $uranus_nominatim_abusive_source $uranus_nominatim_limit_key {
+    default "";
+    1 $binary_remote_addr;
+}
+# Empty keys are not accounted. A new zone name also permits a reload from the
+# previous configuration whose geocoder zone used $binary_remote_addr directly.
+limit_req_zone $uranus_nominatim_limit_key zone=uranus_geocoder_abuse:10m rate=1r/s;
 limit_req_zone $binary_remote_addr zone=uranus_tiles:10m rate=100r/s;
 # Application documents/API calls and parallel application/media downloads have
 # independent budgets. Media must not exhaust the next page/API request.
@@ -29,6 +43,8 @@ map $uri $uranus_media_key {
 limit_req_zone $uranus_application_key zone=uranus_application:10m rate=20r/s;
 limit_req_zone $uranus_application_key zone=uranus_dashboard:10m rate=20r/s;
 limit_req_zone $uranus_media_key zone=uranus_media:10m rate=100r/s;
+# Static documentation prefetches pages and assets in parallel.
+limit_req_zone $binary_remote_addr zone=uranus_documentation:10m rate=100r/s;
 server {
     listen 127.0.0.1:80 proxy_protocol default_server;
     server_name _;
@@ -51,7 +67,7 @@ server {
     location = /nominatim { return 302 /nominatim/status?format=json; }
     location = /nominatim/ { return 302 /nominatim/status?format=json; }
     location /nominatim/ {
-        limit_req zone=uranus_geocoder burst=10 nodelay;
+        limit_req zone=uranus_geocoder_abuse burst=10 nodelay;
         limit_req_status 429;
         proxy_pass https://{{ nominatim.upstream }}:443/;
         proxy_ssl_verify on;
@@ -139,12 +155,22 @@ server {
 {% endfor %}
     deny all;
 {% endif %}
+{% if site.key == 'documentation' %}
+    absolute_redirect off;
+    location = / { return 302 /docs/; }
+    location = /docs { return 301 /docs/$is_args$args; }
+    location / { return 404; }
+    location ^~ /docs/ {
+{% else %}
     location / {
-{% if site.key in ['dev_frontend', 'prod_frontend', 'dev_backend', 'prod_backend', 'dev_dashboard'] %}
+{% endif %}
+{% if site.key in ['documentation', 'manual'] %}
+        limit_req zone=uranus_documentation burst=200 nodelay;
+{% elif site.key in ['dev_frontend', 'prod_frontend', 'dev_backend', 'prod_backend', 'dev_dashboard'] %}
         limit_req zone={{ 'uranus_dashboard burst=40' if site.key == 'dev_dashboard' else 'uranus_application burst=10' }} nodelay;
         limit_req zone=uranus_media burst=200 nodelay;
 {% else %}
-        limit_req zone={{ 'uranus_geocoder' if site.key == 'nominatim' else 'uranus_tiles' if site.key == 'versatiles' else 'uranus_general' }} burst={{ 200 if site.key == 'versatiles' else 10 }} nodelay;
+        limit_req zone={{ 'uranus_geocoder_abuse' if site.key == 'nominatim' else 'uranus_tiles' if site.key == 'versatiles' else 'uranus_general' }} burst={{ 200 if site.key == 'versatiles' else 10 }} nodelay;
 {% endif %}
         limit_req_status 429;
         proxy_pass https://{{ site.upstream }}:443;

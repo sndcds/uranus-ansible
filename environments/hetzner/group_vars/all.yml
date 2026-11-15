@@ -6,6 +6,8 @@ frontend_repo_url: https://github.com/sndcds/kulturbytes-client.git
 frontend_runtime: node
 frontend_port: 3000
 dashboard_enabled: false
+documentation_enabled: false
+manual_enabled: false
 plausible_enabled: false
 plausible_legacy_proxy_addresses: []
 backend_repo_url: https://github.com/sndcds/uranus.git
@@ -101,6 +103,8 @@ hetzner_domains:
   dev_frontend: dev.example.invalid
   dev_backend: api.dev.example.invalid
   dev_dashboard: app.dev.example.invalid
+  documentation: uranus.example.invalid
+  manual: docs.example.invalid
   prod_frontend: example.invalid
   prod_backend: api.example.invalid
   icinga: monitoring.example.invalid

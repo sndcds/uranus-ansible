@@ -79,18 +79,11 @@
       ansible.builtin.include_tasks: prepare-database.yml
     - name: Import and index the verified extract without superuser privileges
       ansible.builtin.command:
-        argv:
-          - "{{ debian13_nominatim_venv }}/bin/nominatim"
-          - import
-          - --project-dir
-          - "{{ nominatim_project_dir }}"
-          - --continue
-          - import-from-file
-          - --osm-file
-          - "{{ nominatim_data_file }}"
-          - --threads
-          - "{{ debian13_nominatim_import_threads | string }}"
-          - --no-updates
+        argv: >-
+          {{ [debian13_nominatim_venv ~ '/bin/nominatim', 'import', '--project-dir',
+              nominatim_project_dir, '--continue', 'import-from-file', '--osm-file',
+              nominatim_data_file, '--threads', debian13_nominatim_import_threads | string]
+             + ([] if debian13_nominatim_import_updates | bool else ['--no-updates']) }}
       become: true
       become_user: nominatim
       async: "{{ debian13_nominatim_import_timeout }}"
@@ -169,3 +162,7 @@
 - name: Require Nominatim to report a working database
   ansible.builtin.assert:
     that: debian13_nominatim_health.json.status | int == 0
+
+- name: Configure explicitly requested automatic OSM updates
+  ansible.builtin.include_tasks: updates.yml
+  when: debian13_nominatim_updates_enabled | bool

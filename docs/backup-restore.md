@@ -7,10 +7,11 @@ einem isolierten System. Standard-Startwert zur Diskussion: tägliche logische
 Dumps (RPO maximal 24 Stunden); RTO muss mit den realen Nominatim-Daten gemessen
 werden. Der Betreiber muss diese Ziele ausdrücklich bestätigen.
 
-`debian13_backup` sichert täglich um 02:00 alle zugänglichen Nicht-Template-
-Datenbanken mit `pg_dump --format=custom` über lokalen Peer-Zugriff. Dumps werden
-zunächst als `.partial` geschrieben und nur nach Erfolg veröffentlicht. 14 Tage
-lokale Retention. Anwendungen erhalten private TAR-Sicherungen ihrer Releases,
+`debian13_backup` sichert täglich um 02:00 ausschließlich die unter `app_databases`
+konfigurierten Uranus-Datenbanken (`uranus_dev` und `uranus_prod`) mit
+`pg_dump --format=custom` über lokalen Peer-Zugriff. Dumps werden zunächst als
+`.partial` geschrieben und nur nach Erfolg veröffentlicht. 14 Tage lokale
+Retention. Anwendungen erhalten private TAR-Sicherungen ihrer Releases,
 Konfiguration und persistenten Bilder. Archive und Credentials bleiben restriktiv
 berechtigt; keine Passwörter werden in den DB-Backupskripttext eingebettet.
 

@@ -4,7 +4,7 @@ import yaml
 import pytest
 from conftest import ROOT
 
-@pytest.mark.parametrize('entrypoint',['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','versatiles','postgresql','import-databases'])
+@pytest.mark.parametrize('entrypoint',['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','nominatim-updates','versatiles','postgresql','import-databases'])
 @pytest.mark.parametrize('check_mode',[False,True])
 def test_default_gate_stops_locally_before_ssh(entrypoint,check_mode,tmp_path):
     inventory=tmp_path/'inventory.yml'
@@ -23,7 +23,7 @@ def test_every_supported_entrypoint_gates_before_connections(settings):
     assert settings['uranus_security_review_complete'] is False
     assert settings['hetzner_app_initial_import'] is False
     assert settings['hetzner_nominatim_initial_import'] is False
-    for name in ['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','versatiles','postgresql','import-databases']:
+    for name in ['provision','provision-plausible','plausible','plausible-ingress','plausible-migrate','monitoring-checks','configure','ingress','nginx','backend','frontend','dashboard','nominatim','nominatim-europe','nominatim-updates','versatiles','postgresql','import-databases']:
         for play in yaml.safe_load((ROOT/f'playbooks/{name}.yml').read_text()):
             if 'ansible.builtin.import_playbook' in play:
                 continue

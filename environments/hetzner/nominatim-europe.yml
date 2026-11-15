@@ -11,6 +11,8 @@ nominatim_languages: []
 hetzner_nominatim_initial_import: "{{ debian13_nominatim_europe_import_authorized | default(false) }}"
 debian13_nominatim_import_threads: 4
 debian13_nominatim_import_timeout: 604800
+debian13_nominatim_import_updates: true
+debian13_nominatim_replication_url: https://download.geofabrik.de/europe-updates
 debian13_nominatim_db_min_free_gib: 400
 debian13_nominatim_europe_nom_min_free_gib: 160
 debian13_nominatim_europe_nom_storage_path: /srv/nominatim

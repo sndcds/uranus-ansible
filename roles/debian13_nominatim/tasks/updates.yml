@@ -1,0 +1,83 @@
+---
+- name: Verify replication eligibility without changing the existing database
+  ansible.builtin.import_tasks: updates-preflight.yml
+
+- name: Install the pinned replication dependency in the existing environment
+  ansible.builtin.pip:
+    name: "osmium=={{ debian13_nominatim_osmium_version }}"
+    virtualenv: "{{ debian13_nominatim_venv }}"
+
+- name: Record the replication source and database identity before initialization
+  ansible.builtin.copy:
+    dest: "{{ nominatim_project_dir }}/.uranus-replication-source.json"
+    content: "{{ {'url': debian13_nominatim_replication_url, 'database_oid': debian13_nominatim_update_schema.query_result[0].database_oid} | to_nice_json }}\n"
+    owner: root
+    group: www-data
+    mode: '0640'
+
+- name: Keep manual replication commands on the same source as the timer
+  ansible.builtin.lineinfile:
+    path: "{{ nominatim_project_dir }}/.env"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    owner: nominatim
+    group: www-data
+    mode: '0640'
+  loop:
+    - {key: NOMINATIM_REPLICATION_URL, value: "{{ debian13_nominatim_replication_url }}"}
+    - {key: NOMINATIM_REPLICATION_UPDATE_INTERVAL, value: "{{ debian13_nominatim_replication_interval }}"}
+    - {key: NOMINATIM_REPLICATION_RECHECK_INTERVAL, value: "{{ debian13_nominatim_replication_recheck }}"}
+  no_log: true
+
+- name: Initialize replication once without reimporting OSM data
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/flock
+      - --nonblock
+      - "{{ nominatim_project_dir }}/.uranus-replication.lock"
+      - "{{ debian13_nominatim_venv }}/bin/nominatim"
+      - replication
+      - --project-dir
+      - "{{ nominatim_project_dir }}"
+      - --init
+  environment:
+    NOMINATIM_REPLICATION_URL: "{{ debian13_nominatim_replication_url }}"
+    NOMINATIM_REPLICATION_UPDATE_INTERVAL: "{{ debian13_nominatim_replication_interval | string }}"
+    NOMINATIM_REPLICATION_RECHECK_INTERVAL: "{{ debian13_nominatim_replication_recheck | string }}"
+  become: true
+  become_user: nominatim
+  changed_when: true
+  when: debian13_nominatim_update_status.query_result[0].sequence_id is none
+
+- name: Verify that replication initialization persisted its sequence
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: "{{ nominatim_db_name }}"
+    query: SELECT sequence_id FROM public.import_status
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_initialized_status
+
+- name: Require an initialized sequence before enabling the timer
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_initialized_status.rowcount == 1
+      - debian13_nominatim_initialized_status.query_result[0].sequence_id is not none
+
+- name: Install the replication service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [nominatim-updates.service, nominatim-updates.timer]
+
+- name: Enable future update runs without interrupting an active update
+  ansible.builtin.systemd_service:
+    name: nominatim-updates.timer
+    daemon_reload: true
+    enabled: true
+    state: started

@@ -35,6 +35,19 @@
   loop: "{{ hetzner_private_web_networks }}"
   changed_when: false
 
+- name: Validate confirmed abusive Nominatim source networks
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import ipaddress,sys;
+        network=ipaddress.ip_network(sys.argv[1],strict=True);
+        sys.exit(0 if network.prefixlen > 0 else 1)
+      - "{{ item }}"
+  loop: "{{ debian13_ingress_nominatim_abusive_networks }}"
+  changed_when: false
+
 - name: Validate exact trusted legacy analytics proxy addresses
   ansible.builtin.command:
     argv:
@@ -79,6 +92,20 @@
           'upstream': hostvars['dev01'].ansible_host, 'instance': 'dev01',
           'max_body_size': (hostvars['dev01'].backend_pluto_image_max_file_size | int + 1) * 1048576}] }}
   when: hostvars['dev01'].dashboard_enabled | default(false) | bool
+
+- name: Route the enabled documentation through the central ingress
+  ansible.builtin.set_fact:
+    debian13_ingress_sites: >-
+      {{ debian13_ingress_sites + [{'key': 'documentation', 'domain': hetzner_domains.documentation,
+          'upstream': hostvars['dev01'].ansible_host, 'instance': 'dev01'}] }}
+  when: hostvars['dev01'].documentation_enabled | default(false) | bool
+
+- name: Route the enabled kulturbytes manual through the central ingress
+  ansible.builtin.set_fact:
+    debian13_ingress_sites: >-
+      {{ debian13_ingress_sites + [{'key': 'manual', 'domain': hetzner_domains.manual,
+          'upstream': hostvars['dev01'].ansible_host, 'instance': 'dev01'}] }}
+  when: hostvars['dev01'].manual_enabled | default(false) | bool
 
 - name: Route the enabled native analytics service through the central ingress
   ansible.builtin.set_fact:

@@ -195,6 +195,32 @@ Vor der Aktivierung werden die Datenbankintegrität, die ASGI-Konfiguration
 und der API-Status geprüft. Versionswechsel bestehender Datenbanken benötigen
 gegebenenfalls eine gesicherte Migration gemäß der jeweiligen Nominatim-Version.
 
+Nominatim-Anfragen haben am öffentlichen Ingress standardmäßig kein Mengenlimit.
+Das frühere Limit von einer Anfrage pro Sekunde mit zehn zusätzlichen Anfragen
+als Burst entfällt für normale Clients, auch bei vielen parallelen oder
+dauerhaften Anfragen und gemeinsam genutzten IP-Adressen. Diese Regel gilt für
+die HTTPS-Domain und die optionale HTTP-IP-Testroute `/nominatim/`.
+
+Nur nachgewiesen missbräuchliche Quellen werden in
+`debian13_ingress_nominatim_abusive_networks` in der Deployment-Konfiguration
+eingetragen. Standard ist `[]`; einzelne IPv4-/IPv6-Adressen oder CIDRs sind
+zulässig. Möglichst einzelne Adressen (`/32` beziehungsweise `/128`) verwenden
+und ganze Netze nur aufnehmen, wenn der Missbrauch für das gesamte Netz belegt
+ist. Ungültige Netze und `/0` werden vor dem Rendern abgewiesen. Gelistete
+Quellen erhalten weiterhin ein Limit von einer Anfrage pro Sekunde und zehn
+zusätzlichen Anfragen als Burst, danach HTTP 429. Das Budget gilt pro echter
+Client-IP gemeinsam über beide Zugangswege. Fremde Quellen teilen dieses
+Budget nicht. Maßgeblich ist die vom Incus-PROXY-Protokoll bestätigte Adresse;
+gefälschte HTTP-Header beeinflussen die Zuordnung nicht.
+
+Dies ist eine manuell gepflegte Missbrauchsliste, keine automatische
+Botnetz-Erkennung. Hohe Request-Zahlen allein führen zu keinem Eintrag. nginx
+nimmt normale Clients über einen leeren Schlüssel vom
+[Anfragelimit](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_zone)
+aus. Die Änderung wird mit `playbooks/ingress.yml` nach der oben beschriebenen
+Produktionsfreigabe auf `nginx01` ausgerollt; ein Nominatim-Import ist dafür
+nicht erforderlich.
+
 Für Europa-Karten auf der provisionierten `vers01`:
 
 ```bash
@@ -444,6 +470,84 @@ Neue Medienverzeichnisse und bereits übertragene Dateien werden bei einem
 Rollback nicht gelöscht. Vor einer späteren öffentlichen Produktionsumschaltung
 neu hinzugekommene Originalbilder und Avatare aus dem weiterhin laufenden
 Quellsystem nachziehen; eine Dateikopie stoppt dessen laufende Uploads nicht.
+
+## Uranus-Dokumentation auf dev01
+
+Die vorhandenen Quellen liegen auf `dev01` unter
+`/opt/uranus/documentation/uranus-docs`; `docs/` enthält die Inhalte und `dist/`
+den statischen Blume-Build. Für `https://uranus.kulturbytes.de/docs/` muss der
+Build den Unterpfad enthalten. Im Quellverzeichnis als Benutzer `uranus` bauen:
+
+```bash
+./node_modules/.bin/blume build --base /docs
+```
+
+`documentation_enabled`, `documentation_domain` und `documentation_dist` stehen
+in `host_vars/dev01.yml`. In der lokalen `deployment.yml` zusätzlich
+`hetzner_domains.documentation: uranus.kulturbytes.de` setzen. Falls dort
+`debian13_ingress_tls_site_keys` explizit gesetzt ist, `documentation` ergänzen.
+Die DNS-Adresse muss wie bei den anderen Ingress-Domains auf den Hetzner-Host
+zeigen; nginx01 beschafft das eigene Zertifikat über den bestehenden ACME-Pfad.
+
+Nach erfolgreichem Build die nginx-Konfiguration gezielt ausrollen:
+
+```bash
+ansible-playbook playbooks/nginx.yml --limit dev01,nginx01 \
+  -e @environments/hetzner/deployment.yml \
+  --vault-id pki@.uranus-private/pki/vault-password \
+  --vault-id production@.uranus-private/secrets/vault-password
+```
+
+nginx01 leitet ausschließlich `/docs/` über verifiziertes internes TLS an dev01
+weiter. `/` und `/docs` führen nach `/docs/`; Unterseiten und Assets bleiben
+unter diesem Präfix. Der private nginx liefert nur Dateien aus `dist/` und
+antwortet für fehlende Dateien mit 404. Statische Seiten und Assets verwenden
+ein eigenes Anfragelimit von 100 Anfragen pro Sekunde mit einem Burst von 200,
+damit parallele Vorabrufe nicht das Anwendungsbudget verbrauchen. Nach dem Rollout die
+Startseite, eine API-Unterseite und deren CSS-/JavaScript-Dateien öffentlich
+prüfen. Ein erfolgreicher lokaler Test ersetzt diesen Live-Nachweis nicht.
+
+## kulturbytes-Handbuch auf dev01
+
+`https://docs.kulturbytes.de/` liefert das statische Handbuch aus
+[`sndcds/kulturbytes-manual`](https://github.com/sndcds/kulturbytes-manual).
+Die Quellen liegen unter `/opt/uranus/documentation/kulturbytes-manual`, der
+Build unter `dist/`. Die Domain verwendet den Hauptpfad `/`; Sprachversionen
+liegen unter `/en/`, `/de/` und `/da/`. Der Build benötigt kein `/docs`-Präfix.
+
+Nach Inhaltsänderungen auf dev01 aktualisieren und neu bauen:
+
+```bash
+sudo -iu uranus
+cd /opt/uranus/documentation/kulturbytes-manual
+git pull --ff-only
+npm ci --no-audit --no-fund
+npm run build
+```
+
+Nach einem erfolgreichen Build liefert nginx die neuen Dateien direkt aus.
+Ein eigener Handbuch-Dienst oder nginx-Neustart ist dafür nicht erforderlich.
+
+`manual_enabled`, `manual_domain` und `manual_dist` stehen in den Hostvariablen
+von dev01. Die lokale `deployment.yml` enthält
+`hetzner_domains.manual: docs.kulturbytes.de`; bei einer expliziten
+`debian13_ingress_tls_site_keys`-Liste muss `manual` enthalten sein. nginx01
+übernimmt öffentliches ACME/TLS und leitet über verifiziertes internes TLS an
+den separaten statischen Vhost auf dev01 weiter. Seiten und Assets verwenden
+das Dokumentationsbudget mit 100 Anfragen pro Sekunde und einem Burst von 200.
+
+Beim nginx-Rollout liest Ansible die Weiterleitungen aus
+`dist/blume-redirects.json`. So liefern `/` und bisherige Kapitel-URLs die im
+Repository vorgesehenen HTTP-308-Weiterleitungen auf die englischen Seiten,
+einschließlich Markdown-/MDX-Varianten. Query-Parameter bleiben erhalten.
+Wenn sich diese Weiterleitungen ändern, nach dem Build zusätzlich ausrollen:
+
+```bash
+ansible-playbook playbooks/nginx.yml --limit dev01,nginx01 \
+  -e @environments/hetzner/deployment.yml \
+  --vault-id pki@.uranus-private/pki/vault-password \
+  --vault-id production@.uranus-private/secrets/vault-password
+```
 
 ## Uranus-Dashboard auf dev01
 

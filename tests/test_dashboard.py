@@ -23,11 +23,32 @@ def dashboard_server(render, tmp_path, request):
     (public / 'assets').mkdir(parents=True)
     (public / 'index.html').write_text('<html><div id="app">dashboard fixture</div></html>')
     (public / 'assets/app.js').write_text('window.dashboardLoaded = true;')
+    documentation = tmp_path / 'documentation'
+    (documentation / '_astro').mkdir(parents=True)
+    (documentation / 'api-reference').mkdir()
+    (documentation / 'index.html').write_text('<html>Uranus Docs</html>')
+    (documentation / 'api-reference/index.html').write_text('<html>API reference</html>')
+    (documentation / '_astro/app.js').write_text('window.docsLoaded = true;')
+    manual = tmp_path / 'manual'
+    (manual / '_astro').mkdir(parents=True)
+    (manual / 'img').mkdir()
+    (manual / '_astro/app.js').write_text('window.manualLoaded = true;')
+    (manual / 'img/sign-up.png').write_text('manual image fixture')
+    for locale in ['en', 'de', 'da']:
+        (manual / locale / 'event-edit').mkdir(parents=True)
+        (manual / locale / 'index.html').write_text(f'<html>Manual {locale}</html>')
+        (manual / locale / 'event-edit/index.html').write_text(f'<html>Events {locale}</html>')
+    (manual / 'en/event-edit.md').write_text('# Events')
     text = render('roles/debian13_guest_web/templates/guest.conf.j2',
                   instance_role='dev', ansible_host='127.0.0.1',
                   frontend_runtime='node', frontend_port=backend,
                   frontend_domain='dev.example.test', backend_domain='api.dev.example.test',
                   backend_port=backend, dashboard_enabled=True,
+                  documentation_enabled=True, documentation_domain='docs.example.test',
+                  documentation_dist=str(documentation),
+                  manual_enabled=True, manual_domain='manual.example.test', manual_dist=str(manual),
+                  debian13_guest_web_manual_redirects=[{'from': path, 'to': '/en' + ('' if path == '/' else path), 'status': 308}
+                                    for path in ['/', '/event-edit', '/event-edit.md']],
                   dashboard_domain='app.dev.example.test', **getattr(request, 'param', {}))
     for before, after in {
         '127.0.0.1:443': f'127.0.0.1:{port}',
@@ -114,6 +135,35 @@ def test_dashboard_api_preserves_browser_origin_for_backend_csrf(dashboard_serve
 
 def test_dashboard_does_not_replace_existing_client(dashboard_server):
     assert dashboard_server('/', host='dev.example.test')[:2] == (200, 'existing Kulturbytes client')
+
+
+def test_documentation_serves_static_subpaths_and_preserves_queries(dashboard_server):
+    host = 'docs.example.test'
+    for path, expected in [('/docs/', '<html>Uranus Docs</html>'),
+                           ('/docs/api-reference/', '<html>API reference</html>'),
+                           ('/docs/_astro/app.js', 'window.docsLoaded = true;')]:
+        assert dashboard_server(path, host=host)[:2] == (200, expected)
+    assert dashboard_server('/', host=host)[2]['Location'] == '/docs/'
+    status, _, headers = dashboard_server('/docs?query=kept', host=host)
+    assert status == 301 and headers['Location'] == '/docs/?query=kept'
+    for path in ['/docs/missing', '/docs/_astro/missing.js', '/unrelated', '/docs/.git/config']:
+        assert dashboard_server(path, host=host)[0] == 404
+
+
+def test_manual_serves_each_language_and_shared_assets(dashboard_server):
+    host = 'manual.example.test'
+    for locale in ['en', 'de', 'da']:
+        assert dashboard_server(f'/{locale}/', host=host)[:2] == (200, f'<html>Manual {locale}</html>')
+        assert dashboard_server(f'/{locale}/event-edit/', host=host)[:2] == (200, f'<html>Events {locale}</html>')
+    assert dashboard_server('/_astro/app.js', host=host)[:2] == (200, 'window.manualLoaded = true;')
+    assert dashboard_server('/img/sign-up.png', host=host)[:2] == (200, 'manual image fixture')
+    for path, target in [('/', '/en'), ('/event-edit', '/en/event-edit'),
+                         ('/event-edit/', '/en/event-edit'), ('/event-edit.md', '/en/event-edit.md')]:
+        status, _, headers = dashboard_server(path + '?query=kept', host=host)
+        assert status == 308 and headers['Location'] == target + '?query=kept'
+    assert dashboard_server('/en?query=kept', host=host)[2]['Location'] == '/en/?query=kept'
+    for path in ['/de/missing', '/_astro/missing.js', '/.git/config', '/package.json']:
+        assert dashboard_server(path, host=host)[0] == 404
 
 
 @pytest.mark.parametrize('dashboard_server', [

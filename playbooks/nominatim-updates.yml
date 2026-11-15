@@ -1,0 +1,17 @@
+---
+- name: Configure automatic updates for an existing updateable Nominatim database
+  hosts: 'uranus_instances:&nom01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated geocoding settings and secrets
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Configure guarded Nominatim replication without importing or replacing data
+      ansible.builtin.import_role:
+        name: debian13_nominatim
+        tasks_from: updates

@@ -1,0 +1,131 @@
+---
+- name: Require explicit update configuration
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_updates_enabled | bool
+      - not ansible_check_mode
+      - debian13_nominatim_replication_url is match('^https://[A-Za-z0-9./_-]+$')
+      - debian13_nominatim_replication_interval | int >= 86400
+      - debian13_nominatim_replication_recheck | int >= 60
+      - debian13_nominatim_replication_threads | int >= 1
+      - nominatim_project_dir is match('^/[A-Za-z0-9_./-]+$')
+      - debian13_nominatim_venv is match('^/[A-Za-z0-9_./-]+$')
+    fail_msg: Explicitly enable updates with a daily replication source matching the imported extract; check mode cannot initialize replication.
+
+- name: Inspect retained raw data before any replication changes
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: "{{ nominatim_db_name }}"
+    query: >-
+      SELECT to_regclass('public.place')::text AS place,
+             to_regclass('public.planet_osm_nodes')::text AS nodes,
+             to_regclass('public.planet_osm_ways')::text AS ways,
+             to_regclass('public.planet_osm_rels')::text AS relations,
+             to_regclass('public.import_status')::text AS status,
+             (SELECT oid FROM pg_database WHERE datname = current_database())::bigint AS database_oid
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_update_schema
+
+- name: Preserve frozen databases and require a separately planned reimport
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_update_schema.query_result[0].place is not none
+      - debian13_nominatim_update_schema.query_result[0].ways is not none
+      - debian13_nominatim_update_schema.query_result[0].relations is not none
+      - debian13_nominatim_update_schema.query_result[0].status is not none
+      - nominatim_flatnode_file | default('') | length > 0 or debian13_nominatim_update_schema.query_result[0].nodes is not none
+    fail_msg: >-
+      This database lacks the raw data required for replication (--no-updates/freeze).
+      Preserve the working search database and plan a new import with updates enabled.
+      No packages, files, replication state or timers have been changed.
+
+- name: Inspect indexing and existing replication sequence
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: "{{ nominatim_db_name }}"
+    query: SELECT indexed, sequence_id FROM public.import_status
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_update_status
+
+- name: Require a finished import before configuring updates
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_update_status.rowcount == 1
+      - debian13_nominatim_update_status.query_result[0].indexed | bool
+    fail_msg: An import or update is incomplete; inspect it before changing the update configuration.
+
+- name: Inspect the configured flatnode file
+  ansible.builtin.stat:
+    path: "{{ nominatim_flatnode_file }}"
+  register: debian13_nominatim_update_flatnode
+  when: nominatim_flatnode_file | default('') | length > 0
+
+- name: Require the original flatnode file for replication
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_update_flatnode.stat.exists
+      - debian13_nominatim_update_flatnode.stat.isreg
+      - debian13_nominatim_update_flatnode.stat.size > 0
+    fail_msg: The configured flatnode file is missing or empty; do not initialize replication.
+  when: nominatim_flatnode_file | default('') | length > 0
+
+- name: Read the existing project connection settings
+  ansible.builtin.slurp:
+    src: "{{ nominatim_project_dir }}/.env"
+  register: debian13_nominatim_update_environment
+  no_log: true
+
+- name: Require the project to target the inspected database and flatnode file
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('NOMINATIM_DATABASE_DSN=pgsql:host=' ~
+         (hostvars[nominatim_db_delegate_host].ansible_host | default(nominatim_db_delegate_host)) ~
+         ';port=' ~ (debian13_nominatim_db_port | string) ~
+         ';sslmode=verify-full;sslrootcert=/etc/ssl/certs/uranus-ca.pem;dbname=' ~
+         nominatim_db_name ~ ';user=' ~ nominatim_db_user ~ ';password=' ~ nominatim_db_password)
+        == ((debian13_nominatim_update_environment.content | b64decode) |
+            regex_findall('(?m)^(?:export\s+)?\s*NOMINATIM_DATABASE_DSN\s*=.*$') | first | default(''))
+      - >-
+        ((debian13_nominatim_update_environment.content | b64decode) |
+         regex_findall('(?m)^(?:export\s+)?\s*NOMINATIM_DATABASE_DSN\s*=.*$') | length) == 1
+      - >-
+        ((debian13_nominatim_update_environment.content | b64decode) |
+         regex_findall('(?m)^(?:export\s+)?\s*NOMINATIM_FLATNODE_FILE\s*=.*$')) ==
+        (['NOMINATIM_FLATNODE_FILE=' ~ nominatim_flatnode_file]
+         if nominatim_flatnode_file | default('') else [])
+    fail_msg: The project settings differ from the inspected database or flatnode file; reconcile them first.
+  no_log: true
+
+- name: Inspect the recorded replication source
+  ansible.builtin.stat:
+    path: "{{ nominatim_project_dir }}/.uranus-replication-source.json"
+  register: debian13_nominatim_update_source_file
+
+- name: Require a known source for an existing replication sequence
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_update_status.query_result[0].sequence_id is none or debian13_nominatim_update_source_file.stat.exists
+    fail_msg: Existing replication has no managed source record; inspect its URL and sequence before adopting it.
+
+- name: Read the recorded replication identity
+  ansible.builtin.slurp:
+    src: "{{ nominatim_project_dir }}/.uranus-replication-source.json"
+  register: debian13_nominatim_update_source
+  when: debian13_nominatim_update_source_file.stat.exists
+
+- name: Prevent source changes and reuse of a replaced database
+  ansible.builtin.assert:
+    that:
+      - >-
+        (debian13_nominatim_update_source.content | b64decode | from_json) ==
+        {'url': debian13_nominatim_replication_url,
+         'database_oid': debian13_nominatim_update_schema.query_result[0].database_oid}
+    fail_msg: The replication URL or database identity changed; stop updates and plan an explicit reinitialization.
+  when: debian13_nominatim_update_source_file.stat.exists

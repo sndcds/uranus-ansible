@@ -12,6 +12,8 @@ vault_monitoring_admin_password: REPLACE_WITH_GENERATED_SECRET
 vault_monitoring_api_password: REPLACE_WITH_GENERATED_SECRET
 vault_monitoring_grafana_admin_password: REPLACE_WITH_GENERATED_SECRET
 vault_backend_contact_secret: REPLACE_WITH_GENERATED_SECRET
+# Existing SMTP account password for dev01; obtain it from the mail provider.
+vault_backend_smtp_password_dev: REPLACE_WITH_SMTP_PASSWORD
 # Optional off-host exports; initialize the repository separately.
 vault_restic_repository: sftp:backup-user@backup.example.invalid:/srv/uranus
 vault_restic_password: REPLACE_WITH_GENERATED_SECRET

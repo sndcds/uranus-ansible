@@ -1,5 +1,290 @@
 # Tests und Nachweisgrenzen
 
+## kulturbytes-Handbuch aktiviert am 30. Oktober 2026
+
+`https://docs.kulturbytes.de/` ist über nginx01 mit eigenem
+Let's-Encrypt-Zertifikat aktiv. Auf dev01 wurde das Repository
+`sndcds/kulturbytes-manual`, Branch `main`, Revision
+`b79ebee670d0d0357a8332f6713bde9937c0b827`, als Benutzer `uranus` nach
+`/opt/uranus/documentation/kulturbytes-manual` geklont. `npm ci` installierte
+die gesperrten Abhängigkeiten einschließlich Blume 2.2.1; `npm run build`
+erzeugte erfolgreich 48 statische Seiten in `dist/`.
+
+`playbooks/nginx.yml --limit dev01,nginx01` bestand mit `unreachable=0` und
+`failed=0` auf beiden Hosts: dev01 meldete `ok=43`, `changed=2`, nginx01
+`ok=91`, `changed=5`. Nur für den neuen Service-Key `manual` wurde ein
+Zertifikat angefordert. Es ist bis zum 28. Januar 2027 gültig;
+`certbot.timer` und der vorhandene Renewal-Hook sind aktiv. nginx01 prüft
+weiterhin CA und Knotennamen der internen TLS-Verbindung nach dev01.
+
+Der private Vhost liefert den statischen Build am Domain-Hauptpfad aus.
+Ansible übernahm 43 Weiterleitungen aus `dist/blume-redirects.json`, darunter
+die Root-Weiterleitung nach `/en` und bisherige Kapitel-URLs einschließlich
+Markdown-/MDX-Varianten. Die HTTP-308-Weiterleitungen und die automatischen
+Verzeichnisweiterleitungen erhalten Query-Parameter und enthalten keine
+internen Hostadressen. Fehlende Kapitel, Assets, `package.json` und
+`/.git/config` lieferten HTTP 404.
+
+Öffentliche IPv4- und IPv6-Aufrufe vom Hetzner-Host endeten jeweils mit HTTP
+200 auf `/en/`. Englische, deutsche und dänische Startseiten und Kapitel,
+die neuen deutschen Portal-/Team-Seiten, Suchindex, Screenshot und zwölf
+eingebundene Assets waren erreichbar. Weitere 80 Abrufe mit bis zu 16
+parallelen Verbindungen lieferten ausschließlich HTTP 200, keine HTTP 429.
+Ein externer Chromium-Aufruf bestätigte alle drei Sprachversionen, den
+Sprachwechsel am gleichen Kapitel, deutsche Suchtreffer, den geladenen
+Registrierungs-Screenshot und eine Mobilansicht ohne horizontales Überlaufen.
+Dabei traten weder JavaScriptfehler noch fehlgeschlagene Browseranfragen auf.
+Die bestehenden Uranus-Docs und das Dashboard lieferten weiterhin HTTP 200.
+
+Vor dem Rollout bestanden 59 lokale nginx-/Rollback-Tests, Repository-Policy,
+Syntaxprüfung aller Playbooks und ansible-lint im Production-Profil für die
+betroffenen Rollen. Nach der vom Linter verlangten Variablenumbenennung
+bestand die gezielte Handbuchprüfung erneut.
+
+Die vorherigen nginx-Konfigurationen liegen geschützt auf dev01 unter
+`/var/backups/kulturbytes-manual-20261030-FTc4dl/` und auf nginx01 unter
+`/var/backups/kulturbytes-manual-20261030-3dbyAS/`. Build-, Rollout- und
+Prüfprotokolle liegen lokal unter `.uranus-private/manual-rollout/`.
+
+## Uranus-Dokumentation unter `/docs` aktiviert am 30. Oktober 2026
+
+Nach DNS-Einrichtung und ausdrücklicher Freigabe wurde
+`https://uranus.kulturbytes.de/docs/` auf nginx01 aktiviert. Die Quellen auf
+dev01 liegen unter `/opt/uranus/documentation/uranus-docs`, Revision `d628565`.
+Der vorhandene Stand wurde als Benutzer `uranus` mit Blume 1.7.3 und
+`./node_modules/.bin/blume build --base /docs` erfolgreich neu gebaut
+(26 Seiten). nginx liefert ausschließlich den statischen Inhalt aus `dist/`.
+Startseite und API-Referenz enthalten die korrekten `/docs`-Präfixe; der
+nginx-Benutzer kann die Dateien lesen.
+
+`playbooks/nginx.yml --limit dev01,nginx01` bestand auf dev01 mit
+`ok=40`, `changed=2`, `failed=0`, auf nginx01 mit `ok=90`, `changed=5`,
+`failed=0`; beide Hosts meldeten `unreachable=0`. Nur für `documentation`
+wurde ein neues Let's-Encrypt-Zertifikat angefordert. Es ist für
+`uranus.kulturbytes.de` ausgestellt und bis zum 28. Januar 2027 gültig;
+`certbot.timer` und der bestehende nginx-Renewal-Hook sind aktiv.
+
+Schnelle Abrufe mehrerer API-Seiten trafen zunächst das gemeinsame
+Anwendungslimit. Für statische Docs-Seiten und Assets wurde deshalb ein
+eigenes Limit mit 100 Anfragen pro Sekunde und einem Burst von 200 ergänzt.
+Die gezielte Aktivierung erfolgte mit Sicherung, erfolgreichem `nginx -t`
+und Reload. Die aktive Ingress-Konfiguration stimmt exakt mit der gerenderten
+Ansible-Vorlage überein.
+
+Öffentliche HTTPS-Aufrufe über IPv4 und IPv6 lieferten vom Hetzner-Host HTTP
+200. Startseite, API-Referenz, Suchindex, OpenAPI-JSON und zehn eingebundene
+Assets wurden erfolgreich abgerufen; fehlende Seiten und Dateien lieferten
+404. Weiterleitungen für `/`, `/docs` und API-Unterseiten bleiben unter dem
+öffentlichen Pfad und erhalten Query-Parameter. Weitere 80 Abrufe mit bis zu
+16 parallelen Verbindungen lieferten ausschließlich HTTP 200, keine HTTP 429.
+Ein externer Chromium-Aufruf bestätigte Navigation, Suche mit `/docs/`-Links,
+den direkten Aufruf von `/docs/api-reference/events/get-events` und eine
+Mobilansicht ohne horizontales Überlaufen. Dabei traten weder JavaScriptfehler
+noch fehlgeschlagene Browseranfragen auf. Das bestehende Dev-Frontend lieferte
+weiterhin seine Weiterleitung mit HTTP 302, das Dashboard HTTP 200.
+
+Die lokalen nginx-/Frontend-Rollback-/Template-Prüfungen bestanden vor dem
+Rollout über Gesamtlauf und gezielten Wiederholungslauf (64 Testfälle).
+Nach der Limit-Anpassung bestanden vier gezielte Tests für Docs-Vorabrufe,
+Weiterleitungen und unveränderte Anwendungslimits. Weitere 44 Policy-,
+Zertifikats- und Inventory-Tests, Repository-Policy, Syntaxprüfung aller
+Playbooks und ansible-lint im Production-Profil bestanden ebenfalls.
+
+Sicherungen liegen geschützt auf dev01 unter
+`/var/backups/uranus-documentation-20261030-k1bdb3/` (nginx und vorheriger Build)
+und auf nginx01 unter `/var/backups/uranus-documentation-20261030-m1Ctpd/`
+(nginx vor dem Rollout und vor der Limit-Korrektur). Build-, Rollout- und
+Prüfprotokolle liegen lokal unter `.uranus-private/documentation-rollout/`.
+
+## Nominatim ohne pauschales Request-Limit am 28. Oktober 2026
+
+Nach ausdrücklicher Produktionsfreigabe wurde `playbooks/ingress.yml` mit
+`--limit nginx01` und `debian13_ingress_prepare_only=true` ausgeführt. Bestehende
+TLS-Zertifikate und zertifizierte Routen blieben erhalten. Ansible meldete
+`ok=72`, `changed=2`, `unreachable=0`, `failed=0`: Die Ingress-Konfiguration wurde
+aktualisiert und nginx nach erfolgreichem `nginx -t` neu gestartet. Alle übrigen
+geprüften Konfigurationen waren bereits aktuell.
+
+Die vorherige Konfiguration und die Ausgabe von `nginx -T` liegen geschützt
+auf `nginx01` unter
+`/var/backups/uranus-nominatim-rate-limit-20261028T163945Z-hABuI9/`.
+Das pauschale Nominatim-Limit von einer Anfrage pro Sekunde gilt jetzt nur für
+explizit eingetragene Missbrauchsquellen. Die Liste
+`debian13_ingress_nominatim_abusive_networks` ist beim Rollout leer; es gibt
+keine automatische Botnetz-Erkennung und keine Drosselung allein wegen hoher
+Request-Zahlen.
+
+Die öffentliche IPv4-Prüfung verwendete je 40 Suchanfragen nach Flensburg über
+die HTTPS-Domain und die HTTP-IP-Testroute `/nominatim/search`, mit jeweils bis
+zu acht parallelen Verbindungen. Alle 80 Anfragen lieferten HTTP 200 und gültige
+Suchergebnisse, keine HTTP 429. Die beiden Statusprüfungen meldeten HTTP 200 und
+Nominatim-Status `0`. Die HTTPS-Prüfung validierte das Zertifikat für
+`nominatim.oklabflensburg.de`. Die öffentliche DNS-Auflösung bestätigt
+`94.130.236.38` und `2a01:4f8:13b:1405::2`; auch der anschließende normale
+HTTPS-Domainaufruf der Status-API war mit HTTP 200 und Status `0` erfolgreich.
+
+Die zusätzliche Live-IPv6-Prüfung ist noch offen: Der Controller hat keine
+IPv6-Route; beim anschließenden SSH-Zugriff verweigerte der SSH-Agent weitere
+Smartcard-Signaturen (`agent refused operation`). Der produktive Rollout war zu
+diesem Zeitpunkt bereits erfolgreich abgeschlossen.
+
+Vor dem Rollout bestanden 51 lokale Tests mit echtem nginx, einschließlich
+IPv4-/IPv6-Last, Domain- und IP-Routen, gezielter Drosselung und gefälschter
+HTTP-Header. Repository-Policy, Syntaxprüfung sämtlicher Playbooks und
+ansible-lint im Production-Profil für die geänderte Ingress-Konfiguration
+bestanden ebenfalls.
+
+## SMTP-Versand von dev01 am 20. Oktober 2026
+
+Der Betreiber hat auf `dev01` den SMTP-Zugang in `/etc/uranus/config.json`
+eingerichtet und den Backend-Dienst danach neu gestartet. Der aktive Zugang
+verwendet `smtp.porkbun.com:587` und `hello@kulturbytes.de` als Login und Absender.
+Die Konfiguration bleibt mit `uranus:uranus` und Modus `0600` geschützt.
+
+Eine ausdrücklich freigegebene Testmail wurde an den vom Betreiber genannten
+Empfänger versendet. Der Test importierte die tatsächliche Mailfunktion
+`app.SendEmailWithTimeout` aus dem laufenden Release
+`d06a615b4b4c8454f5298902fabcddd1d7985834`. Er lief als Dienstbenutzer `uranus`
+mit dem gleichen Zertifikatsspeicher wie das Backend. Das Backend-Paket wurde
+mit dem vorhandenen Go-1.25.8-Toolchain und unveränderten Moduldateien gebaut.
+
+Der SMTP-Server nahm die Nachricht am **20.10.2026 um 15:16:29 Uhr MESZ** an.
+Der Versandprozess endete mit Exit 0. Ein exklusiv angelegter Versuchsnachweis
+verhindert einen erneuten Versand durch den Testhelfer. Ergebnis und Betreff
+stehen geschützt unter `/var/lib/uranus/mail-verification-20261020/result.json`
+auf `dev01`. Die Bestätigung über den Eingang im Empfängerpostfach steht noch aus.
+
+Die funktionierenden Werte sind in `host_vars/dev01.yml` hinterlegt. Das Passwort
+wurde aus der geprüften Konfiguration über SSH in den bestehenden lokalen
+Ansible-Vault übernommen und unter `vault_backend_smtp_password_dev`
+verschlüsselt gespeichert. Alle übrigen Vault-Werte wurden nach Ver- und
+Entschlüsselung auf unveränderten Inhalt geprüft; die vorherige verschlüsselte
+Fassung bleibt privat gesichert. Der Klartext wurde nicht in lokale Dateien
+geschrieben oder ausgegeben. `prod01` verwendet weiterhin seine bisherige
+SMTP-Konfiguration.
+
+Ein lokaler Ansible-Lauf prüfte die tatsächlich aufgelösten SMTP-Werte und die
+gerenderte Backend-JSON-Vorlage für `dev01` und `prod01` erfolgreich
+(`ok=3`, `changed=0`, `failed=0` je Host). `ansible-lint` bestand im
+Production-Profil für 19 Dateien; die Repository-Policy bestand für 185
+Quelldateien. Nach dem Test ist der Backend-Dienst aktiv und die öffentliche
+Dev-API liefert HTTP 200. Eine erneute Backend-Aktivierung war nicht erforderlich.
+
+## Mail-Konfiguration auf dev01 am 19. Oktober 2026
+
+Die lesende Prüfung von `/etc/uranus/config.json` auf `dev01` ergab leere
+SMTP-Host-, Login- und Passwortwerte. Postfix ist nicht eingerichtet. Das
+laufende Backend verwendet selbst `net/smtp` mit den `auth_smtp_*`-Werten;
+ein lokaler Postfix-Dienst ist für diesen Versandweg nicht erforderlich.
+
+Im tatsächlich laufenden Backend-Release
+`d06a615b4b4c8454f5298902fabcddd1d7985834` erwartet `app.Config.AuthReplyEmail`
+den JSON-Schlüssel `auth_reply_email`. Die bisherige Ansible-Vorlage schrieb
+`auth_reply_email_address`, wodurch das Backend keinen Absender einlas.
+Die Vorlage verwendet jetzt den richtigen Schlüssel und serialisiert die
+SMTP-Textfelder mit `to_json`, damit Sonderzeichen in Zugangsdaten erhalten
+bleiben und die Konfiguration gültiges JSON bleibt.
+
+Auf `dev01` wurde ausschließlich der bisherige Absender in den tatsächlich
+gelesenen Schlüssel übernommen. Der atomare Austausch bewahrt übrige Werte,
+Eigentümer und Dateimodus. Die geschützte ursprüngliche Konfiguration liegt
+unter `/var/backups/uranus-mail-20261019T102429Z/config.json`. Der Backend-Dienst
+wurde neu gestartet und antwortet lokal sowie über
+`https://api.dev.kulturbytes.de/api/events?limit=1` mit HTTP 200.
+
+Eine lokale Vorlagenprüfung bestätigte gültiges JSON, den vom Backend gelesenen
+Absenderschlüssel sowie verlustfreie SMTP-Passwörter mit Anführungszeichen,
+Backslash und Zeilenumbruch als Testdaten. `ansible-lint` bestand im
+Production-Profil für 18 betroffene Dateien; `git diff --check` war erfolgreich.
+
+**Bei dieser Prüfung vom 19.10. war der Mailversand noch nicht nachgewiesen.**
+Es fehlten SMTP-Server, Benutzername und Passwort. Eine einzelne Testmail an den
+vom Betreiber genannten Empfänger war freigegeben, wurde zu diesem Zeitpunkt
+aber noch nicht gesendet.
+Ein HTTP-200-Backend-Check ersetzt keinen SMTP- oder Zustellnachweis.
+
+## Vorbereitung automatischer Nominatim-Updates am 18. Oktober 2026
+
+Die lesende Prüfung der laufenden Europa-Datenbank bestätigt eine eingefrorene
+Installation: `place`, `planet_osm_nodes`, `planet_osm_ways` und
+`planet_osm_rels` fehlen, ebenso die ursprüngliche Flatnode-Datei. Der Import
+ist indiziert, hat den Datenstand `2026-10-15T20:20:56Z` und keine
+Replikationssequenz. Die Ursache ist der bereits in der ursprünglichen
+Importrolle fest enthaltene Schalter `--no-updates`, der beim Europa-Import
+übernommen wurde. Die laufende Suche wurde bei dieser Untersuchung nicht geändert.
+
+Die lokale Vorbereitung behält bei neuen Importen standardmäßig die
+Update-Daten. Ein eigener Update-Einstieg prüft den Datenbestand vor jeder
+Änderung, initialisiert eine passende Quelle einmalig und richtet danach einen
+systemd-Service samt Timer für tägliche Geofabrik-Europa-Diffs ein. Ein
+Quellnachweis bindet die Konfiguration an URL und Datenbank-OID.
+
+Die lokalen Prüfungen bestanden:
+
+- 56 Tests für Nominatim, die erste Update-Vorbereitung und die Deployment-Gates.
+- Anschließend 22 Tests für die ergänzten Update-Schutzprüfungen und den
+  bestehenden Europa-Ablauf. Abgedeckt sind eingefrorene/unfertige Datenbanken,
+  fehlende Flatnodes oder Nodes, fremde beziehungsweise doppelte Verbindungen,
+  eine abweichende Flatnode-Konfiguration, unbekannte/geänderte Quellen und
+  Datenbank-OIDs sowie zulässige neue und bereits initialisierte Datenbestände.
+  Die PostgreSQL-Tests erhalten Daten, OIDs, Projektkonfiguration und Quellnachweis.
+  Der Importbefehl wurde mit einem inerten Ersatzprogramm für beide Einstellungen
+  ausgeführt; die erzeugten Units bestanden `systemd-analyze verify`.
+- Syntaxprüfung aller 19 Playbooks, Repository-Policy für 185 Quelldateien und
+  `ansible-lint` im Production-Profil für die 22 betroffenen Dateien.
+
+Es wurde keine Produktiv-Replikation initialisiert, kein Timer installiert und
+kein neuer Import gestartet. Ein kompletter Replikationslauf mit echten Diffs
+ist noch nicht nachgewiesen und benötigt einen neuen updatefähigen Datenbestand.
+Auf dem bisherigen physischen `/data`-Dateisystem sind nur rund 163 GiB frei;
+der zusätzliche Speicherbedarf muss vor einem Neuimport eingeplant werden.
+Die Anleitung steht in [Europa und automatische Updates](nominatim-europe.md#automatische-osm-updates).
+
+## Europa-Import und Nominatim-HTTPS am 18. Oktober 2026
+
+Der vom Betreiber gestartete Europa-Import wurde um 12:01 Uhr MESZ nach rund
+41 Stunden 47 Minuten abgeschlossen. Das Manifest enthält `completed: true`,
+PostgreSQL meldet `import_status.indexed = true`, und Nominatim 5.3.3 liefert
+API-Status 0. Die neue Datenbank umfasst rund 171 GiB; die bisherige Datenbank
+`nominatim_sh_20261016` bleibt mit rund 1 GiB erhalten. Der Datenstand des
+Auszugs ist der 15. Oktober 2026.
+
+Nach ausdrücklicher Freigabe wurde die vom Betreiber bestätigte Domain
+`nominatim.oklabflensburg.de` auf Gast-nginx, öffentlichem Ingress und Monitoring
+aktiviert. A und AAAA zeigen auf `94.130.236.38` und
+`2a01:4f8:13b:1405::2`. Die lokale Deployment-Datei enthält den korrigierten
+Namen und nimmt `nominatim` in die bestehende TLS-Auswahl auf.
+
+Der auf `nom01` und `nginx01` begrenzte Lauf von `playbooks/nginx.yml` bestand
+mit `ok=38`, `changed=2`, `failed=0` auf `nom01` und `ok=89`, `changed=5`,
+`failed=0` auf `nginx01`. Nur für Nominatim wurde ein neues öffentliches
+Zertifikat angefordert. Das Let's-Encrypt-Zertifikat deckt die richtige Domain
+ab und gilt bis 16. Januar 2027. `nginx -t`, Hostnamen- und Ablaufprüfung sind
+erfolgreich; `certbot.timer` ist aktiviert und aktiv. Der Monitoring-Lauf
+bestand mit `ok=36`, `changed=2`, `failed=0`; die Icinga-Konfiguration wurde vor
+dem Neustart validiert.
+
+Auf `nom01` fehlte bisher der für die delegierten Prüfungen benötigte
+Icinga-Agent. Er wurde mit der vorhandenen Rolle und den bestehenden
+Deployment-Gates ergänzt (`ok=28`, `changed=16`, `failed=0`). Der Master
+bestätigt die authentifizierte Verbindung von `nom01` und die unveränderte
+gültige CA. Der HTTPS-Check als Benutzer `nagios` liefert HTTP 200 und Exit 0;
+Agent, Nominatim-Service, Socket und Gast-nginx sind aktiv.
+
+Öffentliches HTTPS liefert mit System-CA- und Hostnamenprüfung API-Status 0 und
+Suchergebnisse für Paris, Madrid, Berlin und Flensburg. IPv6-Status und eine
+Paris-Suche wurden vom Hetzner-Host aus erfolgreich geprüft; der Arbeitsplatz
+prüft den öffentlichen Zugang über IPv4. HTTP leitet mit 301 auf HTTPS weiter.
+Der bestehende IP-Zugang sowie Kulturbytes-Dev, Dev-API, Entwicklungsdashboard,
+VersaTiles und Plausible antworten nach dem Rollout weiterhin mit HTTP 200.
+
+Vor der Umstellung wurden die bestehenden Konfigurationen auf `nom01`,
+`nginx01` und `mon01` unter `/var/backups/uranus-nominatim-domain-*.tar.gz`
+gesichert. 13 lokale nginx-/Zertifikatstests und die Syntaxprüfungen der beiden
+Rollout-Playbooks bestanden. Ein erster Rolloutversuch scheiterte ohne
+Serveränderungen an der lokalen `/tmp`-Quota; der erfolgreiche Lauf verwendete
+eine geschützte temporäre Ablage unter `.uranus-private/`.
+
 ## Vollständiger lokaler Prüfstand vor PR-Aktualisierung, 16.10.2026
 
 Der aktuelle Gesamtstand besteht `make check`: **380 Tests**, Repository-Policy

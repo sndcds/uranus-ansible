@@ -1,11 +1,20 @@
 # Europa in Nominatim importieren
 
-`db01` wurde inzwischen auf **600 GiB** vergrößert. Die anschließende Leseprüfung
-bestätigt die größere Disk und Rootpartition, aktives PostgreSQL und rund
-577 GiB freien Datenbankplatz. Der vollständige Europa-Preflight ist erfolgreich.
-Der Import selbst wurde vom Agenten nicht ausgeführt.
+Der Europa-Import wurde am **18.10.2026 um 12:01 Uhr (MESZ)** erfolgreich
+abgeschlossen. `db01` hat eine **600-GiB-Disk**; die neue Datenbank umfasst rund
+171 GiB. Die bisherige Schleswig-Holstein-Datenbank bleibt unter
+`nominatim_sh_20261016` erhalten.
 
-Im eigenen Terminal im Repository ausführen, vorzugsweise in `tmux`:
+Die bestätigte öffentliche Domain ist **`nominatim.oklabflensburg.de`**.
+Gast-nginx, öffentlicher Ingress und Monitoring verwenden diesen Namen. HTTPS
+liefert über IPv4 und IPv6 einen gesunden API-Status; Suchen nach Paris, Madrid,
+Berlin und Flensburg sind erfolgreich. Das eigene Let's-Encrypt-Zertifikat
+und die automatische Erneuerung sind eingerichtet. Ausgeführte Prüfungen stehen
+in [Tests und Nachweisen](testing.md).
+
+Der Einstieg wird im eigenen Terminal im Repository ausgeführt, vorzugsweise in
+`tmux`. Mit vorhandenem Abschlussmanifest prüft er den bestehenden Zustand und
+die Suchergebnisse; ein neuer Import wird dabei nicht gestartet:
 
 ```bash
 ./scripts/import_nominatim_europe.sh
@@ -82,11 +91,13 @@ Datenbankumbenennung oder Dienststopp:
 5. Socket und API werden gestoppt. Die alte Datenbank wird unter
    `nominatim_sh_20261016` erhalten. Europa wird als neue `nominatim` importiert.
    **Während Import und Indexierung ist die Suche nicht verfügbar.**
-6. Die vorhandene Rolle verwendet vier Threads und ein Zeitlimit von sieben
+6. Die Rolle verwendet vier Threads und ein Zeitlimit von sieben
    Tagen. Flatnode-Speicherung reduziert den Cachebedarf des Importprozesses.
    Importstil `address` umfasst Adressen; POI-Suche erfordert den Stil `full`
-   und eine entsprechende neue Speicherplanung. Der Import verwendet weiterhin
-   `--no-updates`; automatische OSM-Replikation wird nicht eingerichtet.
+   und eine entsprechende neue Speicherplanung. Der abgeschlossene Import vom
+   16.–18.10.2026 verwendete `--no-updates`. Seit der anschließenden Anpassung
+   behält ein neuer Import standardmäßig die für Updates benötigten Daten.
+   Ein erneuter Lauf mit Abschlussmanifest führt diesen neuen Import nicht aus.
 7. Datenbankintegrität, API-Status und Ergebnisse für Paris, Madrid, Berlin
    und Flensburg müssen erfolgreich sein, bevor der Abschluss protokolliert wird.
 
@@ -97,7 +108,100 @@ sind zusammen größer als die physische NVMe; sie dürfen nicht gleichzeitig
 voll belegt werden. Die bestehenden Sicherungen bleiben erhalten und müssen
 mit eigener Retention beziehungsweise externem Backup eingeplant werden.
 
+## Automatische OSM-Updates
+
+**Die laufende Europa-Datenbank ist eingefroren und derzeit nicht updatefähig.**
+Der bisher fest im Importbefehl enthaltene Schalter `--no-updates` entfernte nach
+der Indexierung unter anderem `place`, `planet_osm_ways`, `planet_osm_rels` und
+die Flatnode-Datei. Das sparte dauerhaft Speicher; die fertige Datenbank umfasst
+rund 171 GiB. Das ist keine Voraussetzung für Europa, sondern eine Entscheidung
+für einen statischen Datenbestand. Ein Timer oder `replication --init` kann die
+gelöschten Daten nicht wiederherstellen. Der Datenstand bleibt vorerst
+`2026-10-15T20:20:56Z`.
+
+Neue Importe verwenden standardmäßig `debian13_nominatim_import_updates: true`.
+Nur für eine bewusst statische neue Installation darf dieser Wert auf `false`
+gesetzt werden. Die Änderung wirkt auf keinen bestehenden Datenbestand zurück.
+Die Flatnode-Datei muss bei einem updatefähigen Import dauerhaft erhalten bleiben.
+
+Das vorbereitete Playbook `playbooks/nominatim-updates.yml` installiert eine
+systemd-Service-/Timer-Kombination **erst nach erfolgreicher Vorprüfung**:
+
+- Es müssen Rohdaten, ein abgeschlossener Import und die konfigurierte
+  Flatnode-Datei vorhanden sein. Das Projekt muss dieselbe Datenbank verwenden.
+- Eine bereits initialisierte Replikation benötigt einen bekannten Quellnachweis.
+  Quell-URL und Datenbank-OID werden festgehalten; ein Quellenwechsel oder eine
+  unbemerkt ersetzte Datenbank führt zum Abbruch.
+- Pyosmium wird im vorhandenen venv als `osmium==4.3.1` installiert. Einmalig wird
+  die Sequenz mit `nominatim replication --init` bestimmt. Bestehende Sequenzen
+  werden nicht bei jedem Deployment zurückgesetzt. Die Replikationsquelle wird
+  auch in der Projekt-`.env` festgehalten, damit manuelle Befehle dieselbe Quelle
+  verwenden.
+- `nominatim-updates.service` verarbeitet mit zwei Threads jeweils einen Batch
+  über `replication --once`. Quelle ist
+  `https://download.geofabrik.de/europe-updates`, deren Veröffentlichungsintervall
+  86.400 Sekunden beträgt. Der Timer startet nach dem Boot und jeweils 15 Minuten
+  nach dem Ende eines Laufs erneut. Nominatim wartet bei Bedarf selbst bis zum
+  nächsten täglichen Diff. Ein gemeinsames `flock` verhindert parallele
+  Initialisierung und Updates durch diese verwalteten Abläufe.
+- systemd führt den Prozess auf `nom01` aus; eine unterbrochene SSH-Verbindung
+  oder eine ausgeschaltete lokale Arbeitsstation beendet ihn nicht.
+
+**Noch nicht auf dem aktuellen Datenbestand ausführen.** Nach einem separat
+geplanten und erfolgreich geprüften Neuimport aktiviert folgender Befehl die
+Updates. Er importiert oder ersetzt selbst keine Datenbank und bricht auf der
+heutigen eingefrorenen Datenbank vor jeder Änderung ab:
+
+```bash
+. .venv/bin/activate
+ansible-playbook playbooks/nominatim-updates.yml \
+  -e @environments/hetzner/deployment.yml \
+  -e @environments/hetzner/nominatim-europe.yml \
+  -e '{"debian13_nominatim_updates_enabled":true}' \
+  --vault-id pki@.uranus-private/pki/vault-password \
+  --vault-id production@.uranus-private/secrets/vault-password
+```
+
+Nach der Aktivierung zusätzlich `debian13_nominatim_updates_enabled: true` in der
+eigenen `deployment.yml` festhalten. Dann prüfen spätere normale
+Nominatim-Deployments auch die Update-Konfiguration. `false` überspringt deren
+Verwaltung; es stoppt keinen bereits aktivierten Timer.
+
+Vor dem Neuimport muss die Kapazität für dauerhaft erhaltene Rohdaten,
+Flatnodes, temporäre Indexdaten und die bisherige Suche geplant werden. Bei der
+Prüfung am 18.10.2026 waren auf dem physischen `/data`-Dateisystem nur rund
+163 GiB verfügbar. Rund 802 GiB waren auf der separaten System-NVMe verfügbar,
+gehören aber bislang nicht zum freigegebenen Incus-Datenpool. Eine Verwendung
+erfordert einen eigenen Storage-Plan samt Anpassung der bestehenden Guards;
+die nominellen 600 GiB von `db01` allein belegen keine ausreichende physische
+Reserve. Es wurde weder ein Neuimport gestartet noch zusätzlicher Speicher
+zugewiesen oder ein Timer aktiviert.
+
+Nach einer späteren Aktivierung auf `nom01` prüfen:
+
+```bash
+sudo systemctl status nominatim-updates.timer nominatim-updates.service
+sudo journalctl -u nominatim-updates.service --since yesterday
+curl -fsS 'https://nominatim.oklabflensburg.de/status?format=json'
+```
+
+Für Wartung zuerst `sudo systemctl stop nominatim-updates.timer` ausführen und
+das Ende des laufenden Service abwarten. Zum dauerhaften Abschalten zusätzlich
+`sudo systemctl disable nominatim-updates.timer` verwenden. Den laufenden
+Service nicht während einer Datenverarbeitung abbrechen. Manuelle
+Replikationsläufe müssen dieselbe Projektsperre verwenden. Ein Wechsel der
+Update-Quelle erfordert eine bewusst geplante neue Initialisierung; den
+Quellnachweis nicht einfach löschen.
+
+Grundlagen: [Import und Freeze](https://nominatim.org/release-docs/latest/admin/Import/#dropping-data-required-for-dynamic-updates)
+und [Replikation und systemd](https://nominatim.org/release-docs/latest/admin/Update/).
+
 ## Weitere Nominatim-Deployments
+
+In der vorhandenen Domain-Zuordnung der lokalen `deployment.yml` muss
+`hetzner_domains.nominatim` auf `nominatim.oklabflensburg.de` stehen. Die
+bestehende Liste `debian13_ingress_tls_site_keys` enthält zusätzlich `nominatim`,
+damit spätere Ingress-Läufe diese Domain weiter berücksichtigen.
 
 Das Europa-Profil muss nach `deployment.yml` übergeben werden, damit dessen
 bisherige Schleswig-Holstein-Werte nicht wieder aktiviert werden:

@@ -8,3 +8,11 @@ debian13_nominatim_import_threads: 4
 debian13_nominatim_import_timeout: 7200
 debian13_nominatim_db_storage_path: /var/lib/postgresql
 debian13_nominatim_db_min_free_gib: 10
+# Keep raw OSM data and the flatnode file for future replication by default.
+debian13_nominatim_import_updates: true
+debian13_nominatim_updates_enabled: false
+debian13_nominatim_replication_url: ''
+debian13_nominatim_replication_interval: 86400
+debian13_nominatim_replication_recheck: 900
+debian13_nominatim_replication_threads: 2
+debian13_nominatim_osmium_version: '4.3.1'

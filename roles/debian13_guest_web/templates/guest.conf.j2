@@ -52,6 +52,37 @@ server {
     location / { try_files $uri $uri/ /index.html; }
 }
 {% endif %}
+{% if documentation_enabled | default(false) | bool %}
+server {
+    listen {{ ansible_host }}:443 ssl;
+    server_name {{ documentation_domain }};
+    absolute_redirect off;
+    location = / { return 302 /docs/; }
+    location = /docs { return 301 /docs/$is_args$args; }
+    location ^~ /docs/ {
+        alias {{ documentation_dist }}/;
+        index index.html;
+        try_files $uri $uri/ =404;
+    }
+    location / { return 404; }
+}
+{% endif %}
+{% if manual_enabled | default(false) | bool %}
+server {
+    listen {{ ansible_host }}:443 ssl;
+    server_name {{ manual_domain }};
+    root {{ manual_dist }};
+    index index.html;
+    absolute_redirect off;
+{% for redirect in debian13_guest_web_manual_redirects %}
+    location = {{ redirect.from }} { return {{ redirect.status }} {{ redirect.to }}$is_args$args; }
+{% if redirect.from != '/' and not redirect.from.endswith('/') %}
+    location = {{ redirect.from }}/ { return {{ redirect.status }} {{ redirect.to }}$is_args$args; }
+{% endif %}
+{% endfor %}
+    location / { try_files $uri $uri/ =404; }
+}
+{% endif %}
 server {
     listen {{ ansible_host }}:443 ssl;
     server_name {{ backend_domain }};

@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule daily-source Nominatim updates and retry after failures
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=15min
+RandomizedDelaySec=1min
+Unit=nominatim-updates.service
+
+[Install]
+WantedBy=timers.target
