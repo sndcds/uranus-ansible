@@ -29,6 +29,8 @@ all:
         mon01: {}
         nom01: {}
         vers01: {}
+        nginx01: {}
+        plausible01: {}
 ''')
         for playbook in sorted((ROOT / 'playbooks').rglob('*.yml')):
             if playbook.parent.name == 'tasks':

@@ -39,10 +39,64 @@ def layout(settings,tmp_path,monkeypatch):
 def plan(api,layout,**kwargs):
     return incus.preflight(*layout,run=api.run,guard=lambda run:{'options':'rw'},**kwargs)
 
-def test_first_installation_plans_all_six_without_mutation(layout):
+def test_first_installation_plans_all_eight_without_mutation(layout):
     api=API(); result=plan(api,layout)
     assert set(result['new_instances'])==incus.NAMES
     assert not result['project_exists']
+
+
+def test_existing_seven_guests_only_plan_the_new_analytics_container(layout):
+    api = API()
+    api.managed([i for i in layout[0] if i['name'] != 'plausible01'])
+    before = copy.deepcopy(api.data)
+    result = plan(api, layout)
+    assert result['new_instances'] == ['plausible01']
+    assert api.data == before
+
+
+@pytest.mark.parametrize('proxy_setting', [None, 'block'])
+def test_existing_six_guest_project_only_plans_ingress_and_proxy_upgrade(layout, proxy_setting):
+    api=API();api.managed(layout[0][:-1])
+    config=api.data['/1.0/projects?recursion=1'][0]['config']
+    if proxy_setting is None:
+        del config['restricted.devices.proxy']
+    else:
+        config['restricted.devices.proxy']=proxy_setting
+    before=copy.deepcopy(api.data)
+    result=plan(api,layout)
+    assert result['new_instances']==['nginx01']
+    assert result['project_proxy_upgrade']
+    assert api.data==before
+
+
+@pytest.mark.parametrize('fault', ['proxy_protocol', 'connect', 'listen', 'extra_proxy', 'missing_proxy'])
+def test_ingress_proxy_drift_is_rejected_without_changes(layout, fault):
+    api=API();api.managed(layout[0])
+    guests=api.data['/1.0/instances?recursion=2&project=uranus']
+    devices=next(i for i in guests if i['name']=='nginx01')['expanded_devices']
+    if fault=='extra_proxy':
+        guests[0]['expanded_devices']['http']=copy.deepcopy(devices['http'])
+    elif fault=='missing_proxy':
+        del devices['http']
+    else:
+        devices['http'][fault]={'proxy_protocol':'false', 'connect':'tcp:127.0.0.1:22',
+                                'listen':'tcp:[::]:22'}[fault]
+    before=copy.deepcopy(api.data)
+    with pytest.raises(safety.SafetyError, match='device drift'):
+        plan(api,layout)
+    assert api.data==before
+
+
+@pytest.mark.parametrize('fault', ['vm', 'wrong_role', 'other_ingress'])
+def test_ingress_requires_its_own_container_before_api_calls(layout, fault):
+    instance=next(i for i in layout[0] if i['name']=='nginx01')
+    if fault=='vm':instance['type']='virtual-machine'
+    elif fault=='wrong_role':instance['role']='prod'
+    else:layout[0][1]['role']='ingress'
+    api=API()
+    with pytest.raises(safety.SafetyError, match='dedicated ingress container'):
+        plan(api,layout)
+    assert not api.calls
 
 @pytest.mark.parametrize('drivers',['lxc','',None,[],{},'lxc | not-qemu'])
 def test_unavailable_qemu_stops_before_resource_inspection(layout,drivers):

@@ -1,0 +1,4 @@
+---
+ansible_ssh_extra_args: >-
+  -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no
+  -o UserKnownHostsFile={{ inventory_dir }}/../../.uranus-private/known_hosts

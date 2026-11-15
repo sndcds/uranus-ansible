@@ -29,9 +29,20 @@
       - --config=restricted.containers.nesting=block
       - --config=restricted.devices.disk=managed
       - --config=restricted.devices.nic=managed
+      - --config=restricted.devices.proxy=allow
       - --config=restricted.networks.access=uranusincus0
   changed_when: true
   when: not incus_instance_plan.project_exists
+
+- name: Guard filesystem before updating the managed project restriction
+  uranus_storage_guard: {}
+  when: incus_instance_plan.project_proxy_upgrade
+
+- name: Enable ingress proxy devices on an audited existing Uranus project
+  ansible.builtin.command:
+    argv: [incus, --force-local, project, set, uranus, restricted.devices.proxy=allow]
+  changed_when: true
+  when: incus_instance_plan.project_proxy_upgrade
 
 - name: Guard filesystem before creating pool
   uranus_storage_guard: {}
@@ -87,7 +98,9 @@
   loop_control:
     loop_var: incus_instance
     label: "{{ incus_instance.name }}"
-  when: incus_instance.name not in incus_instance_verified.stopped_instances
+  when:
+    - incus_instance.name not in incus_instance_verified.stopped_instances
+    - incus_instance.name in (incus_instance_targets | default(incus_instances | map(attribute='name') | list))
 
 - name: Prepare the baseline on every running VM and container through Incus
   ansible.builtin.include_tasks: bootstrap.yml
@@ -95,15 +108,19 @@
   loop_control:
     loop_var: incus_instance
     label: "{{ incus_instance.name }}"
-  when: incus_instance.name not in incus_instance_verified.stopped_instances
+  when:
+    - incus_instance.name not in incus_instance_verified.stopped_instances
+    - incus_instance.name in (incus_instance_targets | default(incus_instances | map(attribute='name') | list))
 
 - name: Install host monitoring certificate
   ansible.builtin.include_role:
     name: internal_tls
+  when: incus_manage_host_agents | default(true) | bool
 
 - name: Monitor host resources and data NVMe through the same private agent
   ansible.builtin.include_role:
     name: icinga_agent
+  when: incus_manage_host_agents | default(true) | bool
 
 - name: Install optional external Incus export schedule
   ansible.builtin.include_role:

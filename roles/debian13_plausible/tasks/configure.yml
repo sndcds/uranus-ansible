@@ -1,0 +1,145 @@
+---
+- name: Load the dedicated encrypted Plausible configuration
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../environments/hetzner/plausible.vault.yml"
+  no_log: true
+
+- name: Require preserved application keys and generated local database passwords
+  ansible.builtin.assert:
+    that:
+      - vault_plausible_environment.SECRET_KEY_BASE | length >= 32
+      - vault_plausible_postgres_password is match('^[0-9a-f]{64}$')
+      - vault_plausible_clickhouse_password is match('^[0-9a-f]{64}$')
+  no_log: true
+
+- name: Validate environment entries before systemd serialization
+  ansible.builtin.assert:
+    that:
+      - item.key is match('^[A-Z][A-Z0-9_]*$')
+      - item.value is string
+      - item.value is not search('[\r\n\x00]')
+  loop: "{{ vault_plausible_environment | dict2items }}"
+  no_log: true
+
+- name: Protect runtime configuration and migration state
+  ansible.builtin.file:
+    path: /etc/plausible
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install protected native application environment
+  ansible.builtin.template:
+    src: plausible.env.j2
+    dest: /etc/plausible/plausible.env
+    owner: root
+    group: root
+    mode: '0600'
+    backup: true
+  no_log: true
+  register: debian13_plausible_environment
+
+- name: Restrict PostgreSQL to this container's loopback
+  ansible.builtin.copy:
+    dest: /etc/postgresql/17/main/conf.d/plausible.conf
+    mode: '0644'
+    content: |
+      listen_addresses = '127.0.0.1'
+      shared_buffers = '256MB'
+      max_connections = 100
+  register: debian13_plausible_postgres_config
+
+- name: Start the private PostgreSQL cluster
+  ansible.builtin.systemd_service:
+    name: postgresql@17-main
+    enabled: true
+    state: "{{ 'restarted' if debian13_plausible_postgres_config.changed else 'started' }}"
+
+- name: Create the isolated PostgreSQL application account
+  community.postgresql.postgresql_user:
+    name: plausible
+    password: "{{ vault_plausible_postgres_password }}"
+    role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+  become: true
+  become_user: postgres
+  no_log: true
+
+- name: Create only the dedicated application database
+  community.postgresql.postgresql_db:
+    name: "{{ debian13_plausible_database }}"
+    owner: plausible
+    encoding: UTF8
+    template: template0
+  become: true
+  become_user: postgres
+
+- name: Configure bounded ClickHouse resources and local listeners
+  ansible.builtin.template:
+    src: clickhouse.xml.j2
+    dest: /etc/clickhouse-server/config.d/uranus.xml
+    owner: root
+    group: clickhouse
+    mode: '0640'
+  register: debian13_plausible_clickhouse_config
+
+- name: Configure the local ClickHouse application user
+  ansible.builtin.template:
+    src: clickhouse-users.xml.j2
+    dest: /etc/clickhouse-server/users.d/zz-uranus.xml
+    owner: root
+    group: clickhouse
+    mode: '0640'
+  no_log: true
+  register: debian13_plausible_clickhouse_users
+
+- name: Create protected native database backup directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: clickhouse
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /var/backups/plausible, owner: root, mode: '0710'}
+    - {path: /var/backups/plausible/clickhouse, owner: clickhouse, mode: '0700'}
+
+- name: Start the private native ClickHouse server
+  ansible.builtin.systemd_service:
+    name: clickhouse-server
+    enabled: true
+    state: >-
+      {{ 'restarted' if debian13_plausible_clickhouse_config.changed or
+         debian13_plausible_clickhouse_users.changed else 'started' }}
+
+- name: Wait for ClickHouse to accept local administrative queries
+  ansible.builtin.command:
+    argv: [clickhouse-client, --query, SELECT 1]
+  changed_when: false
+  register: debian13_plausible_clickhouse_ready
+  retries: 20
+  delay: 3
+  until: debian13_plausible_clickhouse_ready.rc == 0
+
+- name: Create only the dedicated statistics database
+  ansible.builtin.command:
+    argv: [clickhouse-client, --query, "CREATE DATABASE IF NOT EXISTS {{ debian13_plausible_clickhouse_database }}"]
+  changed_when: false
+
+- name: Install the native application service
+  ansible.builtin.template:
+    src: plausible.service.j2
+    dest: /etc/systemd/system/plausible.service
+    mode: '0644'
+    backup: true
+  register: debian13_plausible_unit
+
+- name: Install the native migration service
+  ansible.builtin.template:
+    src: plausible-migrate.service.j2
+    dest: /etc/systemd/system/plausible-migrate.service
+    mode: '0644'
+
+- name: Reload native systemd definitions without starting an empty application
+  ansible.builtin.systemd_service:
+    daemon_reload: true

@@ -67,23 +67,27 @@ def main():
         jinja=Environment(loader=FileSystemLoader(ROOT/'roles/incus_instance/templates'),undefined=StrictUndefined)
         jinja.filters['to_json']=json.dumps
         template=jinja.from_string((ROOT/'roles/incus_instance/templates/instance.yml.j2').read_text())
-        if args.image_cache:
-            cache=Path(args.image_cache)
-            for kind,file in [('container','root.squashfs'),('virtual-machine','disk.qcow2')]:
+        for kind,file in [('container','root.squashfs'),('virtual-machine','disk.qcow2')]:
+            if args.image_cache:
+                cache=Path(args.image_cache)
                 run(project+['image','import',str(cache/'incus.tar.xz'),str(cache/file)])
-                image=json.loads(run(cli+['query','--raw','/1.0/images/'+cfg['incus_images'][kind]+'?project=uranus']))
-                assert image['metadata']['fingerprint']==cfg['incus_images'][kind]
+            else:
+                run(project+['image','copy','images:'+cfg['incus_images'][kind],
+                             'local:','--target-project','uranus']+(['--vm'] if kind=='virtual-machine' else []))
+            image=json.loads(run(cli+['query','--raw','/1.0/images/'+cfg['incus_images'][kind]+'?project=uranus']))
+            assert image['metadata']['fingerprint']==cfg['incus_images'][kind]
+            assert image['metadata']['type']==kind
         for instance in resources:
             body=template.render(incus_instance=instance,incus_container_quotas=False,
                                  incus_guest_bootstrap_packages=cfg['incus_guest_bootstrap_packages'],
                                  hetzner_ssh_public_key_file=str(key)+'.pub',lookup=lambda kind,path: Path(path).read_text())
-            command=project+['init',('' if args.image_cache else 'images:')+cfg['incus_images'][instance['type']],instance['name'],'--no-profiles']
+            command=project+['init',cfg['incus_images'][instance['type']],instance['name'],'--no-profiles']
             if instance['type']=='virtual-machine': command+=['--vm']
             run(command,stdin=body)
         after=safety.preflight(resources,cfg['incus_images'],run=run,guard=guard)
         repeat=safety.preflight(resources,cfg['incus_images'],run=run,guard=guard)
         assert after==repeat and not after['new_instances'] and set(after['stopped_instances'])==safety.NAMES
-        print('PASS: Debian native project, pool, network, six VM/container initializations and repeated read-only preflight',flush=True)
+        print('PASS: Debian native project, pool, network, eight VM/container initializations and repeated read-only preflight',flush=True)
         if args.boot:
             for name in ['dev01','db01']:
                 run(project+['start',name])

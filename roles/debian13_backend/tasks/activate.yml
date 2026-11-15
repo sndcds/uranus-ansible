@@ -1,0 +1,75 @@
+---
+- name: Inspect the current backend release
+  ansible.builtin.stat:
+    path: /opt/uranus/backend/current
+    follow: false
+  register: debian13_backend_previous
+
+- name: Require a managed release symlink
+  ansible.builtin.assert:
+    that:
+      - not debian13_backend_previous.stat.exists or debian13_backend_previous.stat.islnk
+      - not debian13_backend_previous.stat.exists or debian13_backend_previous.stat.lnk_source is match('^/opt/uranus/backend/releases/[0-9a-f]{40}$')
+
+- name: Snapshot existing runtime file presence
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ debian13_backend_config_path }}"
+    - /etc/systemd/system/uranus-backend.service
+  register: debian13_backend_before
+
+- name: Activate and verify the backend configuration with recovery
+  block:
+    - name: Render protected central configuration with recovery copy
+      ansible.builtin.template:
+        src: config.json.j2
+        dest: "{{ debian13_backend_config_path }}"
+        owner: uranus
+        group: uranus
+        mode: '0600'
+        backup: true
+        validate: /usr/bin/python3 -m json.tool %s
+      register: debian13_backend_config
+      no_log: true
+    - name: Install backend service with the stable configuration path
+      ansible.builtin.template:
+        src: backend.service.j2
+        dest: /etc/systemd/system/uranus-backend.service
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      register: debian13_backend_unit
+    - name: Activate the reviewed backend release
+      ansible.builtin.file:
+        src: "/opt/uranus/backend/releases/{{ backend_repo_version }}"
+        dest: /opt/uranus/backend/current
+        state: link
+        owner: uranus
+        group: uranus
+      register: debian13_backend_activation
+    - name: Start or restart only changed backend configuration
+      ansible.builtin.systemd_service:
+        name: uranus-backend
+        enabled: true
+        daemon_reload: "{{ debian13_backend_unit is changed }}"
+        state: >-
+          {{ 'restarted' if debian13_backend_activation is changed or
+             debian13_backend_config is changed or debian13_backend_unit is changed else 'started' }}
+    - name: Require a healthy local backend before completing activation
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ backend_port }}{{ api_health_endpoint }}"
+        status_code: 200
+      register: debian13_backend_health
+      retries: 10
+      delay: 3
+      until: debian13_backend_health.status | default(0) == 200
+  rescue:
+    - name: Restore previous configuration and service after failed activation
+      ansible.builtin.include_tasks: rollback.yml
+    - name: Report failed activation and preserve all releases and data
+      ansible.builtin.fail:
+        msg: >-
+          Backend healthcheck failed. Previous release, configuration and service restored when available;
+          inspect before retry. No database migration or release deletion was performed.

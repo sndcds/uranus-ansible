@@ -7,7 +7,7 @@
     group: postgres
     mode: '0750'
 
-- name: Install backups for every non-template database including monitoring and Nominatim
+- name: Install backups for the configured Uranus application databases only
   ansible.builtin.copy:
     dest: /usr/local/sbin/uranus-debian13-db-backup
     mode: '0755'
@@ -17,14 +17,17 @@
       umask 077
       backup_dir=/var/backups/uranus/databases
       backup_timestamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
-      databases=$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --dbname=postgres \
-        --command="SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn")
-      while IFS= read -r database; do
+      databases=(
+      {% for app_database in app_databases %}
+        {{ app_database.name | quote }}
+      {% endfor %}
+      )
+      for database in "${databases[@]}"; do
         [[ "$database" =~ ^[a-zA-Z0-9_]+$ ]] || exit 1
         archive="$backup_dir/${database}_${backup_timestamp}.dump"
         pg_dump --format=custom --dbname="$database" --file="$archive.partial"
         mv --no-clobber "$archive.partial" "$archive"
-      done <<< "$databases"
+      done
       find "$backup_dir" -maxdepth 1 -type f -name '*.dump' -mtime +{{ backup_retention_days }} -delete
 
 - name: Install database backup service

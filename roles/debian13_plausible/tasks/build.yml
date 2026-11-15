@@ -1,0 +1,56 @@
+---
+- name: Check out the official pinned CE source without tracked changes
+  ansible.builtin.git:
+    repo: https://github.com/plausible/analytics.git
+    version: "{{ debian13_plausible_revision }}"
+    dest: "{{ debian13_plausible_build_path }}"
+    force: false
+  become: true
+  become_user: plausible
+
+- name: Inspect the completed native release
+  ansible.builtin.stat:
+    path: "{{ debian13_plausible_build_path }}/{{ item }}"
+  loop: [.uranus-build-complete, _build/ce/rel/plausible/bin/plausible]
+  register: debian13_plausible_build_files
+
+- name: Build only missing or unfinished native releases
+  when: debian13_plausible_build_files.results | rejectattr('stat.exists') | list | length > 0
+  become: true
+  become_user: plausible
+  environment:
+    MIX_HOME: /var/lib/plausible/.mix
+    HEX_HOME: /var/lib/plausible/.hex
+    MIX_ENV: ce
+    APP_VERSION: "{{ debian13_plausible_version }}"
+    MIX_REBAR3: /usr/bin/rebar3
+    ERL_FLAGS: +S 4:4
+    NODE_OPTIONS: --max-old-space-size=2048
+  block:
+    - name: Compile locked Elixir dependencies and static application assets
+      ansible.builtin.command:
+        argv: "{{ item }}"
+        chdir: "{{ debian13_plausible_build_path }}"
+      loop:
+        - [mix, deps.get, --only, ce, --check-locked]
+        - [mix, deps.compile]
+        - [npm, ci, --prefix, assets]
+        - [npm, ci, --prefix, tracker]
+        - [npm, run, deploy, --prefix, tracker]
+        - [mix, assets.setup]
+        - [mix, assets.deploy]
+        - [mix, download_country_database]
+        - [mix, release, plausible, --overwrite]
+      async: "{{ debian13_plausible_build_timeout }}"
+      poll: 5
+      changed_when: true
+    - name: Require unchanged upstream dependency locks
+      ansible.builtin.command:
+        argv: [git, diff, --exit-code, --, mix.lock, assets/package-lock.json, tracker/package-lock.json]
+        chdir: "{{ debian13_plausible_build_path }}"
+      changed_when: false
+    - name: Record only the successful native release build
+      ansible.builtin.copy:
+        dest: "{{ debian13_plausible_build_path }}/.uranus-build-complete"
+        content: "{{ debian13_plausible_revision }}\n"
+        mode: '0640'

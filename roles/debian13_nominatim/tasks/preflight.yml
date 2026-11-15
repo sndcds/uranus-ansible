@@ -1,0 +1,86 @@
+---
+- name: Require a pinned OSM extract for an authorized first import
+  ansible.builtin.assert:
+    that:
+      - nominatim_data_url is match('^https://')
+      - nominatim_data_sha256 is match('^[0-9a-f]{64}$')
+  when: hetzner_nominatim_initial_import | bool
+
+- name: Inspect Nominatim database existence without modifying it
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: postgres
+    query: SELECT oid FROM pg_database WHERE datname = %(name)s
+    named_args: {name: "{{ nominatim_db_name }}"}
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_database
+
+- name: Require explicit first import if no Nominatim database exists
+  ansible.builtin.assert:
+    that: debian13_nominatim_database.rowcount > 0 or hetzner_nominatim_initial_import | bool
+    fail_msg: >-
+      Nominatim has no database. Authorize an initial import explicitly or restore
+      an existing database. The role never drops or replaces a database.
+
+- name: Inspect existing Nominatim schema independently of local marker files
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: "{{ nominatim_db_name }}"
+    query: SELECT to_regclass('public.placex')::text AS sentinel, to_regclass('public.import_status')::text AS import_status
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_schema
+  when: debian13_nominatim_database.rowcount > 0
+
+- name: Stop on an incomplete existing Nominatim database
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_schema.query_result[0].sentinel is not none
+      - debian13_nominatim_schema.query_result[0].import_status is not none
+    fail_msg: Incomplete Nominatim database found; preserve it and recover manually.
+  when: debian13_nominatim_database.rowcount > 0
+
+- name: Inspect completion of an existing Nominatim import
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_nominatim_db_socket }}"
+    port: "{{ debian13_nominatim_db_port }}"
+    db: "{{ nominatim_db_name }}"
+    query: SELECT indexed FROM public.import_status
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  become: true
+  become_user: postgres
+  register: debian13_nominatim_import_status
+  when: debian13_nominatim_database.rowcount > 0
+
+- name: Preserve an interrupted or unindexed existing database
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_import_status.rowcount == 1
+      - debian13_nominatim_import_status.query_result[0].indexed | bool
+    fail_msg: Existing Nominatim import is incomplete; preserve it and inspect before continuing.
+  when: debian13_nominatim_database.rowcount > 0
+
+- name: Check free database storage before the first import
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os,sys; v=os.statvfs(sys.argv[1]); print(v.f_bavail*v.f_frsize)"
+      - "{{ debian13_nominatim_db_storage_path }}"
+  delegate_to: "{{ nominatim_db_delegate_host }}"
+  changed_when: false
+  register: debian13_nominatim_free_storage
+  when: debian13_nominatim_database.rowcount == 0
+
+- name: Require enough database storage for the configured regional import
+  ansible.builtin.assert:
+    that:
+      - debian13_nominatim_free_storage.stdout | int >= (debian13_nominatim_db_min_free_gib | int) * 1073741824
+      - not ansible_check_mode
+    fail_msg: Free database space is insufficient or check mode cannot perform the initial import.
+  when: debian13_nominatim_database.rowcount == 0

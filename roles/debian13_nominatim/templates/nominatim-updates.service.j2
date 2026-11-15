@@ -1,0 +1,24 @@
+[Unit]
+Description=Apply a batch of regional OSM updates to Nominatim
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=nominatim
+Group=www-data
+WorkingDirectory={{ nominatim_project_dir }}
+Environment="NOMINATIM_REPLICATION_URL={{ debian13_nominatim_replication_url }}"
+Environment="NOMINATIM_REPLICATION_UPDATE_INTERVAL={{ debian13_nominatim_replication_interval }}"
+Environment="NOMINATIM_REPLICATION_RECHECK_INTERVAL={{ debian13_nominatim_replication_recheck }}"
+ExecStart=/usr/bin/flock --nonblock {{ nominatim_project_dir }}/.uranus-replication.lock {{ debian13_nominatim_venv }}/bin/nominatim replication --project-dir {{ nominatim_project_dir }} --once --threads {{ debian13_nominatim_replication_threads }}
+TimeoutStartSec=infinity
+TimeoutStopSec=infinity
+Nice=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+StandardOutput=journal
+StandardError=inherit

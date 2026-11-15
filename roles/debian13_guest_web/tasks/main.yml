@@ -1,4 +1,29 @@
 ---
+- name: Require a positive whole MiB application upload limit
+  ansible.builtin.assert:
+    that: backend_pluto_image_max_file_size | string is match('^[1-9][0-9]*$')
+  when: instance_role in ['dev', 'prod']
+
+- name: Load generated redirects for the static kulturbytes manual
+  when: manual_enabled | default(false) | bool
+  block:
+    - name: Read the manual build's redirect manifest
+      ansible.builtin.slurp:
+        src: '{{ manual_dist }}/blume-redirects.json'
+      register: debian13_guest_web_manual_redirect_file
+
+    - name: Select the manual redirects from the current build
+      ansible.builtin.set_fact:
+        debian13_guest_web_manual_redirects: '{{ debian13_guest_web_manual_redirect_file.content | b64decode | from_json }}'
+
+    - name: Require safe local redirect paths and HTTP statuses
+      ansible.builtin.assert:
+        that:
+          - item.from is match('^/[A-Za-z0-9/_.-]*$')
+          - item.to is match('^/[A-Za-z0-9/_.-]*$')
+          - item.status | int in [301, 302, 307, 308]
+      loop: '{{ debian13_guest_web_manual_redirects }}'
+
 - name: Install private guest nginx without starting the default site
   ansible.builtin.apt:
     name: nginx
@@ -39,9 +64,11 @@
 - name: Validate frontend activation over internal TLS with code rollback
   when: instance_role in ['dev', 'prod']
   block:
-    - name: Require the newly served static frontend to answer successfully
+    - name: Apply pending nginx reloads before checking the active frontend
+      ansible.builtin.meta: flush_handlers
+    - name: Require the newly served frontend to answer successfully
       ansible.builtin.uri:
-        url: "https://{{ ansible_host }}{{ frontend_health_endpoint }}"
+        url: "https://{{ ansible_host }}{{ debian13_guest_web_health_endpoint | default(frontend_health_endpoint) }}"
         headers:
           Host: "{{ frontend_domain }}"
         ca_path: /etc/ssl/certs/uranus-ca.pem
@@ -52,7 +79,11 @@
         src: "{{ debian13_frontend_previous.stat.lnk_source }}"
         dest: /opt/uranus/frontend/current
         state: link
-      when: debian13_frontend_previous.stat.exists
+      when:
+        - debian13_frontend_previous is defined
+        - debian13_frontend_previous.stat.exists | default(false)
     - name: Report frontend activation failure and preserve release artifacts
       ansible.builtin.fail:
-        msg: Frontend healthcheck failed; previous static artifact restored when available. Review before retry.
+        msg: >-
+          Frontend healthcheck failed: {{ ansible_failed_result.msg | default('unknown error') }}.
+          Previous static artifact restored when available. Review before retry.

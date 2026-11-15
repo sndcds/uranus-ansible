@@ -1,4 +1,7 @@
 ---
+## Enable analytics routing and activation only after the verified existing-data import.
+plausible_enabled: false
+debian13_plausible_prepare_only: true
 # These are documentation-only examples. Replace addresses/domains before use.
 # Keep approval false until the owner explicitly authorizes production deployment.
 hetzner_deployment_approved: false
@@ -6,15 +9,22 @@ uranus_security_review_complete: false
 # Administrative SSH accepts changing source IPs and requires public-key authentication.
 # This separate allowlist controls access to development and monitoring websites.
 hetzner_private_web_networks: [203.0.113.10/32]
+# Nominatim: only add confirmed abusive source IPs/CIDRs, never busy clients.
+# An empty list allows unlimited request rates. Both IPv4 and IPv6 are supported.
+debian13_ingress_nominatim_abusive_networks: []
 hetzner_acme_email: admin@example.com
 hetzner_domains:
   dev_frontend: dev.example.com
   dev_backend: api.dev.example.com
+  dev_dashboard: app.dev.example.com
+  documentation: uranus.example.com
+  manual: docs.example.com
   prod_frontend: example.com
   prod_backend: api.example.com
   icinga: monitoring.example.com
   nominatim: nominatim.example.com
   versatiles: tiles.example.com
+  plausible: plausible.example.com
   mail_mx: mail.example.com
 # Set only for an explicitly authorized FIRST initialization of absent databases.
 hetzner_app_initial_import: false

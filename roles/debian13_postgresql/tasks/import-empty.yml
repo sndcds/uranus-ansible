@@ -1,0 +1,55 @@
+---
+- name: Recheck the target immediately before its import
+  ansible.builtin.include_tasks: import-preflight.yml
+
+- name: Allocate a private backup file without replacing earlier backups
+  ansible.builtin.tempfile:
+    state: file
+    path: "{{ debian13_postgresql_state_dir }}"
+    prefix: "{{ application_db.name }}.before-initial-import."
+    suffix: .dump
+  become: true
+  become_user: postgres
+  register: debian13_postgresql_preimport_backup
+
+- name: Back up the existing database before importing
+  ansible.builtin.command:
+    argv:
+      - pg_dump
+      - "--host={{ debian13_postgresql_socket }}"
+      - "--port={{ debian13_postgresql_port }}"
+      - --username=postgres
+      - "--dbname={{ application_db.name }}"
+      - --format=custom
+      - "--file={{ debian13_postgresql_preimport_backup.path }}"
+  become: true
+  become_user: postgres
+  changed_when: true
+
+- name: Report the private backup path
+  ansible.builtin.debug:
+    msg: "Before-import backup: {{ debian13_postgresql_preimport_backup.path }}"
+
+- name: Import into the empty existing application schema
+  ansible.builtin.include_tasks: initial-import.yml
+
+- name: Verify application tables were imported and belong to the target user
+  community.postgresql.postgresql_query:
+    login_unix_socket: "{{ debian13_postgresql_socket }}"
+    port: "{{ debian13_postgresql_port }}"
+    db: "{{ application_db.name }}"
+    query: >-
+      SELECT count(*) AS tables,
+             count(*) FILTER (WHERE tableowner <> %(owner)s) AS unexpected_owners
+      FROM pg_tables WHERE schemaname = 'uranus'
+    named_args:
+      owner: "{{ application_db.user }}"
+  become: true
+  become_user: postgres
+  register: debian13_postgresql_import_verification
+
+- name: Require imported tables with the expected owner
+  ansible.builtin.assert:
+    that:
+      - debian13_postgresql_import_verification.query_result[0].tables | int > 0
+      - debian13_postgresql_import_verification.query_result[0].unexpected_owners | int == 0

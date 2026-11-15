@@ -1,5 +1,10 @@
 # Incus-Provisionierung
 
+Die zentrale Instanzliste enthält die PostgreSQL-VM, fünf Anwendungscontainer
+und den eigenen nginx-Container `nginx01`. Dessen Incus-Proxygeräte veröffentlichen
+HTTP/HTTPS; das Provisionieren des Containers benötigt freie Hostports 80/443.
+Die Umstellung eines bestehenden Host-Ingress beschreibt [Deployment](deployment.md#wechsel-vom-host-ingress-zum-container).
+
 Debian Trixie liefert Incus 6.0.4 LTS mit Debian-Sicherheitsrevisionen. Der Workflow
 verwendet `incus` und `incus-client` aus den konfigurierten Debian-Repositories,
 keine Fremdrepositories oder Installationsskripte. Neuere Hauptversionen werden
@@ -50,11 +55,17 @@ verhindert. Jede Instanz verwendet explizite Geräte und keine geerbten Profile.
 Container nutzen isolierte UID-Mappings; VMs verwenden keine Containeroptionen.
 
 Die beiden Debian-Trixie-Cloud-Images sind über vollständige Fingerprints aus dem
-offiziellen Imageindex vom 11.10.2026 referenziert. Die Image-Server können alte
-Images entfernen: Vor Freigabe aktuelle Fingerprints überprüfen und verifizierte
-Images in einen kontrollierten Mirror übernehmen. `images:` muss auf den
-vorgesehenen offiziellen HTTPS-Image-Server zeigen. Vorhandene Instanzen werden
-bei einem Wechsel des Image-Fingerprints nicht ersetzt.
+offiziellen Imageindex vom 15.10.2026 referenziert. Die Image-Server können alte
+Images entfernen. Vor jeder Erstellung prüft die Rolle den Imagebestand im
+Projekt `uranus`. Fehlende Images werden mit ihrem exakten Fingerprint über
+`incus image copy` in dieses Projekt übernommen, ohne automatische Updates.
+Anschließend prüft sie Fingerprint und Instanztyp und initialisiert ausschließlich
+aus dem lokalen Image. Bereits vorhandene Images benötigen keinen Remotezugriff.
+Scheitert der Download, bricht die Rolle vor der Instanzerstellung mit einem
+Hinweis auf den betroffenen Pin ab. Vor Freigabe aktuelle Fingerprints überprüfen
+und verifizierte Images zusätzlich in einen kontrollierten Mirror übernehmen.
+`images:` muss auf den vorgesehenen offiziellen HTTPS-Image-Server zeigen.
+Vorhandene Instanzen werden bei einem Wechsel des Image-Fingerprints nicht ersetzt.
 
 Vor jeder Erstellung validiert Ansible erneut Projekt, Pool, Netzwerk, Instanzen,
 freie Kapazität und Ownership. `init` erhält Ressourcen, Geräte und Cloud-init in
@@ -71,8 +82,8 @@ Datei `/etc/systemd/network/05-uranus-incus.network` erfasst diese Schnittstelle
 Mehrere Ethernet-Schnittstellen werden vor Änderungen abgelehnt.
 Dieser lokale Kanal funktioniert auch,
 wenn eine falsche dynamische Adresse durch den Incus-IP-Filter blockiert wird
-und Gast-SSH/DNS deshalb noch nicht verfügbar sind. Neue Instanzen führen
-dieselbe Konfiguration über Cloud-init `bootcmd` vor APT aus. Die bestehende
+und Gast-SSH/DNS deshalb noch nicht verfügbar sind. Cloud-init führt keinen
+zusätzlichen frühen DHCP-Befehl und keine Paketinstallation mehr aus. Die bestehende
 Cloud-init-Netzwerkdatei bleibt erhalten; eine eigene networkd-Datei wird
 geschrieben. Bei korrekter Netzwerkdatei und korrekter Adresse bleibt eine Wiederholung
 ohne Netzwerkänderung. Die Incus-IP-/MAC-Filter bleiben aktiv, und der DNS-Dienst
@@ -85,13 +96,20 @@ Passwortsperre, die Gruppen `adm` und `sudo`, kennwortloses sudo und der
 öffentliche SSH-Schlüssel aus `hetzner_ssh_public_key_file`. Zusätzliche vorhandene
 SSH-Schlüssel und Gruppen bleiben erhalten. Die gemeinsame Paketliste
 `incus_guest_bootstrap_packages` enthält `ca-certificates`, `openssh-server`,
-`python3`, `sudo`, `acl` und `htop`. Cloud-init für neue Instanzen und die spätere
-Debian-Gastrolle verwenden dieselbe Liste.
+`python3`, `sudo`, `acl` und `htop`. Die Incus-Vorbereitung und die spätere
+Debian-Gastrolle verwenden dieselbe Liste. Neue Instanzen erhalten die Pakete
+nach erfolgreicher Netzwerkkonfiguration ausschließlich durch diesen Bootstrap.
 
 Vor diesem Bootstrap wartet Ansible auf laufendes Cloud-init. Abgeschlossene
 Fehler der ursprünglichen Paketinstallation und des anschließenden SSH-Starts
 werden gezielt durch den Bootstrap repariert, wenn die damalige Paketliste und
-`runcmd` zur verwalteten Grundinstallation passen. Fehler anderer Module,
+`runcmd` zur verwalteten Grundinstallation passen. Ein alter `bootcmd`-Fehler
+wird ebenfalls repariert, wenn die gespeicherte Cloud-Konfiguration exakt den
+damaligen verwalteten DHCP-Befehl enthält. Die Rolle führt dessen Netzwerk-
+korrektur erneut über Incus aus und verlangt die reservierte Adresse, bevor
+sie die Grundinstallation bestätigt. Die Gast-Vorprüfung prüft zusätzlich zur
+Bootstrapbestätigung ebenfalls die exakte Herkunft dieses alten Befehls.
+Fehler anderer Module,
 zusätzlicher Pakete oder eigener Kommandos brechen den Lauf ab. Die ursprüngliche
 Cloud-init-Fehlerhistorie bleibt erhalten; die geprüfte Ansible-Grundinstallation
 entscheidet anschließend über die Bereitschaft des Gasts.
@@ -141,7 +159,7 @@ haben Zugriff. Diese Kommandos sind Betriebsbeispiele, keine Erlaubnis für eine
 Änderung des Zielhosts.
 
 Die eingetragenen Image-Fingerprints beziehen sich auf den geprüften Debian-13-
-Cloud-Build vom 11. Oktober 2026. Vor Freigabe deren Verfügbarkeit sichern
+Cloud-Build vom 15. Oktober 2026. Vor Freigabe deren Verfügbarkeit sichern
 (geprüfter eigener Image-Cache/Mirror) oder neue vollständige Fingerprints in
 einem Review freigeben. Der öffentliche Image-Server kann alte Builds entfernen;
 dann bricht die Erstellung ab, statt unbemerkt ein neues Image zu verwenden.

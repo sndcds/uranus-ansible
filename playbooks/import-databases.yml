@@ -1,0 +1,35 @@
+---
+- name: Populate empty application databases from the approved SQL dumps
+  hosts: 'uranus_instances:&db01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Require an explicit import outside check mode
+      ansible.builtin.assert:
+        that:
+          - hetzner_app_initial_import | bool
+          - not ansible_check_mode
+        fail_msg: Run this dedicated import with hetzner_app_initial_import=true; check mode cannot verify an import.
+    - name: Load dedicated database settings and secrets
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Verify every target is empty before importing either database
+      ansible.builtin.include_role:
+        name: debian13_postgresql
+        tasks_from: import-preflight
+      loop: "{{ app_databases }}"
+      loop_control:
+        loop_var: application_db
+        label: "{{ application_db.name }}"
+    - name: Back up and populate the verified empty databases
+      ansible.builtin.include_role:
+        name: debian13_postgresql
+        tasks_from: import-empty
+      loop: "{{ app_databases }}"
+      loop_control:
+        loop_var: application_db
+        label: "{{ application_db.name }}"

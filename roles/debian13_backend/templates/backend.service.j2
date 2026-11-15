@@ -8,7 +8,7 @@ WorkingDirectory=/opt/uranus/backend/current/source
 Environment=PGSSLMODE=verify-full
 Environment=PGSSLROOTCERT=/etc/ssl/certs/uranus-ca.pem
 Environment=SSL_CERT_FILE=/etc/ssl/certs/uranus-ca.pem
-ExecStart=/opt/uranus/backend/current/bin/uranus-api -config /opt/uranus/backend/current/config.json
+ExecStart=/opt/uranus/backend/current/bin/uranus-api -config {{ debian13_backend_config_path }}
 StandardOutput=null
 StandardError=journal
 Restart=on-failure
@@ -16,5 +16,6 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
+UMask=0027
 [Install]
 WantedBy=multi-user.target

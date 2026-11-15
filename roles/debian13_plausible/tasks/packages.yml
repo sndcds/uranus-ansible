@@ -1,0 +1,117 @@
+---
+- name: Install the native Elixir toolchain and PostgreSQL
+  ansible.builtin.apt:
+    name:
+      - elixir
+      - erlang-dev
+      - erlang-parsetools
+      - erlang-eunit
+      - erlang-tools
+      - erlang-inets
+      - erlang-xmerl
+      - erlang-ssh
+      - rebar3
+      - build-essential
+      - git
+      - brotli
+      - postgresql-17
+      - postgresql-client-17
+      - python3-psycopg2
+      - rsync
+      - ca-certificates
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Create the native application user
+  ansible.builtin.user:
+    name: plausible
+    system: true
+    home: /var/lib/plausible
+    create_home: true
+    shell: /usr/sbin/nologin
+
+- name: Create native build and application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: plausible
+    group: plausible
+    mode: '0750'
+  loop:
+    - /opt/plausible
+    - /opt/plausible/releases
+    - /var/lib/plausible
+    - /var/lib/plausible/tmp
+
+- name: Create repository key and build download directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop: [/etc/apt/keyrings, /var/cache/plausible]
+
+- name: Install the official NodeSource key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/plausible-nodesource.asc
+    mode: '0644'
+
+- name: Configure the established Node.js build runtime
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/plausible-nodesource.asc]
+      https://deb.nodesource.com/node_{{ hetzner_nodejs_major }}.x nodistro main
+    filename: plausible-nodesource
+
+- name: Install the verified ClickHouse repository key
+  ansible.builtin.get_url:
+    url: https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key
+    dest: /etc/apt/keyrings/plausible-clickhouse.asc
+    checksum: sha256:74c1dfd89393b27c5739ee579a5af661ebe628cef9c33222c6fb29d0b8d42ad0
+    mode: '0644'
+
+- name: Configure the official native ClickHouse package repository
+  ansible.builtin.apt_repository:
+    repo: deb [arch=amd64 signed-by=/etc/apt/keyrings/plausible-clickhouse.asc] https://packages.clickhouse.com/deb stable main
+    filename: plausible-clickhouse
+
+- name: Install native Node.js and matching ClickHouse packages without starting them
+  ansible.builtin.apt:
+    name:
+      - nodejs
+      - "clickhouse-common-static={{ debian13_plausible_clickhouse_version }}"
+      - "clickhouse-server={{ debian13_plausible_clickhouse_version }}"
+      - "clickhouse-client={{ debian13_plausible_clickhouse_version }}"
+    state: present
+    policy_rc_d: 101
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Pin ClickHouse to the source server version during migration
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/plausible-clickhouse
+    mode: '0644'
+    content: |
+      Package: clickhouse-common-static clickhouse-server clickhouse-client
+      Pin: version {{ debian13_plausible_clickhouse_version }}
+      Pin-Priority: 1001
+
+- name: Download the pinned Hex archive
+  ansible.builtin.get_url:
+    url: "https://builds.hex.pm/installs/1.16.0/hex-{{ debian13_plausible_hex_version }}.ez"
+    dest: "/var/cache/plausible/hex-{{ debian13_plausible_hex_version }}.ez"
+    checksum: "sha512:{{ debian13_plausible_hex_sha512 }}"
+    mode: '0644'
+
+- name: Install only the pinned Hex archive for the build user
+  ansible.builtin.command:
+    argv: [mix, archive.install, "/var/cache/plausible/hex-{{ debian13_plausible_hex_version }}.ez", --force]
+    creates: "/var/lib/plausible/.mix/archives/hex-{{ debian13_plausible_hex_version }}"
+  become: true
+  become_user: plausible
+  environment:
+    MIX_HOME: /var/lib/plausible/.mix
+    HEX_HOME: /var/lib/plausible/.hex
+    ERL_FLAGS: +S 4:4

@@ -1,0 +1,23 @@
+---
+- name: Install private image metrics writer
+  ansible.builtin.template:
+    src: pluto-image-metrics-push.sh.j2
+    dest: /usr/local/bin/pluto-image-metrics-push
+    mode: '0755'
+  when: pluto_metrics_enabled | bool
+
+- name: Install metrics service and timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  loop: [pluto-image-metrics.service, pluto-image-metrics.timer]
+  when: pluto_metrics_enabled | bool
+
+- name: Enable metrics schedule
+  ansible.builtin.systemd_service:
+    name: pluto-image-metrics.timer
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: pluto_metrics_enabled | bool

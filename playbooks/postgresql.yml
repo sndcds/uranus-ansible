@@ -1,0 +1,39 @@
+---
+- name: Configure PostgreSQL and backups on the dedicated database guest
+  hosts: 'uranus_instances:&db01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated database settings and secrets
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  roles:
+    - role: internal_tls
+    - role: debian13_postgresql
+    - role: debian13_backup
+  post_tasks:
+    - name: Verify PostgreSQL settings and parsed client access rules
+      community.postgresql.postgresql_query:
+        login_unix_socket: "{{ debian13_postgresql_socket }}"
+        db: postgres
+        query: >-
+          SELECT current_setting('server_version_num')::integer AS version,
+                 current_setting('listen_addresses') AS listen_addresses,
+                 current_setting('ssl') AS ssl,
+                 current_setting('password_encryption') AS password_encryption,
+                 (SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL) AS hba_errors
+      become: true
+      become_user: postgres
+      register: postgresql_verification
+    - name: Require the expected private PostgreSQL configuration
+      ansible.builtin.assert:
+        that:
+          - postgresql_verification.query_result[0].version | int >= 170000
+          - postgresql_verification.query_result[0].version | int < 180000
+          - postgresql_verification.query_result[0].listen_addresses == postgresql_listen_addresses
+          - postgresql_verification.query_result[0].ssl == 'on'
+          - postgresql_verification.query_result[0].password_encryption == 'scram-sha-256'
+          - postgresql_verification.query_result[0].hba_errors | int == 0

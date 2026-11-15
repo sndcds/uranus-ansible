@@ -4,4 +4,6 @@ debian13_postgresql_dump_root: "{{ playbook_dir }}/../"
 debian13_postgresql_owner: postgres
 debian13_postgresql_group: postgres
 debian13_postgresql_socket: /var/run/postgresql
+debian13_postgresql_port: 5432
+debian13_postgresql_import_host: 127.0.0.1
 debian13_postgresql_postgis_enabled: true

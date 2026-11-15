@@ -1,0 +1,41 @@
+---
+- name: Check existing per-domain certificate names
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -noout
+      - -checkhost
+      - "{{ item.domain }}"
+      - -in
+      - "/etc/letsencrypt/live/{{ item.domain }}/fullchain.pem"
+  loop: "{{ debian13_ingress_sites }}"
+  register: debian13_ingress_certificate_names
+  changed_when: false
+  failed_when: false
+
+- name: Check existing per-domain certificate expiry separately
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - x509
+      - -noout
+      - -checkend
+      - '0'
+      - -in
+      - "/etc/letsencrypt/live/{{ item.domain }}/fullchain.pem"
+  loop: "{{ debian13_ingress_sites }}"
+  register: debian13_ingress_certificate_validity
+  changed_when: false
+  failed_when: false
+
+- name: Select domains with a valid matching certificate
+  ansible.builtin.set_fact:
+    debian13_ingress_tls_domains: "{{ debian13_ingress_valid_domains }}"
+    debian13_ingress_tls_ready: "{{ debian13_ingress_valid_domains | length > 0 }}"
+  vars:
+    debian13_ingress_valid_domains: >-
+      {{ debian13_ingress_certificate_names.results | selectattr('rc', 'equalto', 0)
+         | selectattr('stdout', 'search', 'does match certificate') | map(attribute='item.domain')
+         | intersect(debian13_ingress_certificate_validity.results | selectattr('rc', 'equalto', 0)
+                     | map(attribute='item.domain') | list) | list }}

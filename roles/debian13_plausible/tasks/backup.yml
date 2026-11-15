@@ -1,0 +1,45 @@
+---
+- name: Install the native backup helper
+  ansible.builtin.copy:
+    src: backup.py
+    dest: /usr/local/lib/uranus/plausible-backup.py
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install the native database backup service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/plausible-backup.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Back up native Plausible PostgreSQL and ClickHouse databases
+      After=postgresql@17-main.service clickhouse-server.service
+      Requires=postgresql@17-main.service clickhouse-server.service
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/python3 /usr/local/lib/uranus/plausible-backup.py {{ debian13_plausible_clickhouse_database }} {{ debian13_plausible_database }}
+      UMask=0077
+      Nice=10
+      TimeoutStartSec=1800
+
+- name: Schedule daily protected local database backups
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/plausible-backup.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Daily native Plausible database backup
+      [Timer]
+      OnCalendar=*-*-* 03:40:00
+      RandomizedDelaySec=15m
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable native database backup scheduling
+  ansible.builtin.systemd_service:
+    name: plausible-backup.timer
+    daemon_reload: true
+    enabled: true
+    state: started

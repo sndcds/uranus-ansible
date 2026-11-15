@@ -1,0 +1,23 @@
+---
+- name: Configure the deployed backend and its persistent media paths
+  hosts: 'dev01:prod01'
+  order: sorted
+  serial: 1
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load environment-specific application settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  tasks:
+    - name: Configure backend runtime paths without rebuilding its release
+      ansible.builtin.include_role:
+        name: debian13_backend
+        tasks_from: configure.yml
+    - name: Back up persistent media and central application configuration
+      ansible.builtin.include_role:
+        name: application_backup
+      when: not debian13_backend_prepare_only | default(false) | bool

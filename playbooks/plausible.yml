@@ -1,0 +1,17 @@
+---
+- name: Install native Plausible Community Edition in its dedicated container
+  hosts: 'uranus_instances:&plausible01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated guest settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  roles:
+    - role: internal_tls
+    - role: debian13_guest
+    - role: icinga_agent
+    - role: debian13_plausible

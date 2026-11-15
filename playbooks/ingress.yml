@@ -1,13 +1,19 @@
 ---
 - name: Configure public TLS ingress
-  hosts: incus_hosts
+  hosts: 'uranus_instances:&nginx01'
   gather_facts: false
   become: true
   pre_tasks:
     - name: Check deployment authorization
       ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated ingress settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
     - name: Install validated internal TLS identity
       ansible.builtin.include_role:
         name: internal_tls
   roles:
+    - role: debian13_guest
+    - role: icinga_agent
     - role: debian13_ingress

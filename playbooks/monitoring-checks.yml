@@ -1,0 +1,26 @@
+---
+- name: Update native monitoring endpoints and guest checks
+  hosts: 'uranus_instances:&mon01'
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: Check deployment authorization
+      ansible.builtin.import_tasks: tasks/gate.yml
+    - name: Load dedicated monitoring settings
+      ansible.builtin.import_tasks: tasks/guest-vars.yml
+    - name: Verify the provisioned Debian guest baseline
+      ansible.builtin.import_tasks: tasks/guest-preflight.yml
+  roles:
+    - role: debian13_guest
+    - role: icinga_agent
+  tasks:
+    - name: Update availability checks for all managed guests
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/debian13_monitoring/templates/vm-checks.conf.j2"
+        dest: /etc/icinga2/conf.d/uranus-debian13.conf
+        mode: '0644'
+      notify: Restart Icinga agent
+    - name: Validate monitoring definitions before reloading
+      ansible.builtin.command:
+        argv: [icinga2, daemon, -C]
+      changed_when: false

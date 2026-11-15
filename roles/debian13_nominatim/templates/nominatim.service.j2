@@ -1,0 +1,17 @@
+[Unit]
+Description=Nominatim API
+After=network-online.target
+Requires=nominatim.socket
+[Service]
+User=nominatim
+Group=www-data
+WorkingDirectory={{ nominatim_project_dir }}
+ExecStart={{ debian13_nominatim_venv }}/bin/gunicorn --bind unix:/run/nominatim.sock \
+  --workers 2 --worker-class asgi --protocol http \
+  "nominatim_api.server.falcon.server:run_wsgi()"
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+[Install]
+WantedBy=multi-user.target

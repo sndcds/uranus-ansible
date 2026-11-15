@@ -1,0 +1,15 @@
+<clickhouse>
+  <listen_host replace="replace">127.0.0.1</listen_host>
+  <max_server_memory_usage>4294967296</max_server_memory_usage>
+  <mark_cache_size>134217728</mark_cache_size>
+  <uncompressed_cache_size>16777216</uncompressed_cache_size>
+  <background_schedule_pool_size>16</background_schedule_pool_size>
+  <background_message_broker_schedule_pool_size>4</background_message_broker_schedule_pool_size>
+  <background_distributed_schedule_pool_size>4</background_distributed_schedule_pool_size>
+  <logger><level>warning</level><size>100M</size><count>3</count></logger>
+{% for log in ['query_log', 'query_thread_log', 'query_views_log', 'part_log', 'trace_log', 'text_log', 'metric_log', 'asynchronous_metric_log', 'processors_profile_log', 'error_log', 'query_metric_log', 'asynchronous_insert_log'] %}
+  <{{ log }} remove="1"/>
+{% endfor %}
+  <storage_configuration><disks><backups><type>local</type><path>/var/backups/plausible/clickhouse/</path></backups></disks></storage_configuration>
+  <backups><allowed_disk>backups</allowed_disk></backups>
+</clickhouse>

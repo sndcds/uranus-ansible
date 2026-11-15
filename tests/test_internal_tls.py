@@ -75,7 +75,7 @@ def test_generated_keys_decrypt_through_ansible_copy_and_match_certificates(prep
     pki, private, _ = prepared_pki
     destination = tmp_path / 'decrypted'
     destination.mkdir(mode=0o700)
-    names = ['hetzner', 'db01', 'dev01', 'prod01', 'mon01', 'nom01', 'vers01']
+    names = ['hetzner', 'db01', 'dev01', 'prod01', 'mon01', 'nom01', 'vers01', 'nginx01', 'plausible01']
     result = run_ansible(tmp_path, [{
         'name': 'Consume encrypted keys with the real Ansible copy action',
         'ansible.builtin.copy': {
@@ -117,3 +117,25 @@ def test_existing_pki_is_not_replaced(prepared_pki):
     assert result.returncode != 0
     assert 'Refusing to replace existing PKI material' in result.stderr
     assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in files} == before
+
+
+def test_extension_preserves_existing_ca_and_node_identities(prepared_pki, tmp_path):
+    import shutil
+    original, private_original, _ = prepared_pki
+    pki, private = tmp_path / 'pki', tmp_path / 'private'
+    shutil.copytree(original, pki)
+    shutil.copytree(private_original, private)
+    for suffix in ['crt', 'key']:
+        (pki / ('plausible01.' + suffix)).unlink()
+    existing = [*pki.iterdir(), *private.iterdir()]
+    before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in existing}
+    args = [sys.executable, str(ROOT / 'scripts/extend_pki.py'), '--pki-dir', str(pki), '--private-dir', str(private)]
+    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in existing} == before
+    assert (pki / 'plausible01.key').read_bytes().startswith(b'$ANSIBLE_VAULT;')
+    subprocess.run(['openssl', 'verify', '-CAfile', str(pki / 'ca.crt'), '-verify_hostname', 'plausible01',
+                    '-verify_ip', '10.77.0.18', str(pki / 'plausible01.crt')], check=True, capture_output=True)
+    after = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in pki.iterdir()}
+    assert subprocess.run(args, cwd=ROOT, capture_output=True, timeout=60).returncode == 0
+    assert {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in pki.iterdir()} == after

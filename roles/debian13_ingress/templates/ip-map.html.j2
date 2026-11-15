@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Europa · Uranus</title>
+  <link rel="icon" href="/assets/images/versatiles-logo.png">
+  <link rel="stylesheet" href="/assets/lib/maplibre-gl/maplibre-gl.css">
+  <script defer src="/assets/lib/maplibre-gl/maplibre-gl.js"></script>
+  <script defer src="/assets/lib/versatiles-style/versatiles-style.js"></script>
+  <style>
+    body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #172b3a; }
+    #map { position: absolute; inset: 0; background: #dbeaf0; }
+    .card { position: absolute; top: 18px; left: 18px; z-index: 1; background: #fffffff2; padding: 16px 20px; border-radius: 12px; box-shadow: 0 3px 20px #172b3a20; max-width: min(260px, 65vw); }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p { margin: 4px 0; }
+    a { color: #145e83; }
+    #status { color: #475b69; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="map" aria-label="Interaktive Europa-Karte"></div>
+  <aside class="card">
+    <h1>Europa entdecken</h1>
+    <p>Zoomen und verschieben, um Orte zu erkunden.</p>
+    <p id="status" role="status">Karte wird geladen …</p>
+    <p><a href="/">Zur Testübersicht</a></p>
+  </aside>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const status = document.getElementById('status');
+      try {
+        const style = await VersaTilesStyle.inlineSources(VersaTilesStyle.osm({
+          theme: 'colorful',
+          projection: 'mercator',
+          text: { language: 'de' },
+          urls: { base: window.location.origin + '/' }
+        }));
+        const map = new maplibregl.Map({
+          container: 'map', style, center: [12, 52], zoom: 4,
+          maxBounds: [[-32, 34], [45, 72]], hash: true
+        });
+        window.uranusMap = map;
+        map.addControl(new maplibregl.NavigationControl(), 'top-right');
+        map.addControl(new maplibregl.ScaleControl());
+        map.on('error', event => {
+          status.textContent = 'Eine Kartenressource konnte nicht geladen werden.';
+          console.error(event.error);
+        });
+        map.once('load', () => { status.textContent = 'Europa-Karte bereit'; });
+      } catch (error) {
+        status.textContent = 'Die Karte konnte nicht geladen werden.';
+        console.error(error);
+      }
+    });
+  </script>
+</body>
+</html>
